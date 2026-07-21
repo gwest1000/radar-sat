@@ -9,6 +9,8 @@ type Frame = {
   sourceLayer: string;
   fetchedAt: string;
   sourceTimes?: Record<string, string>;
+  detectionCount?: number;
+  newestDetectionTime?: string | null;
 };
 
 type DynamicLayer = {
@@ -123,7 +125,7 @@ function activeAnchorLayer(product: Product, optionalLayers: Record<string, bool
     const recipe = product.layers.find((candidate) => candidate.id === id);
     return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
   };
-  return ["natural", "ir", "daynight", "convective", "radar-rain", "ptype", "lightning-trail", "hotspots"]
+  return ["raw-visible", "raw-ir", "natural", "ir", "daynight", "convective", "radar-rain", "ptype", "lightning-trail", "hotspots"]
     .find(enabled) ?? product.anchorLayer;
 }
 
@@ -164,6 +166,12 @@ function composeLayers(
 
 function actualSourceTime(layerId: string, frame: Frame): string {
   if (layerId === "lightning-trail" && frame.sourceTimes) {
+    const values = Object.values(frame.sourceTimes)
+      .filter((value) => Number.isFinite(Date.parse(value)))
+      .sort((left, right) => Date.parse(right) - Date.parse(left));
+    if (values[0]) return values[0];
+  }
+  if ((layerId === "raw-visible" || layerId === "raw-ir") && frame.sourceTimes) {
     const values = Object.values(frame.sourceTimes)
       .filter((value) => Number.isFinite(Date.parse(value)))
       .sort((left, right) => Date.parse(right) - Date.parse(left));
@@ -280,7 +288,7 @@ function layerLabel(layerId: string): string {
   if (layerId === "ptype") return "PTYPE";
   if (layerId === "site-radar") return "RADAR";
   if (layerId === "hotspots") return "FIRE";
-  if (["daynight", "ir", "natural", "convective", "snowfog"].includes(layerId)) return "SAT";
+  if (["daynight", "ir", "natural", "convective", "snowfog", "raw-visible", "raw-ir"].includes(layerId)) return "SAT";
   return layerId.toUpperCase();
 }
 
@@ -295,6 +303,8 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "ir") return "Infra-Red Satellite";
   if (layerId === "daynight") return "VisIR Blend";
   if (layerId === "convective") return "Convective Satellite";
+  if (layerId === "raw-visible") return "Raw True Colour";
+  if (layerId === "raw-ir") return "Raw Enhanced IR";
   if (layerId === "radar-rain") return "Radar";
   if (layerId === "radar-snow") return "Snow rate";
   if (layerId === "radar-coverage") return "Radar coverage";
@@ -302,7 +312,7 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "ptype") return "Precip type";
   if (layerId === "lightning-trail") return "Lightning";
   if (layerId === "lightning") return "Flash density";
-  if (layerId === "hotspots") return "Wildfire Hotspots";
+  if (layerId === "hotspots") return "Wildfire Hotspots (24 h)";
   return layerLabel(layerId);
 }
 
@@ -317,6 +327,7 @@ function freshnessThresholds(layerId: string): [number, number] {
   if (layerId === "ptype") return [20, 35];
   if (layerId.startsWith("lightning")) return [25, 45];
   if (layerId === "hotspots") return [30, 90];
+  if (layerId === "raw-visible" || layerId === "raw-ir") return [90, 150];
   // The source valid time typically trails receipt by roughly 20–40 minutes;
   // use source-aware limits so normal ECCC publication latency is not reported
   // as a local ingest outage.
@@ -350,7 +361,7 @@ function WatershedLegend() {
   );
 }
 
-function HotspotLegend() {
+function HotspotLegend({ frame }: { frame?: Frame }) {
   const rows = [
     ["0–6 h", "#ffe55c"],
     ["6–12 h", "#ff941f"],
@@ -364,7 +375,34 @@ function HotspotLegend() {
           <span>{label}</span>
         </div>
       ))}
-      <p>Satellite thermal detections</p>
+      <p>
+        {typeof frame?.detectionCount === "number"
+          ? `${frame.detectionCount} mapped detections in this 24 h snapshot`
+          : "Satellite thermal detections"}
+      </p>
+    </div>
+  );
+}
+
+function InfraredLegend() {
+  const rows = [
+    ["≤ −80 °C", "#ffc814"],
+    ["−70 °C", "#ff5323"],
+    ["−60 °C", "#dc2c74"],
+    ["−50 °C", "#7e42be"],
+    ["−40 °C", "#3488eb"],
+    ["−30 °C", "#8ddcf9"],
+    ["−20 to 20 °C", "#d0d0d0"],
+  ];
+  return (
+    <div className="hotspot-legend" aria-label="Infrared brightness temperature legend">
+      {rows.map(([label, colour]) => (
+        <div className="hotspot-key-row" key={label}>
+          <span className="hotspot-symbol" style={{ background: colour }} />
+          <span>{label}</span>
+        </div>
+      ))}
+      <p>Colder, taller cloud tops use stronger colours</p>
     </div>
   );
 }
@@ -768,8 +806,8 @@ export function RadarViewer() {
                 style={{
                   ...cropStyle,
                   opacity: layer.opacity,
-                  filter: product.group === "Overlay"
-                    && ["natural", "ir", "daynight", "convective"].includes(layer.id)
+                  filter: ["Overlay", "Broad"].includes(product.group)
+                    && ["natural", "ir", "daynight", "convective", "raw-visible", "raw-ir"].includes(layer.id)
                     && (composedLayerIds.has("radar-rain") || composedLayerIds.has("ptype"))
                     ? "saturate(0.52) brightness(0.78) contrast(1.06)"
                     : undefined,
@@ -797,7 +835,11 @@ export function RadarViewer() {
             const legend = catalog.legends[legendId];
             if (!legend) return null;
             if (legend.kind === "lightning-age") return <LightningLegend key={legendId} />;
-            if (legend.kind === "hotspots") return <HotspotLegend key={legendId} />;
+            if (legend.kind === "hotspots") {
+              const hotspotFrame = composedLayers.find((layer) => layer.id === "hotspots")?.frame;
+              return <HotspotLegend frame={hotspotFrame} key={legendId} />;
+            }
+            if (legend.kind === "raw-ir") return <InfraredLegend key={legendId} />;
             if (legend.kind === "watersheds") return <WatershedLegend key={legendId} />;
             return legend.path ? (
               // Legend rasters are supplied by the authoritative data source.

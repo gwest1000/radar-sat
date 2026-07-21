@@ -43,21 +43,69 @@ def save_coverage(content: bytes, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     image = Image.open(io.BytesIO(content)).convert("RGBA")
     array = np.asarray(image).copy()
-    # GeoMet's ``*.INV``/``*-Inverted`` coverage layers paint the area where
-    # a radar estimate is available.  The viewer needs the opposite semantic:
-    # hatch only the area with *no* current coverage.  Inverting here also
-    # prevents valid precipitation echoes from being obscured by the hatch.
-    mask = array[:, :, 3] <= 20
+    # GeoMet's ``*.INV``/``*-Inverted`` layers already paint the area with no
+    # radar estimate. Preserve that semantic: hatch their non-transparent
+    # pixels and leave valid radar footprints clear.
+    mask = array[:, :, 3] > 20
     y, x = np.indices(mask.shape)
     hatch = ((x + y) % 10) < 1
     array[:, :, :3] = np.where(mask[:, :, None], np.array([151, 160, 170], dtype=np.uint8), 0)
     array[:, :, 3] = np.where(mask, np.where(hatch, 78, 30), 0).astype(np.uint8)
-    output = Image.fromarray(array, "RGBA").quantize(
+    output = Image.fromarray(array).quantize(
         colors=16,
         method=Image.Quantize.FASTOCTREE,
         dither=Image.Dither.NONE,
     )
     output.save(destination, "PNG", optimize=True)
+
+
+def reproject_overlay(
+    content: bytes,
+    source_domain: Domain,
+    target_domain: Domain,
+    *,
+    outside_no_coverage: bool = False,
+) -> bytes:
+    """Warp a transparent WMS raster to a target grid unsupported by GeoMet."""
+    from rasterio.transform import from_bounds
+    from rasterio.warp import Resampling, reproject
+
+    source = np.asarray(Image.open(io.BytesIO(content)).convert("RGBA"))
+    destination = np.zeros((target_domain.height, target_domain.width, 4), dtype=np.uint8)
+    source_bounds = projected_bbox(source_domain)
+    target_bounds = projected_bbox(target_domain)
+    source_transform = from_bounds(*source_bounds, source_domain.width, source_domain.height)
+    target_transform = from_bounds(*target_bounds, target_domain.width, target_domain.height)
+    for channel in range(4):
+        reproject(
+            source=source[:, :, channel],
+            destination=destination[:, :, channel],
+            src_transform=source_transform,
+            src_crs=source_domain.crs,
+            dst_transform=target_transform,
+            dst_crs=target_domain.crs,
+            resampling=Resampling.nearest,
+            src_nodata=0,
+            dst_nodata=None,
+            init_dest_nodata=False,
+        )
+    if outside_no_coverage:
+        footprint = np.zeros((target_domain.height, target_domain.width), dtype=np.uint8)
+        reproject(
+            source=np.ones(source.shape[:2], dtype=np.uint8),
+            destination=footprint,
+            src_transform=source_transform,
+            src_crs=source_domain.crs,
+            dst_transform=target_transform,
+            dst_crs=target_domain.crs,
+            resampling=Resampling.nearest,
+            src_nodata=None,
+            dst_nodata=0,
+        )
+        destination[footprint == 0] = np.array((181, 181, 181, 128), dtype=np.uint8)
+    output = io.BytesIO()
+    Image.fromarray(destination, "RGBA").save(output, "PNG", optimize=True)
+    return output.getvalue()
 
 
 def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
@@ -248,8 +296,8 @@ def render_static_maps(domain: Domain, base_destination: Path, boundary_destinat
         color="#60717c",
         alpha=0.28,
         linestyle=":",
-        xlocs=range(-180, -79, 5),
-        ylocs=range(40, 76, 5),
+        xlocs=range(-180, 181, 10 if domain.tier == "broad" else 5),
+        ylocs=range(0 if domain.tier == "broad" else 40, 81, 10 if domain.tier == "broad" else 5),
     )
     figure.savefig(base_destination, dpi=dpi, transparent=False, pad_inches=0)
     plt.close(figure)
@@ -282,7 +330,7 @@ def render_static_maps(domain: Domain, base_destination: Path, boundary_destinat
         ("Fort St. John", -120.85, 56.25),
         ("Cranbrook", -115.77, 49.51),
     ]
-    for name, lon, lat in cities:
+    for name, lon, lat in cities if domain.id == "bc" else []:
         axis.plot(lon, lat, marker="o", markersize=2.8, color="#ffffff", markeredgecolor="#071018", markeredgewidth=0.9, transform=ccrs.PlateCarree(), zorder=8)
         text = axis.text(
             lon + 0.18,

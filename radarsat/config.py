@@ -68,10 +68,12 @@ DOMAINS: dict[str, Domain] = {
         south=5.0,
         east=-70.0,
         north=75.0,
-        crs="EPSG:3857",
+        # Pacific-centred Mercator avoids cutting the map at the dateline.
+        crs="EPSG:3832",
         width=1600,
         height=900,
         tier="broad",
+        projected_bounds=(-3339584.7, 764000.0, 15584728.7, 11413000.0),
     ),
 }
 
@@ -178,6 +180,27 @@ LAYERS: dict[str, Layer] = {
         source="NRCan CWFIS",
         max_age_minutes=30,
     ),
+    "raw-visible": Layer(
+        id="raw-visible",
+        title="Calibrated raw true-colour satellite imagery",
+        source_layer=None,
+        image_format="image/jpeg",
+        extension="webp",
+        role="background",
+        source="NOAA Open Data",
+        max_age_minutes=90,
+        daylight_only=True,
+    ),
+    "raw-ir": Layer(
+        id="raw-ir",
+        title="Calibrated raw 10.3 µm brightness temperature",
+        source_layer=None,
+        image_format="image/jpeg",
+        extension="webp",
+        role="background",
+        source="NOAA Open Data",
+        max_age_minutes=90,
+    ),
     "site-radar": Layer(
         id="site-radar",
         title="BC site radar diagnostic",
@@ -224,12 +247,14 @@ def _overlay_product(
             {"id": "ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "daynight", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
             {"id": "convective", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "raw-visible", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
             {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "watersheds", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
         ],
@@ -272,6 +297,36 @@ def _snowfog_product(
     }
 
 
+def _broad_product(
+    product_id: str,
+    title: str,
+    short_title: str,
+    domain: str,
+    description: str,
+    notes: list[str],
+) -> dict[str, object]:
+    return {
+        "id": product_id,
+        "title": title,
+        "shortTitle": short_title,
+        "group": "Broad",
+        "domain": domain,
+        "anchorLayer": "raw-ir",
+        "defaultHours": 24,
+        "description": description,
+        "layers": [
+            {"id": "base-dark", "opacity": 1.0},
+            {"id": "raw-visible", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
+            {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
+            {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True},
+            {"id": "boundaries", "opacity": 1.0},
+        ],
+        "legends": ["raw-ir", "radar-rain"],
+        "notes": notes,
+    }
+
+
 PRODUCTS: list[dict[str, object]] = [
     _overlay_product("bc-large-overlay", "BC Large", "BC Large"),
     _overlay_product("bc-small-overlay", "BC Small", "BC Small", VIEWPORTS["small"]),
@@ -282,6 +337,28 @@ PRODUCTS: list[dict[str, object]] = [
     _snowfog_product("bc-southwest-snowfog", "BC Southwest Snow / Fog", "SW Snow / Fog", VIEWPORTS["southwest"]),
     _snowfog_product("bc-southeast-snowfog", "BC Southeast Snow / Fog", "SE Snow / Fog", VIEWPORTS["southeast"]),
     _snowfog_product("bc-northeast-snowfog", "BC Northeast Snow / Fog", "NE Snow / Fog", VIEWPORTS["northeast"]),
+    _broad_product(
+        "north-america-overlay",
+        "North America Satellite / Radar",
+        "North America",
+        "north-america",
+        "GOES-18/19 calibrated satellite imagery with the ECCC continental radar composite.",
+        [
+            "GOES-18 supplies the west and GOES-19 the east, blended on a common 2 km display grid.",
+            "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder.",
+        ],
+    ),
+    _broad_product(
+        "north-pacific-overlay",
+        "North Pacific Satellite / West Coast Radar",
+        "North Pacific",
+        "north-pacific",
+        "Himawari-9/GOES-18 calibrated satellite imagery with real West Coast radar coverage.",
+        [
+            "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
+            "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
+        ],
+    ),
 ]
 
 
@@ -313,5 +390,9 @@ LEGENDS: dict[str, dict[str, str]] = {
     "hotspots": {
         "title": "Wildfire hotspot age",
         "kind": "hotspots",
+    },
+    "raw-ir": {
+        "title": "10.3 µm cloud-top temperature",
+        "kind": "raw-ir",
     },
 }

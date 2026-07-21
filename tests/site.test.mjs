@@ -42,10 +42,15 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "convective").optional, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").optional, true);
+  assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
+  assert.equal(overlay.layers.find((layer) => layer.id === "raw-visible").choiceGroup, "satellite");
+  assert.equal(overlay.layers.find((layer) => layer.id === "raw-ir").choiceGroup, "satellite");
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");
   assert.match(overlay.notes.join(" "), /54-polygon BC Hydro boundary source/);
   assert.equal(demo.products.some((product) => product.id === "bc-lightning"), false);
+  assert.equal(demo.products.some((product) => product.id === "north-america-overlay"), true);
+  assert.equal(demo.products.some((product) => product.id === "north-pacific-overlay"), true);
 });
 
 test("deploy workflow uses the GitHub Pages artifact flow", async () => {

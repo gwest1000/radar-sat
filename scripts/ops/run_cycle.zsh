@@ -74,6 +74,8 @@ export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/run_ingest.py" \
   --output-root "${OUTPUT_ROOT}" \
   --domain bc \
+  --domain north-america \
+  --domain north-pacific \
   --hours "${RADARSAT_INGEST_HOURS:-3}" \
   --spool-root "${RADARSAT_SPOOL_ROOT:-${HOME}/.local/share/radar-sat/spool/eccc}" \
   --spool-mode "${RADARSAT_SPOOL_MODE:-auto}" \

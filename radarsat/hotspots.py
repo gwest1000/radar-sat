@@ -116,7 +116,10 @@ def render_hotspots(
         age = float(item["age"])
         frp = float(item["frp"])
         newest = detected if newest is None or detected > newest else newest
-        radius = 4 + min(2, int(math.log10(frp + 1)))
+        # These are point detections rather than fire perimeters. Use a larger
+        # high-contrast symbol so isolated detections remain legible on the BC
+        # Large view and above bright satellite cloud or high reflectivity.
+        radius = 6 + min(3, int(math.log10(frp + 1)))
         if age <= 6:
             fill = (255, 229, 92, 255)
         elif age <= 12:

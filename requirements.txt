@@ -1,8 +1,11 @@
 boto3==1.42.97
 cartopy==0.23.0
+h5netcdf==1.8.1
 matplotlib==3.9.4
 numpy==2.0.2
 pillow==11.3.0
-pyproj==3.6.1
+pyproj==3.7.2
+pyspectral==0.14.3
 requests==2.32.5
 rasterio==1.4.4
+satpy==0.60.0

@@ -1,6 +1,6 @@
 # ECCC real-time production feeds
 
-Radar-Sat uses ECCC's AMQPS notification service for systematic real-time acquisition. Sarracenia receives a notification as each product is published, downloads the announced file over HTTPS, and atomically renames it into a local raw spool. This avoids wasteful directory polling and follows ECCC's recommended Datamart access pattern.
+Radar-Sat uses ECCC's AMQPS notification service for systematic real-time acquisition. Sarracenia receives a notification as each product is published, downloads the announced file over HTTPS, and atomically renames it into a local raw spool. A separate half-hourly path reads NOAA's public S3 inventories for calibrated GOES-18/19 ABI and Himawari-9 AHI source data.
 
 The rendered BC composites and precipitation-type layers still come from GeoMet WMS because no equivalent gridded Datamart file is published. The raw feeds here supply the satellite, lightning, and four site-radar diagnostic loops.
 
@@ -108,7 +108,19 @@ become explicit trail anchors rather than being left as unused source frames.
 - `off` ignores the raw spool and uses the existing GeoMet bootstrap path. This is useful for a demo host that does not run Sarracenia.
 - `only` disables WMS fallback for the five native-capable BC layers. It **does not** disable GeoMet radar rain/snow composites, precipitation type, or either coverage mask; those proven gridded paths are always retained.
 
-The native path is intentionally limited to the BC grid in this first production version. Each GOES RGB GeoTIFF is read in its declared geostationary CRS, bilinearly reprojected and cropped to the 1920×1472 EPSG:3005 grid, then encoded as quality-88 WebP. The one-band lightning density GeoTIFF is nearest-neighbour reprojected so isolated positive cells are not diluted; positive density bins are rendered opaque for the downstream categorical age-trail glyphs, while zero and nodata are transparent. North America and North Pacific remain phase-two domains and are not advertised as available products in the initial catalog.
+The ECCC native-spool path is limited to the BC grid. Each GOES RGB GeoTIFF is read in its declared geostationary CRS, bilinearly reprojected and cropped to the 1920×1472 EPSG:3005 grid, then encoded as quality-88 WebP. The one-band lightning density GeoTIFF is nearest-neighbour reprojected so isolated positive cells are not diluted; positive density bins are rendered opaque for the downstream categorical age-trail glyphs, while zero and nodata are transparent.
+
+The parallel NOAA path reads calibrated Level-2 GOES multiband files and the northern Himawari full-disk segments with Satpy. GOES-18/19 are blended for North America; Himawari-9/GOES-18 are blended on the Pacific-centred EPSG:3832 grid. Raw true colour and a configured 10.3 µm brightness-temperature enhancement are offered separately. Downloads are processed one satellite at a time, may not exceed `RADARSAT_RAW_SAT_MAX_BYTES` (900 MB by default), and are deleted in a `finally` block. Only WebP display rasters persist. If a secondary satellite fails, the primary satellite is retained for that cycle and the degraded blend is recorded as an ingest warning.
+
+At the first production sample, the compressed display pairs averaged 0.32 MB
+for BC, 0.56 MB for North America and 0.63 MB for the North Pacific. The
+retention policy admits at most 336 half-hour BC raw times and 192 broad times
+per domain. Allowing roughly twice the nighttime sample size for brighter
+daytime visible imagery gives a conservative raw-satellite archive allowance
+of about 0.7 GB. Broad radar plus coverage masks are only tens of kilobytes per
+time. These layers therefore remain well inside the existing 4 GB warning and
+5 GB hard publication guards; they do not rely on the account's nominal 10 GB
+ceiling for safety.
 
 The `site-radar` layer is a 2×2 PNG montage of DPQPE **rain** GIFs from CASAG, CASHP, CASSS, and CASPG. A frame is emitted only when all four sites have the exact same source timestamp. Primary imagery wins when primary and contingency files coexist; a same-time contingency image is accepted when primary is absent and is labelled in the panel and metadata. A newer scan from only one to three sites never creates a mixed-time frame. Snow DPQPE and CAPPI files remain available in the raw spool for future dedicated products but are not silently mixed into this display.
 

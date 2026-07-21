@@ -219,7 +219,7 @@ class NativeRenderTests(unittest.TestCase):
             self.assertEqual(payload["source"], "NRCan CWFIS")
             self.assertEqual(payload["detectionCount"], 1)
             self.assertEqual(payload["sourceLayer"], "public:hotspots_24h")
-            self.assertEqual(payload["renderVersion"], 2)
+            self.assertEqual(payload["renderVersion"], 3)
 
     def test_local_bch_watershed_shapefile_renders_to_aligned_overlay(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -465,6 +465,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                 mock.patch("radarsat.pipeline.ensure_static_assets"),
                 mock.patch("radarsat.pipeline.ingest_geomet", return_value={}),
                 mock.patch("radarsat.pipeline.derive_lightning_trails"),
+                mock.patch("radarsat.pipeline.ingest_raw_satellite", return_value={"status": "unchanged"}),
                 mock.patch("radarsat.pipeline.prune"),
                 mock.patch("radarsat.pipeline.write_catalog", return_value=catalog),
                 mock.patch("radarsat.spool.ingest_spool", return_value=native_result),
@@ -489,6 +490,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                 mock.patch("radarsat.pipeline.ensure_static_assets"),
                 mock.patch("radarsat.pipeline.ingest_geomet", return_value={}) as geomet,
                 mock.patch("radarsat.pipeline.derive_lightning_trails"),
+                mock.patch("radarsat.pipeline.ingest_raw_satellite", return_value={"status": "unchanged"}),
                 mock.patch("radarsat.pipeline.prune"),
                 mock.patch("radarsat.pipeline.write_catalog", return_value=catalog),
                 mock.patch(

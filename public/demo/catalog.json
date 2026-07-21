@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-21T06:28:08.160115Z",
+  "generatedAt": "2026-07-21T07:29:21.415787Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -1480,7 +1480,7 @@
       "title": "North Pacific",
       "width": 1600,
       "height": 900,
-      "projection": "EPSG:3857",
+      "projection": "EPSG:3832",
       "layers": {},
       "staticLayers": {}
     }
@@ -1529,6 +1529,20 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visible",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "radar-coverage",
           "opacity": 1.0,
           "enabledWith": "radar-rain"
@@ -1562,7 +1576,7 @@
           "id": "hotspots",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false
+          "defaultEnabled": true
         },
         {
           "id": "watersheds",
@@ -1630,6 +1644,20 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visible",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "radar-coverage",
           "opacity": 1.0,
           "enabledWith": "radar-rain"
@@ -1663,7 +1691,7 @@
           "id": "hotspots",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false
+          "defaultEnabled": true
         },
         {
           "id": "watersheds",
@@ -1737,6 +1765,20 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visible",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "radar-coverage",
           "opacity": 1.0,
           "enabledWith": "radar-rain"
@@ -1770,7 +1812,7 @@
           "id": "hotspots",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false
+          "defaultEnabled": true
         },
         {
           "id": "watersheds",
@@ -1844,6 +1886,20 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visible",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "radar-coverage",
           "opacity": 1.0,
           "enabledWith": "radar-rain"
@@ -1877,7 +1933,7 @@
           "id": "hotspots",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false
+          "defaultEnabled": true
         },
         {
           "id": "watersheds",
@@ -1951,6 +2007,20 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visible",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "radar-coverage",
           "opacity": 1.0,
           "enabledWith": "radar-rain"
@@ -1984,7 +2054,7 @@
           "id": "hotspots",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false
+          "defaultEnabled": true
         },
         {
           "id": "watersheds",
@@ -2158,6 +2228,112 @@
       "notes": [
         "RGB colours are qualitative; no numerical colourbar applies."
       ]
+    },
+    {
+      "id": "north-america-overlay",
+      "title": "North America Satellite / Radar",
+      "shortTitle": "North America",
+      "group": "Broad",
+      "domain": "north-america",
+      "anchorLayer": "raw-ir",
+      "defaultHours": 24,
+      "description": "GOES-18/19 calibrated satellite imagery with the ECCC continental radar composite.",
+      "layers": [
+        {
+          "id": "base-dark",
+          "opacity": 1.0
+        },
+        {
+          "id": "raw-visible",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0,
+          "enabledWith": "radar-rain"
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.84,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "raw-ir",
+        "radar-rain"
+      ],
+      "notes": [
+        "GOES-18 supplies the west and GOES-19 the east, blended on a common 2 km display grid.",
+        "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder."
+      ]
+    },
+    {
+      "id": "north-pacific-overlay",
+      "title": "North Pacific Satellite / West Coast Radar",
+      "shortTitle": "North Pacific",
+      "group": "Broad",
+      "domain": "north-pacific",
+      "anchorLayer": "raw-ir",
+      "defaultHours": 24,
+      "description": "Himawari-9/GOES-18 calibrated satellite imagery with real West Coast radar coverage.",
+      "layers": [
+        {
+          "id": "base-dark",
+          "opacity": 1.0
+        },
+        {
+          "id": "raw-visible",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0,
+          "enabledWith": "radar-rain"
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.84,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "raw-ir",
+        "radar-rain"
+      ],
+      "notes": [
+        "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
+        "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit."
+      ]
     }
   ],
   "legends": {
@@ -2188,11 +2364,16 @@
     "hotspots": {
       "title": "Wildfire hotspot age",
       "kind": "hotspots"
+    },
+    "raw-ir": {
+      "title": "10.3 \u00b5m cloud-top temperature",
+      "kind": "raw-ir"
     }
   },
   "sources": {
     "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
     "ECCC Datamart": "https://dd.weather.gc.ca/",
-    "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf"
+    "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf",
+    "NOAA Open Data": "https://registry.opendata.aws/collab/noaa/"
   }
 }
