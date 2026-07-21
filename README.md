@@ -1,0 +1,116 @@
+# Radar-Sat
+
+Operational satellite, radar, precipitation-type, and lightning loops for
+British Columbia and its upstream weather. The viewer uses one set of aligned
+source layers to build several products in the browser, so a new overlay does
+not duplicate imagery in R2.
+
+Public site: <https://gwest1000.github.io/radar-sat/>
+
+## Launch products
+
+- **Operations:** continuous GOES-West day-visible/night-IR, rain rate, radar
+  coverage, and a 30-minute lightning trail.
+- **Radar:** rain or snow rate on a neutral map, with optional lightning.
+- **Convection:** visible/IR sandwich by day and night-microphysics IR after
+  dark.
+- **Precip type:** ECCC model-assisted surface precipitation type and its own
+  dynamic coverage mask.
+- **Lightning:** three ten-minute CLDN intervals over subdued satellite.
+- **Snow / fog**, **infrared**, and **visible:** standalone qualitative satellite
+  RGB products; infrared can carry an optional lightning trail.
+- **Radar sites:** a synchronized four-station DPQPE diagnostic loop for
+  Aldergrove, Halfmoon Peak, Silver Star, and Prince George. It appears only
+  after the native station feeds have produced a usable synchronized time.
+
+Every map shows the real source timestamps. Old data is never silently relabelled
+as current, and hatched grey means no current radar coverage rather than no echo.
+
+## Architecture
+
+```text
+ECCC Datamart AMQPS ── GOES / lightning / site radar ┐
+ECCC GeoMet WMS ────── composite / ptype / coverage ├─ local render + retention
+                                                     └─ R2 layers + catalog.json
+                                                                  │
+GitHub Pages static viewer ◀──────────────────────────────────────┘
+```
+
+- BC grid: EPSG:3005, 1920×1472, approximately 145–108°W and 45–63°N.
+- BC retention: all observations for 24 hours, then `:00`/`:30` through day 7
+  (432 ten-minute or 528 six-minute times per layer).
+- Broad-domain target: 30 minutes for 24 hours, then hourly through day 7.
+- R2 publication is transactional: assets first, `catalog.json` last.
+- The publisher warns at 4 GB and refuses storage growth above 5 GB.
+- The R2 `frames/` lifecycle expires at 9 days as a failure backstop.
+- Allow roughly 8–10 GB free on the ingest host for processed output plus the
+  local native-data spool; monitor account-wide R2 usage separately.
+
+See [the technical assessment](docs/technical-report.md),
+[production-feed setup](docs/production-feeds.md), and
+[operations runbook](ops/README.md).
+
+## Local development
+
+Requirements: Node 22.13+, Python 3.11+, and the packages in
+`requirements.txt`.
+
+```bash
+npm install
+npm run dev
+
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+PYTHONPATH=. .venv/bin/python scripts/run_ingest.py \
+  --output-root public/demo --domain bc --hours 1 \
+  --spool-mode auto --spool-hours 12
+```
+
+Validation:
+
+```bash
+npm run lint
+npm test
+PYTHONPATH=. .venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+```
+
+`npm run build:pages` writes the static GitHub Pages export to `out/` with the
+`/radar-sat` base path.
+
+## Production bring-up
+
+Use a Cloudflare Object Read & Write token restricted to the `radar-sat`
+bucket. Keep its S3 key pair in macOS Keychain; never commit it.
+
+```bash
+scripts/ops/setup_local.zsh
+scripts/ops/store_r2_credentials.zsh
+./scripts/manage_eccc_feeds.sh check
+./scripts/manage_eccc_feeds.sh install-agent
+
+PYTHONPATH=. .venv/bin/python scripts/run_ingest.py \
+  --output-root data/output --domain bc --hours 3
+PYTHONPATH=. .venv/bin/python scripts/publish_r2.py \
+  --root data/output --dry-run
+PYTHONPATH=. .venv/bin/python scripts/publish_r2.py --root data/output
+
+scripts/ops/install_launchd.zsh
+```
+
+`setup_local.zsh` installs both the rendering and Sarracenia feed requirements
+into the project virtual environment. After each successful render, the
+scheduled cycle bounds raw staging retention to three hours by default. Native
+source times are scanned over a separate 12-hour broker-recovery window before
+those files can become eligible for pruning.
+
+The scheduled cycle searches the full recent window on every run, which closes
+ordinary network gaps while the three-hour GeoMet radar archive still exists.
+Raw Datamart files stay local and are pruned after rendering; only compressed,
+display-ready layers are sent to R2.
+
+## Data sources
+
+Radar-Sat uses public Environment and Climate Change Canada data. Source
+limitations and fallback options are documented in the
+[technical assessment](docs/technical-report.md). The interface is an
+independent meteorological display and is not an official warning service.

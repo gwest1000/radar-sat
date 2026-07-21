@@ -1,0 +1,1778 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-21T01:09:10.634897Z",
+  "domains": {
+    "bc": {
+      "id": "bc",
+      "title": "British Columbia and surroundings",
+      "width": 1920,
+      "height": 1472,
+      "projection": "EPSG:3005",
+      "layers": {
+        "convective": {
+          "title": "GOES-West visible/IR sandwich",
+          "maxAgeMinutes": 40,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:40:00Z",
+              "path": "frames/bc/convective/2026/07/20/20260720T2340Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_VisibleIRSandwich-NightMicrophysicsIR",
+              "fetchedAt": "2026-07-21T01:07:15Z"
+            },
+            {
+              "validTime": "2026-07-20T23:50:00Z",
+              "path": "frames/bc/convective/2026/07/20/20260720T2350Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_VisibleIRSandwich-NightMicrophysicsIR",
+              "fetchedAt": "2026-07-21T01:07:17Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/convective/2026/07/21/20260721T0000Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_VisibleIRSandwich-NightMicrophysicsIR",
+              "fetchedAt": "2026-07-21T01:07:18Z"
+            },
+            {
+              "validTime": "2026-07-21T00:10:00Z",
+              "path": "frames/bc/convective/2026/07/21/20260721T0010Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_VisibleIRSandwich-NightMicrophysicsIR",
+              "fetchedAt": "2026-07-21T01:07:19Z"
+            },
+            {
+              "validTime": "2026-07-21T00:20:00Z",
+              "path": "frames/bc/convective/2026/07/21/20260721T0020Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_VisibleIRSandwich-NightMicrophysicsIR",
+              "fetchedAt": "2026-07-21T01:07:21Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/convective/2026/07/21/20260721T0030Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_VisibleIRSandwich-NightMicrophysicsIR",
+              "fetchedAt": "2026-07-21T01:07:22Z"
+            },
+            {
+              "validTime": "2026-07-21T00:40:00Z",
+              "path": "frames/bc/convective/2026/07/21/20260721T0040Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_VisibleIRSandwich-NightMicrophysicsIR",
+              "fetchedAt": "2026-07-21T01:07:24Z"
+            }
+          ]
+        },
+        "daynight": {
+          "title": "GOES-West day visible / night IR",
+          "maxAgeMinutes": 40,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/daynight/2026/07/20/20260720T2330Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_DayVis-NightIR",
+              "fetchedAt": "2026-07-21T01:06:49Z"
+            },
+            {
+              "validTime": "2026-07-20T23:40:00Z",
+              "path": "frames/bc/daynight/2026/07/20/20260720T2340Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_DayVis-NightIR",
+              "fetchedAt": "2026-07-21T01:06:50Z"
+            },
+            {
+              "validTime": "2026-07-20T23:50:00Z",
+              "path": "frames/bc/daynight/2026/07/20/20260720T2350Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_DayVis-NightIR",
+              "fetchedAt": "2026-07-21T01:06:51Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/daynight/2026/07/21/20260721T0000Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_DayVis-NightIR",
+              "fetchedAt": "2026-07-21T01:06:52Z"
+            },
+            {
+              "validTime": "2026-07-21T00:10:00Z",
+              "path": "frames/bc/daynight/2026/07/21/20260721T0010Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_DayVis-NightIR",
+              "fetchedAt": "2026-07-21T01:06:54Z"
+            },
+            {
+              "validTime": "2026-07-21T00:20:00Z",
+              "path": "frames/bc/daynight/2026/07/21/20260721T0020Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_DayVis-NightIR",
+              "fetchedAt": "2026-07-21T01:06:55Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/daynight/2026/07/21/20260721T0030Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_DayVis-NightIR",
+              "fetchedAt": "2026-07-21T01:06:56Z"
+            }
+          ]
+        },
+        "ir": {
+          "title": "GOES-West enhanced infrared imagery",
+          "maxAgeMinutes": 40,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:40:00Z",
+              "path": "frames/bc/ir/2026/07/20/20260720T2340Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_2km_NightIR",
+              "fetchedAt": "2026-07-21T01:06:57Z"
+            },
+            {
+              "validTime": "2026-07-20T23:50:00Z",
+              "path": "frames/bc/ir/2026/07/20/20260720T2350Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_2km_NightIR",
+              "fetchedAt": "2026-07-21T01:06:58Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/ir/2026/07/21/20260721T0000Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_2km_NightIR",
+              "fetchedAt": "2026-07-21T01:06:59Z"
+            },
+            {
+              "validTime": "2026-07-21T00:10:00Z",
+              "path": "frames/bc/ir/2026/07/21/20260721T0010Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_2km_NightIR",
+              "fetchedAt": "2026-07-21T01:07:00Z"
+            },
+            {
+              "validTime": "2026-07-21T00:20:00Z",
+              "path": "frames/bc/ir/2026/07/21/20260721T0020Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_2km_NightIR",
+              "fetchedAt": "2026-07-21T01:07:01Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/ir/2026/07/21/20260721T0030Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_2km_NightIR",
+              "fetchedAt": "2026-07-21T01:07:02Z"
+            },
+            {
+              "validTime": "2026-07-21T00:40:00Z",
+              "path": "frames/bc/ir/2026/07/21/20260721T0040Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_2km_NightIR",
+              "fetchedAt": "2026-07-21T01:07:03Z"
+            }
+          ]
+        },
+        "lightning": {
+          "title": "CLDN 10-minute flash density",
+          "maxAgeMinutes": 35,
+          "frames": [
+            {
+              "validTime": "2026-07-20T22:50:00Z",
+              "path": "frames/bc/lightning/2026/07/20/20260720T2250Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:40Z"
+            },
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/lightning/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:40Z"
+            },
+            {
+              "validTime": "2026-07-20T23:10:00Z",
+              "path": "frames/bc/lightning/2026/07/20/20260720T2310Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:40Z"
+            },
+            {
+              "validTime": "2026-07-20T23:20:00Z",
+              "path": "frames/bc/lightning/2026/07/20/20260720T2320Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:41Z"
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/lightning/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:41Z"
+            },
+            {
+              "validTime": "2026-07-20T23:40:00Z",
+              "path": "frames/bc/lightning/2026/07/20/20260720T2340Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:41Z"
+            },
+            {
+              "validTime": "2026-07-20T23:50:00Z",
+              "path": "frames/bc/lightning/2026/07/20/20260720T2350Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:42Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/lightning/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:42Z"
+            },
+            {
+              "validTime": "2026-07-21T00:10:00Z",
+              "path": "frames/bc/lightning/2026/07/21/20260721T0010Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:43Z"
+            },
+            {
+              "validTime": "2026-07-21T00:20:00Z",
+              "path": "frames/bc/lightning/2026/07/21/20260721T0020Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:43Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/lightning/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:43Z"
+            },
+            {
+              "validTime": "2026-07-21T00:40:00Z",
+              "path": "frames/bc/lightning/2026/07/21/20260721T0040Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:44Z"
+            },
+            {
+              "validTime": "2026-07-21T00:50:00Z",
+              "path": "frames/bc/lightning/2026/07/21/20260721T0050Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Lightning_2.5km_Density",
+              "fetchedAt": "2026-07-21T01:08:44Z"
+            }
+          ]
+        },
+        "lightning-trail": {
+          "title": "CLDN 30-minute age trail",
+          "maxAgeMinutes": 6,
+          "frames": [
+            {
+              "validTime": "2026-07-20T22:50:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2250Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:45Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T22:50:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:45Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:00:00Z",
+                "age10": "2026-07-20T22:50:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:46Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:00:00Z",
+                "age10": "2026-07-20T22:50:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:48Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:10:00Z",
+                "age10": "2026-07-20T23:00:00Z",
+                "age20": "2026-07-20T22:50:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:49Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:10:00Z",
+                "age10": "2026-07-20T23:00:00Z",
+                "age20": "2026-07-20T22:50:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:50Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:20:00Z",
+                "age10": "2026-07-20T23:10:00Z",
+                "age20": "2026-07-20T23:00:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:51Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:30:00Z",
+                "age10": "2026-07-20T23:20:00Z",
+                "age20": "2026-07-20T23:10:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:53Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:30:00Z",
+                "age10": "2026-07-20T23:20:00Z",
+                "age20": "2026-07-20T23:10:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:54Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:40:00Z",
+                "age10": "2026-07-20T23:30:00Z",
+                "age20": "2026-07-20T23:20:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:55Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:40:00Z",
+                "age10": "2026-07-20T23:30:00Z",
+                "age20": "2026-07-20T23:20:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:57Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:50:00Z",
+                "age10": "2026-07-20T23:40:00Z",
+                "age20": "2026-07-20T23:30:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:58Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:00:00Z",
+                "age10": "2026-07-20T23:50:00Z",
+                "age20": "2026-07-20T23:40:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:08:59Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:00:00Z",
+                "age10": "2026-07-20T23:50:00Z",
+                "age20": "2026-07-20T23:40:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:00Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:10:00Z",
+                "age10": "2026-07-21T00:00:00Z",
+                "age20": "2026-07-20T23:50:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:02Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:10:00Z",
+                "age10": "2026-07-21T00:00:00Z",
+                "age20": "2026-07-20T23:50:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:03Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:20:00Z",
+                "age10": "2026-07-21T00:10:00Z",
+                "age20": "2026-07-21T00:00:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:04Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:30:00Z",
+                "age10": "2026-07-21T00:20:00Z",
+                "age20": "2026-07-21T00:10:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:05Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:30:00Z",
+                "age10": "2026-07-21T00:20:00Z",
+                "age20": "2026-07-21T00:10:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:07Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:40:00Z",
+                "age10": "2026-07-21T00:30:00Z",
+                "age20": "2026-07-21T00:20:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:08Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:40:00Z",
+                "age10": "2026-07-21T00:30:00Z",
+                "age20": "2026-07-21T00:20:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:09Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:50:00Z",
+                "age10": "2026-07-21T00:40:00Z",
+                "age20": "2026-07-21T00:30:00Z"
+              }
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/lightning-trail/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-21T01:09:10Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:50:00Z",
+                "age20": "2026-07-21T00:40:00Z"
+              }
+            }
+          ]
+        },
+        "natural": {
+          "title": "GOES-West natural colour",
+          "maxAgeMinutes": 40,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:50:00Z",
+              "path": "frames/bc/natural/2026/07/20/20260720T2350Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_NaturalColor",
+              "fetchedAt": "2026-07-21T01:07:04Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/natural/2026/07/21/20260721T0000Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_NaturalColor",
+              "fetchedAt": "2026-07-21T01:07:06Z"
+            },
+            {
+              "validTime": "2026-07-21T00:10:00Z",
+              "path": "frames/bc/natural/2026/07/21/20260721T0010Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_NaturalColor",
+              "fetchedAt": "2026-07-21T01:07:07Z"
+            },
+            {
+              "validTime": "2026-07-21T00:20:00Z",
+              "path": "frames/bc/natural/2026/07/21/20260721T0020Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_NaturalColor",
+              "fetchedAt": "2026-07-21T01:07:09Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/natural/2026/07/21/20260721T0030Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_NaturalColor",
+              "fetchedAt": "2026-07-21T01:07:10Z"
+            },
+            {
+              "validTime": "2026-07-21T00:40:00Z",
+              "path": "frames/bc/natural/2026/07/21/20260721T0040Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_NaturalColor",
+              "fetchedAt": "2026-07-21T01:07:12Z"
+            },
+            {
+              "validTime": "2026-07-21T00:50:00Z",
+              "path": "frames/bc/natural/2026/07/21/20260721T0050Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_NaturalColor",
+              "fetchedAt": "2026-07-21T01:07:13Z"
+            }
+          ]
+        },
+        "ptype": {
+          "title": "Surface precipitation type",
+          "maxAgeMinutes": 30,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:14Z"
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:15Z"
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:16Z"
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:17Z"
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:18Z"
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:19Z"
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:20Z"
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:21Z"
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:21Z"
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/ptype/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:22Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:23Z"
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:24Z"
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:25Z"
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:26Z"
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:27Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:28Z"
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:29Z"
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:30Z"
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:31Z"
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:32Z"
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/ptype/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar_1km_SfcPrecipType",
+              "fetchedAt": "2026-07-21T01:08:32Z"
+            }
+          ]
+        },
+        "ptype-coverage": {
+          "title": "Precipitation-type no-coverage mask",
+          "maxAgeMinutes": 30,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:33Z"
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:33Z"
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:34Z"
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:34Z"
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:34Z"
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:34Z"
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:35Z"
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:35Z"
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:35Z"
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:36Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:36Z"
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:36Z"
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:37Z"
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:37Z"
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:37Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:38Z"
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:38Z"
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:38Z"
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:39Z"
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:39Z"
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/ptype-coverage/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
+              "fetchedAt": "2026-07-21T01:08:39Z"
+            }
+          ]
+        },
+        "radar-coverage": {
+          "title": "Radar no-coverage mask",
+          "maxAgeMinutes": 20,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:06Z"
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:07Z"
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:07Z"
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:07Z"
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:07Z"
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:08Z"
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:08Z"
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:08Z"
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:09Z"
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:09Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:09Z"
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:09Z"
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:10Z"
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:11Z"
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:11Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:11Z"
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:12Z"
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:12Z"
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:12Z"
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:13Z"
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/radar-coverage/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
+              "fetchedAt": "2026-07-21T01:08:13Z"
+            }
+          ]
+        },
+        "radar-rain": {
+          "title": "Radar rain rate",
+          "maxAgeMinutes": 20,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:35Z"
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:36Z"
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:36Z"
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:37Z"
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:38Z"
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:39Z"
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:39Z"
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:40Z"
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:41Z"
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/radar-rain/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:42Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:42Z"
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:43Z"
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:44Z"
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:45Z"
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:45Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:46Z"
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:47Z"
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:48Z"
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:48Z"
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:49Z"
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/radar-rain/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RRAI",
+              "fetchedAt": "2026-07-21T01:07:50Z"
+            }
+          ]
+        },
+        "radar-snow": {
+          "title": "Radar snow rate",
+          "maxAgeMinutes": 20,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:51Z"
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:51Z"
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:52Z"
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:53Z"
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:54Z"
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:54Z"
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:55Z"
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:56Z"
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:57Z"
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/radar-snow/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:57Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:58Z"
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:07:59Z"
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:00Z"
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:01Z"
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:02Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:02Z"
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:03Z"
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:04Z"
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:05Z"
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:05Z"
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/radar-snow/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "RADAR_1KM_RSNO",
+              "fetchedAt": "2026-07-21T01:08:06Z"
+            }
+          ]
+        },
+        "snowfog": {
+          "title": "GOES-West snow/fog and night microphysics",
+          "maxAgeMinutes": 40,
+          "frames": [
+            {
+              "validTime": "2026-07-20T23:40:00Z",
+              "path": "frames/bc/snowfog/2026/07/20/20260720T2340Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_SnowFog-NightMicrophysics",
+              "fetchedAt": "2026-07-21T01:07:25Z"
+            },
+            {
+              "validTime": "2026-07-20T23:50:00Z",
+              "path": "frames/bc/snowfog/2026/07/20/20260720T2350Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_SnowFog-NightMicrophysics",
+              "fetchedAt": "2026-07-21T01:07:27Z"
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/snowfog/2026/07/21/20260721T0000Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_SnowFog-NightMicrophysics",
+              "fetchedAt": "2026-07-21T01:07:28Z"
+            },
+            {
+              "validTime": "2026-07-21T00:10:00Z",
+              "path": "frames/bc/snowfog/2026/07/21/20260721T0010Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_SnowFog-NightMicrophysics",
+              "fetchedAt": "2026-07-21T01:07:30Z"
+            },
+            {
+              "validTime": "2026-07-21T00:20:00Z",
+              "path": "frames/bc/snowfog/2026/07/21/20260721T0020Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_SnowFog-NightMicrophysics",
+              "fetchedAt": "2026-07-21T01:07:31Z"
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/snowfog/2026/07/21/20260721T0030Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_SnowFog-NightMicrophysics",
+              "fetchedAt": "2026-07-21T01:07:33Z"
+            },
+            {
+              "validTime": "2026-07-21T00:40:00Z",
+              "path": "frames/bc/snowfog/2026/07/21/20260721T0040Z.webp",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "GOES-West_1km_SnowFog-NightMicrophysics",
+              "fetchedAt": "2026-07-21T01:07:34Z"
+            }
+          ]
+        }
+      },
+      "staticLayers": {
+        "base-dark": {
+          "path": "static/bc/base-dark.png"
+        },
+        "boundaries": {
+          "path": "static/bc/boundaries.png"
+        }
+      }
+    },
+    "north-america": {
+      "id": "north-america",
+      "title": "North America",
+      "width": 1440,
+      "height": 1080,
+      "projection": "EPSG:3857",
+      "layers": {},
+      "staticLayers": {}
+    },
+    "north-pacific": {
+      "id": "north-pacific",
+      "title": "North Pacific",
+      "width": 1600,
+      "height": 900,
+      "projection": "EPSG:3857",
+      "layers": {},
+      "staticLayers": {}
+    }
+  },
+  "products": [
+    {
+      "id": "bc-operations",
+      "title": "BC Operations Mosaic",
+      "shortTitle": "Operations",
+      "group": "Situational",
+      "domain": "bc",
+      "anchorLayer": "daynight",
+      "defaultHours": 3,
+      "description": "Continuous day/night satellite with radar rate, real coverage state, and a 30-minute lightning trail.",
+      "layers": [
+        {
+          "id": "daynight",
+          "opacity": 1.0
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.82,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "radar-rate"
+        },
+        {
+          "id": "radar-snow",
+          "opacity": 0.82,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "radar-rate"
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "radar-rain",
+        "radar-snow",
+        "lightning-age"
+      ],
+      "notes": [
+        "Cloud tops are not corrected for parallax.",
+        "Hatched grey areas have no current radar coverage; transparent radar means no echo."
+      ]
+    },
+    {
+      "id": "bc-radar",
+      "title": "BC Radar Rate + Lightning",
+      "shortTitle": "Radar",
+      "group": "Radar",
+      "domain": "bc",
+      "anchorLayer": "radar-rain",
+      "defaultHours": 3,
+      "description": "Rain and snow precipitation rates on a neutral basemap, with an optional lightning trail.",
+      "layers": [
+        {
+          "id": "base-dark",
+          "opacity": 1.0
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.95,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "radar-rate"
+        },
+        {
+          "id": "radar-snow",
+          "opacity": 0.95,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "radar-rate"
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "radar-rain",
+        "radar-snow",
+        "lightning-age"
+      ],
+      "notes": [
+        "Rates are DPQPE-derived composites, not base reflectivity."
+      ]
+    },
+    {
+      "id": "bc-convective",
+      "title": "BC Convective Satellite",
+      "shortTitle": "Convection",
+      "group": "Satellite",
+      "domain": "bc",
+      "anchorLayer": "convective",
+      "defaultHours": 6,
+      "description": "Visible/IR sandwich by day and night microphysics IR after dark, with lightning evolution.",
+      "layers": [
+        {
+          "id": "convective",
+          "opacity": 1.0
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "lightning-age"
+      ],
+      "notes": [
+        "Use cloud-top texture and cooling trends; do not infer a surface position without allowing for parallax."
+      ]
+    },
+    {
+      "id": "bc-ptype",
+      "title": "BC Surface Precipitation Type",
+      "shortTitle": "Precip type",
+      "group": "Radar",
+      "domain": "bc",
+      "anchorLayer": "ptype",
+      "defaultHours": 6,
+      "description": "Model-assisted radar surface precipitation type with its own coverage mask.",
+      "layers": [
+        {
+          "id": "base-dark",
+          "opacity": 1.0
+        },
+        {
+          "id": "ptype-coverage",
+          "opacity": 1.0
+        },
+        {
+          "id": "ptype",
+          "opacity": 0.9
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "ptype"
+      ],
+      "notes": [
+        "\u201cHail or rain\u201d is not a definitive hail diagnosis. Do not compare this mosaic pixel-for-pixel with rate."
+      ]
+    },
+    {
+      "id": "bc-lightning",
+      "title": "BC Lightning Evolution",
+      "shortTitle": "Lightning",
+      "group": "Lightning",
+      "domain": "bc",
+      "anchorLayer": "lightning-trail",
+      "defaultHours": 6,
+      "description": "Choose a three-interval age trail or the latest quantitative CLDN flash-density grid over subdued satellite.",
+      "layers": [
+        {
+          "id": "daynight",
+          "opacity": 0.64
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "lightning-view"
+        },
+        {
+          "id": "lightning",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "lightning-view"
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "lightning-age",
+        "lightning-density"
+      ],
+      "notes": [
+        "Density is a ten-minute accumulation normalized to flashes km\u207b\u00b2 min\u207b\u00b9; these are not individual strike data.",
+        "Transparent pixels beyond 250 km of Canadian land or sea borders are outside the CLDN mask, not confirmed zero lightning."
+      ]
+    },
+    {
+      "id": "bc-snowfog",
+      "title": "BC Low Cloud / Snow\u2013Fog",
+      "shortTitle": "Snow / fog",
+      "group": "Satellite",
+      "domain": "bc",
+      "anchorLayer": "snowfog",
+      "defaultHours": 12,
+      "description": "Snow/fog RGB by day and night microphysics after dark for low cloud and terrain obscuration.",
+      "layers": [
+        {
+          "id": "snowfog",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [],
+      "notes": [
+        "RGB colours are qualitative; no numerical colourbar applies."
+      ]
+    },
+    {
+      "id": "bc-ir",
+      "title": "BC Infrared Imagery",
+      "shortTitle": "Infrared",
+      "group": "Satellite",
+      "domain": "bc",
+      "anchorLayer": "ir",
+      "defaultHours": 12,
+      "description": "Around-the-clock GOES-West enhanced 2-km infrared RGB for cloud and weather-system structure and motion.",
+      "layers": [
+        {
+          "id": "ir",
+          "opacity": 1.0
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "lightning-age"
+      ],
+      "notes": [
+        "This public RGB is qualitative rather than calibrated ABI Band 13 brightness temperature; use trends, not numeric cloud-top thresholds."
+      ]
+    },
+    {
+      "id": "bc-natural",
+      "title": "BC Visible / Natural Colour",
+      "shortTitle": "Visible",
+      "group": "Satellite",
+      "domain": "bc",
+      "anchorLayer": "natural",
+      "defaultHours": 12,
+      "description": "Daytime natural-colour visible imagery for cloud texture, smoke, snow cover, and surface detail.",
+      "layers": [
+        {
+          "id": "natural",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [],
+      "notes": [
+        "Daylight only; the normal GOES-West overnight gap is not an outage."
+      ]
+    },
+    {
+      "id": "bc-site-radar",
+      "title": "BC Site Radar Diagnostic",
+      "shortTitle": "Radar sites",
+      "group": "Radar",
+      "domain": "bc",
+      "anchorLayer": "site-radar",
+      "defaultHours": 3,
+      "description": "Aldergrove, Halfmoon Peak, Silver Star Mountain, and Prince George DPQPE imagery.",
+      "layers": [
+        {
+          "id": "site-radar",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [],
+      "notes": [
+        "Rendered DPQPE site imagery is base-like, but is not base reflectivity or radial velocity."
+      ]
+    }
+  ],
+  "legends": {
+    "radar-rain": {
+      "title": "Rain rate",
+      "path": "static/legend-radar-rain.png"
+    },
+    "radar-snow": {
+      "title": "Snow rate",
+      "path": "static/legend-radar-snow.png"
+    },
+    "ptype": {
+      "title": "Surface precipitation type",
+      "path": "static/legend-ptype.png"
+    },
+    "lightning-age": {
+      "title": "Lightning age",
+      "kind": "lightning-age"
+    },
+    "lightning-density": {
+      "title": "Lightning flash density",
+      "path": "static/legend-lightning-density.png"
+    }
+  },
+  "sources": {
+    "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
+    "ECCC Datamart": "https://dd.weather.gc.ca/"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "validTime": "2026-07-20T22:50:00Z",
+  "path": "frames/bc/lightning-trail/2026/07/20/20260720T2250Z.png",
+  "source": "ECCC GeoMet",
+  "sourceLayer": "derived",
+  "fetchedAt": "2026-07-21T01:08:45Z",
+  "sourceTimes": {
+    "age0": "2026-07-20T22:50:00Z"
+  }
+}

@@ -1,0 +1,6 @@
+# Operational ECCC Datamart subscriber. AMQP is required for amqps://;
+# reassembly safely handles any source object announced in multiple blocks.
+metpx-sr3[amqp,reassemble]==3.2.0.post1
+# sr3 3.2 imports its SFTPAttributes compatibility type at startup but does
+# not declare Paramiko in the AMQP extra.
+paramiko==5.0.0
