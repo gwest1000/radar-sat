@@ -38,6 +38,8 @@ test("ships a runtime data configuration", async () => {
   const overlay = demo.products.find((product) => product.id === "bc-large-overlay");
   assert.equal(overlay.layers.find((layer) => layer.id === "convective").optional, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
+  assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");
+  assert.match(overlay.notes.join(" "), /54-polygon BC Hydro boundary source/);
   assert.equal(demo.products.some((product) => product.id === "bc-lightning"), false);
 });
 

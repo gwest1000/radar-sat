@@ -339,9 +339,9 @@ function LightningLegend() {
 
 function WatershedLegend() {
   return (
-    <div className="watershed-legend" aria-label="BC major watershed boundary legend">
+    <div className="watershed-legend" aria-label="BC Hydro watershed boundary legend">
       <span className="watershed-symbol" aria-hidden="true" />
-      <span>BC major watershed</span>
+      <span>BC Hydro watershed</span>
     </div>
   );
 }

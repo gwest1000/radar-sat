@@ -16,9 +16,8 @@ Public site: <https://gwest1000.github.io/radar-sat/>
   loops.
 
 The regional displays crop the shared aligned BC grid, gaining on-screen detail
-without storing four duplicate seven-day archives. DataBC major-watershed
-boundaries are included as the closest authoritative public proxy for BC Hydro
-operational basins.
+without storing four duplicate seven-day archives. The watershed overlay uses
+the same 54-polygon BC Hydro boundary source as the forecast-model plots.
 
 Every map shows the real source timestamps. Old data is never silently relabelled
 as current, and hatched grey means no current radar coverage rather than no echo.

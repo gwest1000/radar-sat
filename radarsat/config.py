@@ -207,7 +207,7 @@ def _overlay_product(
         "defaultHours": 3,
         "description": (
             "A configurable satellite, radar or precipitation-type overlay with "
-            "a 30-minute lightning trail and BC major-watershed boundaries."
+            "a 30-minute lightning trail and BC Hydro watershed boundaries."
         ),
         "layers": [
             {"id": "base-dark", "opacity": 1.0},
@@ -225,8 +225,8 @@ def _overlay_product(
         "legends": ["radar-rain", "ptype", "lightning-age", "watersheds"],
         "notes": [
             "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
-            "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
-            "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins.",
+            "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
+            "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         ],
     }
     if viewport is not None:
@@ -249,7 +249,7 @@ def _snowfog_product(
         "anchorLayer": "snowfog",
         "defaultHours": 12,
         "viewport": viewport,
-        "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
+        "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
         "layers": [
             {"id": "snowfog", "opacity": 1.0},
             {"id": "watersheds", "opacity": 1.0},
@@ -295,7 +295,7 @@ LEGENDS: dict[str, dict[str, str]] = {
         "path": "static/legend-lightning-density.png",
     },
     "watersheds": {
-        "title": "BC major watershed boundary",
+        "title": "BC Hydro watershed boundary",
         "kind": "watersheds",
     },
 }

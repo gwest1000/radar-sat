@@ -153,10 +153,9 @@ than duplicating frames in R2. This preserves the storage plan and avoids fake
 upsampling: source ceilings remain 1 km for visible/radar/ptype, 2 km for IR,
 and 2.5 km for lightning.
 
-DataBC's public [BC Major Watersheds](https://catalogue.data.gov.bc.ca/dataset/bc-major-watersheds)
-layer is drawn with a dark halo and cyan centreline. No downloadable,
-province-wide BC Hydro operational-basin layer was found, so this is labelled
-as a public proxy rather than misrepresented as an internal BCH boundary set.
+The watershed overlay uses the 54-polygon BC Hydro shapefile shared with the
+forecast-model plots. It is transformed from WGS 84 / UTM zone 10N into the
+common EPSG:3005 image grid and drawn with a dark halo and cyan centreline.
 
 The standalone IR RGB is useful for cloud-top structure and motion but is not a
 calibrated ABI Band 13 brightness-temperature field; the visible RGB is not a
@@ -176,10 +175,28 @@ current rendered RGBs alone. It requires a per-pixel cloud-top height field and
 the GOES-West viewing geometry, then relocates each cloudy pixel from its
 apparent satellite line of sight to the corresponding surface intercept. NOAA's
 ABI [cloud-top-height product](https://www.goes-r.gov/products/baseline-cloud-top-height-cloud-layer.html)
-provides the needed height retrieval. A single fixed displacement would move
-low cloud, terrain and deep convection by the same amount and would be more
-misleading than leaving the imagery uncorrected. The current interface states
-this limitation; a future correction should ingest the height product, retain
+provides the needed height retrieval.
+
+For GOES-West near 137.2°W, spherical line-of-sight geometry gives the following
+representative apparent offsets across BC. The low end is approximately coastal
+southwestern BC and the high end northern BC:
+
+| Cloud-top height | Approximate BC offset |
+|---:|---:|
+| 1 km | 1.6–2.3 km |
+| 3 km | 4.8–7.0 km |
+| 6 km | 9.7–14 km |
+| 10 km | 16–23 km |
+| 15 km | 24–35 km |
+
+The uncorrected cloud is normally plotted north to northeast of its true BC
+position; correction moves it south to southwest, toward the satellite
+subpoint. These estimates agree with NOAA's published GOES-West example at
+Mount Adams, Washington—4.46 km at a 3.05-km cloud height and 22.22 km at
+15.24 km ([Bernal Ayala et al., 2023](https://repository.library.noaa.gov/view/noaa/52613)).
+A single fixed displacement would move low cloud, terrain and deep convection
+by the same amount and would be more misleading than leaving the imagery
+uncorrected. A future correction should ingest the height product, retain
 quality flags, and mark any pixel lacking a valid height as uncorrected.
 
 Radar uses ECCC's discrete authoritative legends. Rain thresholds are

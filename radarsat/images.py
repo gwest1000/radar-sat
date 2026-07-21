@@ -1,36 +1,29 @@
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 
 import numpy as np
-import requests
 from PIL import Image, ImageDraw
 
 from .config import Domain
 from .geomet import projected_bbox
 
 
-DATA_BC_WMS_URL = "https://openmaps.gov.bc.ca/geo/pub/ows"
-WATERSHED_LAYER = "pub:WHSE_BASEMAPPING.BC_MAJOR_WATERSHEDS"
-WATERSHED_SLD = f"""<?xml version="1.0" encoding="UTF-8"?>
-<sld:StyledLayerDescriptor version="1.0.0"
- xmlns:sld="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc">
- <sld:NamedLayer><sld:Name>{WATERSHED_LAYER}</sld:Name><sld:UserStyle>
-  <sld:FeatureTypeStyle><sld:Rule>
-   <sld:PolygonSymbolizer><sld:Fill><sld:CssParameter name="fill-opacity">0</sld:CssParameter></sld:Fill>
-    <sld:Stroke><sld:CssParameter name="stroke">#031017</sld:CssParameter>
-     <sld:CssParameter name="stroke-opacity">0.76</sld:CssParameter>
-     <sld:CssParameter name="stroke-width">3.0</sld:CssParameter></sld:Stroke>
-   </sld:PolygonSymbolizer>
-   <sld:PolygonSymbolizer><sld:Fill><sld:CssParameter name="fill-opacity">0</sld:CssParameter></sld:Fill>
-    <sld:Stroke><sld:CssParameter name="stroke">#72d9ff</sld:CssParameter>
-     <sld:CssParameter name="stroke-opacity">0.82</sld:CssParameter>
-     <sld:CssParameter name="stroke-width">1.15</sld:CssParameter></sld:Stroke>
-   </sld:PolygonSymbolizer>
-  </sld:Rule></sld:FeatureTypeStyle>
- </sld:UserStyle></sld:NamedLayer>
-</sld:StyledLayerDescriptor>"""
+DEFAULT_BCH_WATERSHEDS = (
+    Path(__file__).resolve().parents[2]
+    / "fcstGraphics"
+    / "data"
+    / "bc_watersheds"
+    / "bch"
+    / "AllWatershedsUTM.shp"
+)
+
+
+def bch_watershed_source() -> Path:
+    configured = os.environ.get("RADARSAT_BCH_WATERSHEDS")
+    return Path(configured).expanduser() if configured else DEFAULT_BCH_WATERSHEDS
 
 
 def save_satellite(content: bytes, destination: Path) -> None:
@@ -144,33 +137,73 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
     )
 
 
-def render_watershed_overlay(domain: Domain, destination: Path) -> None:
-    """Fetch an authoritative, transparent DataBC major-watershed overlay."""
-    xmin, ymin, xmax, ymax = projected_bbox(domain)
-    response = requests.get(
-        DATA_BC_WMS_URL,
-        params={
-            "SERVICE": "WMS",
-            "VERSION": "1.3.0",
-            "REQUEST": "GetMap",
-            "LAYERS": WATERSHED_LAYER,
-            "CRS": domain.crs,
-            "BBOX": f"{xmin:.3f},{ymin:.3f},{xmax:.3f},{ymax:.3f}",
-            "WIDTH": str(domain.width),
-            "HEIGHT": str(domain.height),
-            "FORMAT": "image/png",
-            "TRANSPARENT": "TRUE",
-            "SLD_BODY": WATERSHED_SLD,
-        },
-        headers={"User-Agent": "Radar-Sat/0.1 (+https://github.com/gwest1000/radar-sat)"},
-        timeout=90,
+def render_watershed_overlay(
+    domain: Domain,
+    destination: Path,
+    source_path: Path | None = None,
+) -> None:
+    """Render the local BC Hydro watershed polygons onto the aligned map grid."""
+    from cartopy.io import shapereader
+    from pyproj import CRS, Transformer
+    from shapely.geometry import Polygon, box
+    from shapely.ops import transform
+
+    source = source_path or bch_watershed_source()
+    projection = source.with_suffix(".prj")
+    if not source.is_file():
+        raise FileNotFoundError(f"BC Hydro watershed shapefile is missing: {source}")
+    if not projection.is_file():
+        raise FileNotFoundError(f"BC Hydro watershed projection is missing: {projection}")
+
+    bbox = projected_bbox(domain)
+    clip = box(*bbox)
+    transformer = Transformer.from_crs(
+        CRS.from_wkt(projection.read_text()),
+        domain.crs,
+        always_xy=True,
     )
-    response.raise_for_status()
-    if not response.headers.get("content-type", "").startswith("image/"):
-        raise RuntimeError("DataBC returned a non-image watershed response")
-    image = Image.open(io.BytesIO(response.content)).convert("RGBA")
-    if image.size != (domain.width, domain.height) or image.getchannel("A").getbbox() is None:
-        raise RuntimeError("DataBC returned an empty or mis-sized watershed overlay")
+
+    def rings(geometry: object):
+        if isinstance(geometry, Polygon):
+            yield geometry.exterior.coords
+            for interior in geometry.interiors:
+                yield interior.coords
+            return
+        for member in getattr(geometry, "geoms", ()):
+            yield from rings(member)
+
+    reader = shapereader.Reader(source)
+    try:
+        geometries = list(reader.geometries())
+    finally:
+        reader.close()
+
+    xmin, ymin, xmax, ymax = bbox
+    pixel_lines: list[list[tuple[float, float]]] = []
+    for geometry in geometries:
+        projected = transform(transformer.transform, geometry)
+        if projected.is_empty or not projected.intersects(clip):
+            continue
+        clipped = projected.intersection(clip).simplify(150, preserve_topology=True)
+        for coordinates in rings(clipped):
+            pixels = [
+                (
+                    (x - xmin) / (xmax - xmin) * (domain.width - 1),
+                    (ymax - y) / (ymax - ymin) * (domain.height - 1),
+                )
+                for x, y in coordinates
+            ]
+            if len(pixels) >= 2:
+                pixel_lines.append(pixels)
+    if not pixel_lines:
+        raise RuntimeError("BC Hydro watershed shapefile does not intersect the map domain")
+
+    image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image, "RGBA")
+    for line in pixel_lines:
+        draw.line(line, fill=(3, 16, 23, 215), width=3, joint="curve")
+    for line in pixel_lines:
+        draw.line(line, fill=(114, 217, 255, 225), width=1, joint="curve")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:

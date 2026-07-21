@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-21T05:41:07.171651Z",
+  "generatedAt": "2026-07-21T06:03:18.608427Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -1439,7 +1439,7 @@
           "path": "static/bc/base-dark.png"
         },
         "watersheds": {
-          "path": "static/bc/watersheds.png"
+          "path": "static/bc/bch-watersheds.png"
         },
         "boundaries": {
           "path": "static/bc/boundaries.png"
@@ -1474,7 +1474,7 @@
       "domain": "bc",
       "anchorLayer": "convective",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1548,8 +1548,8 @@
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
-        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
-        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
       ]
     },
     {
@@ -1560,7 +1560,7 @@
       "domain": "bc",
       "anchorLayer": "convective",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1634,8 +1634,8 @@
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
-        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
-        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
       ],
       "viewport": {
         "left": 0.0954,
@@ -1652,7 +1652,7 @@
       "domain": "bc",
       "anchorLayer": "convective",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1726,14 +1726,14 @@
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
-        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
-        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
       ],
       "viewport": {
         "left": 0.3531,
-        "top": 0.4924,
+        "top": 0.53,
         "width": 0.3898,
-        "height": 0.3814
+        "height": 0.3438
       }
     },
     {
@@ -1744,7 +1744,7 @@
       "domain": "bc",
       "anchorLayer": "convective",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1818,8 +1818,8 @@
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
-        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
-        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
       ],
       "viewport": {
         "left": 0.5518,
@@ -1836,7 +1836,7 @@
       "domain": "bc",
       "anchorLayer": "convective",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1910,8 +1910,8 @@
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
-        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
-        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
       ],
       "viewport": {
         "left": 0.4196,
@@ -1934,7 +1934,7 @@
         "width": 0.8302,
         "height": 0.6768
       },
-      "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
+      "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "snowfog",
@@ -1966,11 +1966,11 @@
       "defaultHours": 12,
       "viewport": {
         "left": 0.3531,
-        "top": 0.4924,
+        "top": 0.53,
         "width": 0.3898,
-        "height": 0.3814
+        "height": 0.3438
       },
-      "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
+      "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "snowfog",
@@ -2006,7 +2006,7 @@
         "width": 0.355,
         "height": 0.3473
       },
-      "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
+      "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "snowfog",
@@ -2042,7 +2042,7 @@
         "width": 0.452,
         "height": 0.4422
       },
-      "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
+      "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "snowfog",
@@ -2087,7 +2087,7 @@
       "path": "static/legend-lightning-density.png"
     },
     "watersheds": {
-      "title": "BC major watershed boundary",
+      "title": "BC Hydro watershed boundary",
       "kind": "watersheds"
     }
   },

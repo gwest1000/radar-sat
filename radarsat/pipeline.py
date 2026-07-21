@@ -149,7 +149,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
     boundaries = root / "static" / domain.id / "boundaries.png"
     if not base.exists() or not boundaries.exists():
         render_static_maps(domain, base, boundaries)
-    watersheds = root / "static" / domain.id / "watersheds.png"
+    watersheds = root / "static" / domain.id / "bch-watersheds.png"
     if domain.id == "bc" and not watersheds.exists():
         render_watershed_overlay(domain, watersheds)
 

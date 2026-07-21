@@ -10,10 +10,12 @@ from unittest import mock
 import numpy as np
 import rasterio
 from PIL import Image
+from pyproj import CRS, Transformer
 from rasterio.transform import from_bounds
+import shapefile
 
 from radarsat.config import LAYERS, Domain
-from radarsat.images import lightning_trail
+from radarsat.images import lightning_trail, render_watershed_overlay
 from radarsat.pipeline import (
     derive_lightning_trails,
     frame_path,
@@ -139,6 +141,48 @@ class NativeDiscoveryTests(unittest.TestCase):
 
 
 class NativeRenderTests(unittest.TestCase):
+    def test_local_bch_watershed_shapefile_renders_to_aligned_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "watersheds.shp"
+            writer = shapefile.Writer(str(source))
+            writer.field("ID", "N")
+            writer.poly([[(-130.0, 48.0), (-130.0, 50.0), (-128.5, 50.0), (-128.5, 48.0), (-130.0, 48.0)]])
+            writer.record(1)
+            writer.close()
+            source.with_suffix(".prj").write_text(CRS.from_epsg(4326).to_wkt())
+
+            transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+            xmin, ymin = transformer.transform(-131.0, 47.0)
+            xmax, ymax = transformer.transform(-128.0, 51.0)
+            domain = Domain(
+                id="test",
+                title="Test",
+                west=-131.0,
+                south=47.0,
+                east=-128.0,
+                north=51.0,
+                crs="EPSG:3857",
+                width=120,
+                height=100,
+                tier="bc",
+                projected_bounds=(xmin, ymin, xmax, ymax),
+            )
+            destination = root / "bch-watersheds.png"
+
+            render_watershed_overlay(domain, destination, source)
+
+            rendered = np.asarray(Image.open(destination).convert("RGBA"))
+            self.assertEqual(rendered.shape, (100, 120, 4))
+            self.assertTrue(np.any(rendered[:, :, 3] > 0))
+            cyan = (
+                (rendered[:, :, 0] > 90)
+                & (rendered[:, :, 1] > 190)
+                & (rendered[:, :, 2] > 230)
+                & (rendered[:, :, 3] > 0)
+            )
+            self.assertTrue(np.any(cyan))
+
     def test_lightning_trail_uses_haloed_circles_with_a_flash_core(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

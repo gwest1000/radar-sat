@@ -43,7 +43,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
         static_layers: dict[str, Any] = {}
         for layer_id, filename in (
             ("base-dark", "base-dark.png"),
-            ("watersheds", "watersheds.png"),
+            ("watersheds", "bch-watersheds.png"),
             ("boundaries", "boundaries.png"),
         ):
             path = root / "static" / domain_id / filename
