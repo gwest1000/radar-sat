@@ -138,13 +138,15 @@ output only.
 
 The operational interface now concentrates on two complementary families:
 
-1. **Overlay:** large BC, zoomed BC, southwest, southeast and northeast views.
-   Visible, infrared and VisIR are a mutually exclusive satellite group; radar
-   and precipitation type are a second mutually exclusive group; lightning can
-   be switched independently. Coverage hatching follows the selected radar
-   product. The chosen satellite clock anchors the loop; if no satellite is
-   enabled, the selected radar/ptype or lightning clock takes over.
-2. **Snow/fog:** zoomed BC and the same three regional views. These use the
+1. **Overlay:** BC Large, tightly cropped BC Small, southwest, southeast and
+   northeast views. Visible, infrared, day-visible/night-IR VisIR and the
+   visible/IR-sandwich convective product are a mutually exclusive satellite
+   group; radar and precipitation type are a second mutually exclusive group;
+   lightning and wildfire hotspots can be switched independently. Coverage
+   hatching follows the selected radar product. The chosen satellite clock
+   anchors the loop; if no satellite is enabled, the selected radar/ptype,
+   lightning or hotspot clock takes over.
+2. **Snow/fog:** BC Small and the same three regional views. These use the
    qualitative day snow/fog/night-microphysics RGB with watershed and political
    boundaries.
 
@@ -152,6 +154,17 @@ The regional displays magnify normalized crops of the common BC grid rather
 than duplicating frames in R2. This preserves the storage plan and avoids fake
 upsampling: source ceilings remain 1 km for visible/radar/ptype, 2 km for IR,
 and 2.5 km for lightning.
+
+The hotspot layer archives a new snapshot every ten minutes from NRCan CWFIS's
+documented public
+[`hotspots_24h` WFS](https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf),
+restricted to detections assigned to BC. It
+uses the record's observation timestamp rather than the download time: yellow
+diamonds are 0–6 hours old, orange 6–12 hours and red 12–24 hours. Multiple
+detections falling in one display pixel are consolidated. A detection is a
+satellite thermal anomaly, not a confirmed wildfire or mapped fire perimeter.
+If CWFIS is temporarily unavailable, core radar/satellite publication continues
+and the last hotspot snapshot ages out rather than being silently restamped.
 
 The watershed overlay uses the 54-polygon BC Hydro shapefile shared with the
 forecast-model plots. It is transformed from WGS 84 / UTM zone 10N into the
@@ -207,20 +220,100 @@ coverage and has been verified not to overlap valid ptype pixels.
 
 Animation advances only after every raster in the next composition is loaded,
 at a nominal 3.3 frames per second at 1× with a 1.2-second final-frame hold.
-A five-stop slider provides 0.5×, 0.75×, 1×, 1.5× and 2×; product and layer
+A slider provides 0.5×, 0.75×, 1×, 1.5×, 2×, 3×, 4× and 5×; product and layer
 changes restart playback automatically. The viewer also provides keyboard
 stepping, pause/play, 3/6/12/24-hour and 7-day ranges, UTC plus PDT/PST valid
-time, and the actual SAT/RADAR/PTYPE/LTG source times.
+time, and the actual SAT/RADAR/PTYPE/LTG/FIRE source times.
+
+### CIRA SLIDER and public satellite data
+
+The user's SLIDER link points to retired GOES-17; operational GOES-West is now
+GOES-18. The imagery is publicly viewable and the
+[SLIDER archive](https://slider-archive.cira.colostate.edu/) can download a
+current frame or all loop frames as PNGs. CIRA offers excellent value-added
+GeoColor, fog, nighttime-microphysics, convection and fire-temperature
+imagery. Its tile/index layout is a display service, however, not a documented
+or versioned production API. It is a valuable rendering reference and manual
+backup, but a fragile primary ingest dependency. Public download access also
+does not by itself establish blanket redistribution terms for every CIRA
+derived product.
+
+CIRA's product documentation explains the science recipes. In particular,
+[GeoColor](https://rammb.cira.colostate.edu/ramsdis/online/product_descriptions.asp)
+uses synthetic daytime true colour and a multispectral low-cloud/fog display at
+night. We can create closely related products ourselves from the underlying
+public measurements while retaining control of stretches, thresholds,
+palettes, labels and projection.
+
+### What is fixed today, and what raw data changes
+
+The present satellite backgrounds are all **ECCC-rendered RGB images**, but
+they are not all fetched from GeoMet during normal operation. The primary BC
+path receives three-band GeoTIFFs from the ECCC Datamart AMQPS feed; GeoMet WMS
+is the recent-gap fallback and the current broad-domain bootstrap. In both
+cases ECCC has already converted the physical satellite channels into display
+RGB values. Radar-Sat only reprojects and compresses them. A browser can alter
+global brightness, contrast or saturation, but it cannot assign a defensible
+colour to, for example, a 213 K cloud top because the delivered pixel no longer
+contains calibrated brightness temperature. Even the standalone ECCC IR layer
+therefore has a fixed upstream enhancement and no numerical colourbar.
+
+Better configurable inputs are available:
+
+| Source | Physical data and access | Cadence / resolution | Best use here |
+|---|---|---|---|
+| NOAA GOES-18 West and GOES-19 East | Anonymous public NODD object storage provides ABI L1b radiance and Level-2 CMI NetCDF. CMI contains reflectance factor for bands 1–6 and brightness temperature in kelvin for bands 7–16. | Full disk every 10 minutes; 0.5, 1 or 2 km at nadir by band | BC and a feathered two-satellite North America composite; GOES-18 also covers the eastern/central Pacific |
+| NOAA mirror of JMA Himawari-9 | Anonymous public HSD files, segmented by band and latitude, in the [`noaa-himawari9` bucket](https://registry.opendata.aws/noaa-himawari/) | Full disk every 10 minutes; 0.5, 1 or 2 km at the sub-satellite point | Western/central Pacific and an overlap blend with GOES-18 |
+| EUMETSAT MTG/FCI | Calibrated Level-1c through the [Data Store and EUMDAC API](https://user.eumetsat.int/data-access/data-store); EUMETView also supplies rendered WMS imagery | 10-minute full disk | Excellent Europe/Africa/eastern-Atlantic data, but it adds little useful geometry for BC or the Pacific |
+| Polar orbiters (VIIRS/MODIS/Sentinel-3) | Public calibrated swaths and derived fire/smoke products | Much finer pixels but only a few useful passes per day | Optional high-detail smoke, snow and fire context; not a replacement for a 10-minute loop |
+
+[NOAA's GOES open-data registry](https://registry.opendata.aws/noaa-goes/)
+provides no-account access and says new data is added as it becomes available.
+GOES-19 has been operational GOES-East since April 2025. A July 21 spot check
+found representative 06:20 GOES-18/19 full-disk CMI objects published near
+06:30, and 06:20 Himawari-9 segments near 06:30–06:31. Those are useful observed
+lags, not an SLA. NOAA also distributes GOES through multiple NODD cloud
+partners and NCEI/CLASS provides historical recovery; these are delivery
+alternatives, although they share the same upstream satellite ground system.
+
+For implementation, Level-2 CMI is the simplest source for custom single-band
+visible, IR and water-vapour displays because the physical calibration is
+already applied. Selected L1b bands are appropriate for multispectral RGBs.
+[Satpy](https://satpy.readthedocs.io/en/stable/) can read ABI and Himawari HSD,
+resample to our exact grids, build standard composites and apply our own
+value-based colormaps. NOAA-supported
+[Geo2Grid](https://www.ssec.wisc.edu/software/geo2grid/getting_started.html)
+provides a useful operational reference and standard recipes including true
+colour, natural colour, fog, night microphysics and day-severe-storms imagery.
+Raw files should be transient local input: download only required bands or HSD
+segments, render the retained WebP/PNG products, then delete the source files.
+They do not need to consume R2 storage.
+
+Raw ABI also makes a real parallax correction possible. NOAA's Level-2 cloud-top
+height product can provide a height estimate for each cloudy pixel; that can be
+combined with satellite viewing geometry before reprojection. The correction
+would be labelled and quality-masked because cloud-top retrievals can fail or
+represent only the uppermost layer.
 
 ## Broad-domain recommendation
 
-Add the broad views as phase two, after several days of BC reliability data:
+Add the configurable source in three controlled stages while retaining the
+ECCC RGBs as fallback:
 
-- **North America:** feather GOES-West and GOES-East day/night imagery; overlay
-  radar only where real coverage exists; 30-minute/one-hour retention.
-- **North Pacific:** GOES-West IR for the northeast Pacific first, then add
-  Himawari-9 for the western Pacific. Never imply ocean radar coverage.
+1. **BC proof of quality:** clean-window IR brightness temperature with a
+   labelled kelvin/°C enhancement, solar-corrected visible or true colour,
+   standard snow/fog/night-microphysics, and day-convection RGB. Compare every
+   product against CIRA SLIDER and the existing ECCC version.
+2. **North America:** blend GOES-18 and GOES-19 by view angle rather than draw a
+   hard seam. Publish at 30-minute live cadence and hourly after day one. Radar
+   remains visible only where actual networks provide coverage.
+3. **North Pacific:** blend GOES-18 with Himawari-9 in their broad overlap,
+   again at 30-minute live and hourly archive cadence. Never imply radar over
+   the open ocean.
 
-This sequence preserves the highest-value BC products while keeping the bucket
-well under its guardrail and exposes actual compression/traffic before adding a
-second projection pipeline.
+At the planned 192 retained broad-domain times, each additional 0.5 MB rendered
+layer costs about 96 MB per domain. Four satellite layers over both broad
+domains would therefore add roughly 0.77 GB at that representative compression,
+while the much larger raw downloads remain temporary. This preserves the
+bucket guardrail and lets measured bandwidth, processing time and visual
+quality decide whether more products are worth retaining.

@@ -78,7 +78,7 @@ type SiteConfig = {
 };
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
-const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.5, 2];
+const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
 
@@ -123,7 +123,7 @@ function activeAnchorLayer(product: Product, optionalLayers: Record<string, bool
     const recipe = product.layers.find((candidate) => candidate.id === id);
     return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
   };
-  return ["natural", "ir", "convective", "radar-rain", "ptype", "lightning-trail"]
+  return ["natural", "ir", "daynight", "convective", "radar-rain", "ptype", "lightning-trail", "hotspots"]
     .find(enabled) ?? product.anchorLayer;
 }
 
@@ -279,6 +279,7 @@ function layerLabel(layerId: string): string {
   if (layerId.startsWith("lightning")) return "LTG";
   if (layerId === "ptype") return "PTYPE";
   if (layerId === "site-radar") return "RADAR";
+  if (layerId === "hotspots") return "FIRE";
   if (["daynight", "ir", "natural", "convective", "snowfog"].includes(layerId)) return "SAT";
   return layerId.toUpperCase();
 }
@@ -286,13 +287,14 @@ function layerLabel(layerId: string): string {
 function sourceLabel(layerId: string): string | null {
   if (layerId.includes("coverage")) return null;
   const label = layerLabel(layerId);
-  return ["SAT", "RADAR", "PTYPE", "LTG"].includes(label) ? label : null;
+  return ["SAT", "RADAR", "PTYPE", "LTG", "FIRE"].includes(label) ? label : null;
 }
 
 function layerControlLabel(layerId: string): string {
   if (layerId === "natural") return "Visible Satellite";
   if (layerId === "ir") return "Infra-Red Satellite";
-  if (layerId === "convective") return "VisIR Blend";
+  if (layerId === "daynight") return "VisIR Blend";
+  if (layerId === "convective") return "Convective Satellite";
   if (layerId === "radar-rain") return "Radar";
   if (layerId === "radar-snow") return "Snow rate";
   if (layerId === "radar-coverage") return "Radar coverage";
@@ -300,6 +302,7 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "ptype") return "Precip type";
   if (layerId === "lightning-trail") return "Lightning";
   if (layerId === "lightning") return "Flash density";
+  if (layerId === "hotspots") return "Wildfire Hotspots";
   return layerLabel(layerId);
 }
 
@@ -313,6 +316,7 @@ function freshnessThresholds(layerId: string): [number, number] {
   if (layerId.startsWith("radar") || layerId === "site-radar") return [15, 30];
   if (layerId === "ptype") return [20, 35];
   if (layerId.startsWith("lightning")) return [25, 45];
+  if (layerId === "hotspots") return [30, 90];
   // The source valid time typically trails receipt by roughly 20–40 minutes;
   // use source-aware limits so normal ECCC publication latency is not reported
   // as a local ingest outage.
@@ -342,6 +346,25 @@ function WatershedLegend() {
     <div className="watershed-legend" aria-label="BC Hydro watershed boundary legend">
       <span className="watershed-symbol" aria-hidden="true" />
       <span>BC Hydro watershed</span>
+    </div>
+  );
+}
+
+function HotspotLegend() {
+  const rows = [
+    ["0–6 h", "#ffe55c"],
+    ["6–12 h", "#ff941f"],
+    ["12–24 h", "#d94b3d"],
+  ];
+  return (
+    <div className="hotspot-legend" aria-label="Wildfire hotspot detection age legend">
+      {rows.map(([label, colour]) => (
+        <div className="hotspot-key-row" key={label}>
+          <span className="hotspot-symbol" style={{ background: colour }} />
+          <span>{label}</span>
+        </div>
+      ))}
+      <p>Satellite thermal detections</p>
     </div>
   );
 }
@@ -746,7 +769,7 @@ export function RadarViewer() {
                   ...cropStyle,
                   opacity: layer.opacity,
                   filter: product.group === "Overlay"
-                    && ["natural", "ir", "convective"].includes(layer.id)
+                    && ["natural", "ir", "daynight", "convective"].includes(layer.id)
                     && (composedLayerIds.has("radar-rain") || composedLayerIds.has("ptype"))
                     ? "saturate(0.52) brightness(0.78) contrast(1.06)"
                     : undefined,
@@ -774,6 +797,7 @@ export function RadarViewer() {
             const legend = catalog.legends[legendId];
             if (!legend) return null;
             if (legend.kind === "lightning-age") return <LightningLegend key={legendId} />;
+            if (legend.kind === "hotspots") return <HotspotLegend key={legendId} />;
             if (legend.kind === "watersheds") return <WatershedLegend key={legendId} />;
             return legend.path ? (
               // Legend rasters are supplied by the authoritative data source.

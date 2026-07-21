@@ -24,7 +24,7 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /first-pass playback can slow down but never flashes a blank frame/);
   assert.match(viewer, /atOrBeforeSourceTime/);
   assert.match(viewer, /sourceCount > selectedSourceCount/);
-  assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.5, 0\.75, 1, 1\.5, 2\]/);
+  assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.5, 0\.75, 1, 1\.5, 2, 3, 4, 5\]/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
 });
@@ -36,7 +36,12 @@ test("ships a runtime data configuration", async () => {
   await access(new URL("../out/demo/catalog.json", import.meta.url));
   const demo = JSON.parse(await readFile(new URL("../public/demo/catalog.json", import.meta.url), "utf8"));
   const overlay = demo.products.find((product) => product.id === "bc-large-overlay");
+  const small = demo.products.find((product) => product.id === "bc-small-overlay");
+  assert.equal(overlay.shortTitle, "BC Large");
+  assert.equal(small.shortTitle, "BC Small");
+  assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "convective").optional, true);
+  assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").optional, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");
   assert.match(overlay.notes.join(" "), /54-polygon BC Hydro boundary source/);

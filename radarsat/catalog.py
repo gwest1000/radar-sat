@@ -67,6 +67,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
         "sources": {
             "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
             "ECCC Datamart": "https://dd.weather.gc.ca/",
+            "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf",
         },
     }
 

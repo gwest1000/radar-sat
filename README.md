@@ -9,10 +9,12 @@ Public site: <https://gwest1000.github.io/radar-sat/>
 
 ## Launch products
 
-- **Overlay:** large BC, zoomed BC, southwest, southeast and northeast views.
-  Each provides mutually exclusive visible/IR/VisIR backgrounds, mutually
-  exclusive radar/precipitation-type overlays, and independent lightning.
-- **Snow / fog:** zoomed BC, southwest, southeast and northeast qualitative RGB
+- **Overlay:** BC Large, tightly cropped BC Small, southwest, southeast and
+  northeast views. Each provides mutually exclusive visible, IR, day/night
+  VisIR and convective-sandwich satellite backgrounds; mutually exclusive
+  radar/precipitation-type overlays; and independent lightning and wildfire
+  hotspots.
+- **Snow / fog:** BC Small, southwest, southeast and northeast qualitative RGB
   loops.
 
 The regional displays crop the shared aligned BC grid, gaining on-screen detail
@@ -23,6 +25,9 @@ Every map shows the real source timestamps. Old data is never silently relabelle
 as current, and hatched grey means no current radar coverage rather than no echo.
 Lightning density cells are rendered as white-ringed flash markers that fade
 with age rather than opaque grid squares.
+Wildfire hotspots are archived ten-minute snapshots of NRCan CWFIS satellite
+thermal detections, shown as age-coloured diamonds; they are not fire
+perimeters or confirmation of an active wildfire.
 
 ## Architecture
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-21T06:03:18.608427Z",
+  "generatedAt": "2026-07-21T06:28:08.160115Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -116,6 +116,26 @@
               "source": "ECCC GeoMet",
               "sourceLayer": "GOES-West_1km_DayVis-NightIR",
               "fetchedAt": "2026-07-21T01:06:56Z"
+            }
+          ]
+        },
+        "hotspots": {
+          "title": "Satellite-detected wildfire hotspots",
+          "maxAgeMinutes": 30,
+          "frames": [
+            {
+              "validTime": "2026-07-21T06:20:00Z",
+              "path": "frames/bc/hotspots/2026/07/21/20260721T0620Z.png",
+              "source": "NRCan CWFIS",
+              "sourceLayer": "public:hotspots_24h",
+              "fetchedAt": "2026-07-21T06:27:51Z",
+              "sourceTimes": {
+                "hotspots": "2026-07-21T06:20:00Z"
+              },
+              "detectionCount": 128,
+              "newestDetectionTime": "2026-07-20T23:52:00Z",
+              "windowHours": 24,
+              "renderVersion": 2
             }
           ]
         },
@@ -1468,13 +1488,13 @@
   "products": [
     {
       "id": "bc-large-overlay",
-      "title": "BC Large Overlay",
-      "shortTitle": "BC Large Overlay",
+      "title": "BC Large",
+      "shortTitle": "BC Large",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "convective",
+      "anchorLayer": "daynight",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, satellite wildfire hotspots and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1495,10 +1515,17 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "convective",
+          "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -1532,6 +1559,12 @@
           "defaultEnabled": true
         },
         {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -1544,23 +1577,25 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
-        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ]
     },
     {
-      "id": "bc-zoomed-overlay",
-      "title": "BC Zoomed Overlay",
-      "shortTitle": "BC Zoomed Overlay",
+      "id": "bc-small-overlay",
+      "title": "BC Small",
+      "shortTitle": "BC Small",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "convective",
+      "anchorLayer": "daynight",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, satellite wildfire hotspots and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1581,10 +1616,17 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "convective",
+          "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -1618,6 +1660,12 @@
           "defaultEnabled": true
         },
         {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -1630,18 +1678,20 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
-        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.0954,
-        "top": 0.1596,
-        "width": 0.8302,
-        "height": 0.6768
+        "left": 0.2133,
+        "top": 0.1239,
+        "width": 0.6534,
+        "height": 0.75
       }
     },
     {
@@ -1650,9 +1700,9 @@
       "shortTitle": "BC Southwest Overlay",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "convective",
+      "anchorLayer": "daynight",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, satellite wildfire hotspots and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1673,10 +1723,17 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "convective",
+          "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -1710,6 +1767,12 @@
           "defaultEnabled": true
         },
         {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -1722,12 +1785,14 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
-        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ],
       "viewport": {
         "left": 0.3531,
@@ -1742,9 +1807,9 @@
       "shortTitle": "BC Southeast Overlay",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "convective",
+      "anchorLayer": "daynight",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, satellite wildfire hotspots and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1765,10 +1830,17 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "convective",
+          "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -1802,6 +1874,12 @@
           "defaultEnabled": true
         },
         {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -1814,12 +1892,14 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
-        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ],
       "viewport": {
         "left": 0.5518,
@@ -1834,9 +1914,9 @@
       "shortTitle": "BC Northeast Overlay",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "convective",
+      "anchorLayer": "daynight",
       "defaultHours": 3,
-      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC Hydro watershed boundaries.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, satellite wildfire hotspots and BC Hydro watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
@@ -1857,10 +1937,17 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "convective",
+          "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -1894,6 +1981,12 @@
           "defaultEnabled": true
         },
         {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -1906,12 +1999,14 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
-        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots."
+        "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ],
       "viewport": {
         "left": 0.4196,
@@ -1921,18 +2016,18 @@
       }
     },
     {
-      "id": "bc-zoomed-snowfog",
-      "title": "BC Zoomed Snow / Fog",
+      "id": "bc-small-snowfog",
+      "title": "BC Small Snow / Fog",
       "shortTitle": "BC Snow / Fog",
       "group": "Snow / fog",
       "domain": "bc",
       "anchorLayer": "snowfog",
       "defaultHours": 12,
       "viewport": {
-        "left": 0.0954,
-        "top": 0.1596,
-        "width": 0.8302,
-        "height": 0.6768
+        "left": 0.2133,
+        "top": 0.1239,
+        "width": 0.6534,
+        "height": 0.75
       },
       "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
       "layers": [
@@ -2089,10 +2184,15 @@
     "watersheds": {
       "title": "BC Hydro watershed boundary",
       "kind": "watersheds"
+    },
+    "hotspots": {
+      "title": "Wildfire hotspot age",
+      "kind": "hotspots"
     }
   },
   "sources": {
     "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
-    "ECCC Datamart": "https://dd.weather.gc.ca/"
+    "ECCC Datamart": "https://dd.weather.gc.ca/",
+    "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf"
   }
 }

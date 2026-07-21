@@ -15,10 +15,12 @@ from rasterio.transform import from_bounds
 import shapefile
 
 from radarsat.config import LAYERS, Domain
+from radarsat.hotspots import render_hotspots
 from radarsat.images import lightning_trail, render_watershed_overlay
 from radarsat.pipeline import (
     derive_lightning_trails,
     frame_path,
+    ingest_hotspot_snapshot,
     metadata_path,
     parse_args,
     run,
@@ -141,6 +143,84 @@ class NativeDiscoveryTests(unittest.TestCase):
 
 
 class NativeRenderTests(unittest.TestCase):
+    def test_hotspots_render_as_age_coloured_diamonds(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = Domain(
+                id="bc",
+                title="BC",
+                west=-125.0,
+                south=48.0,
+                east=-120.0,
+                north=53.0,
+                crs="EPSG:4326",
+                width=120,
+                height=100,
+                tier="bc",
+                projected_bounds=(-125.0, 48.0, -120.0, 53.0),
+            )
+            now = dt.datetime(2026, 7, 21, 6, 14, tzinfo=UTC)
+            features = []
+            for index, hours in enumerate((2, 8, 20)):
+                features.append(
+                    {
+                        "properties": {
+                            "lat": 49.0 + index,
+                            "lon": -124.0 + index,
+                            "rep_date": (now - dt.timedelta(hours=hours)).isoformat(),
+                            "frp": 10 * (index + 1),
+                        }
+                    }
+                )
+            destination = root / "hotspots.png"
+
+            summary = render_hotspots(features, domain, destination, now)
+
+            rendered = np.asarray(Image.open(destination).convert("RGBA"))
+            self.assertEqual(summary["detectionCount"], 3)
+            self.assertTrue(np.any(np.all(rendered[:, :, :3] == (255, 229, 92), axis=2)))
+            self.assertTrue(np.any(np.all(rendered[:, :, :3] == (255, 148, 31), axis=2)))
+            self.assertTrue(np.any(np.all(rendered[:, :, :3] == (217, 75, 61), axis=2)))
+
+    @mock.patch("radarsat.pipeline.fetch_hotspots")
+    def test_hotspot_snapshot_uses_ten_minute_archive_clock(self, fetch: mock.Mock) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = Domain(
+                id="bc",
+                title="BC",
+                west=-125.0,
+                south=48.0,
+                east=-120.0,
+                north=53.0,
+                crs="EPSG:4326",
+                width=120,
+                height=100,
+                tier="bc",
+                projected_bounds=(-125.0, 48.0, -120.0, 53.0),
+            )
+            now = dt.datetime(2026, 7, 21, 6, 17, tzinfo=UTC)
+            fetch.return_value = [
+                {
+                    "properties": {
+                        "lat": 50.0,
+                        "lon": -123.0,
+                        "rep_date": (now - dt.timedelta(hours=1)).isoformat(),
+                        "frp": 12,
+                    }
+                }
+            ]
+
+            summary = ingest_hotspot_snapshot(root, domain, now)
+
+            self.assertEqual(summary["validTime"], "2026-07-21T06:10:00Z")
+            meta = metadata_path(root, domain, LAYERS["hotspots"], now.replace(minute=10))
+            payload = json.loads(meta.read_text())
+            self.assertEqual(payload["source"], "NRCan CWFIS")
+            self.assertEqual(payload["detectionCount"], 1)
+            self.assertEqual(payload["sourceLayer"], "public:hotspots_24h")
+            self.assertEqual(payload["renderVersion"], 2)
+
     def test_local_bch_watershed_shapefile_renders_to_aligned_overlay(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

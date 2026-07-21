@@ -464,6 +464,36 @@ input:focus-visible {
   box-shadow: 0 -1px 0 1px #031017;
 }
 
+.hotspot-legend {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.hotspot-key-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.hotspot-symbol {
+  width: 10px;
+  height: 10px;
+  margin-left: 2px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px #02070b;
+  transform: rotate(45deg);
+}
+
+.hotspot-legend p {
+  margin: 1px 0 2px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
 .product-detail {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);

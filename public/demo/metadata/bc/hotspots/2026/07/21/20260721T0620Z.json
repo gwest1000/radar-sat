@@ -1,0 +1,14 @@
+{
+  "validTime": "2026-07-21T06:20:00Z",
+  "path": "frames/bc/hotspots/2026/07/21/20260721T0620Z.png",
+  "source": "NRCan CWFIS",
+  "sourceLayer": "public:hotspots_24h",
+  "fetchedAt": "2026-07-21T06:27:51Z",
+  "sourceTimes": {
+    "hotspots": "2026-07-21T06:20:00Z"
+  },
+  "detectionCount": 128,
+  "newestDetectionTime": "2026-07-20T23:52:00Z",
+  "windowHours": 24,
+  "renderVersion": 2
+}

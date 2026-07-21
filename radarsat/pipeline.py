@@ -12,6 +12,7 @@ from PIL import Image
 from .catalog import write_catalog
 from .config import DOMAINS, LAYERS, Domain, Layer
 from .geomet import GeoMetClient, at_or_before, format_utc, frame_stamp
+from .hotspots import CWFIS_HOTSPOT_LAYER, fetch_hotspots, render_hotspots
 from .images import (
     lightning_trail,
     render_static_maps,
@@ -25,6 +26,7 @@ from .retention import keep_frame
 
 UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 2
+HOTSPOT_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
     "ir",
@@ -142,6 +144,49 @@ def retained_times(
     if latest_only:
         return values
     return [value for value in values if keep_frame(value, now, tier)]
+
+
+def ingest_hotspot_snapshot(
+    root: Path,
+    domain: Domain,
+    now: dt.datetime | None = None,
+) -> dict[str, object]:
+    """Archive a ten-minute snapshot of CWFIS's rolling 24-hour BC hotspots."""
+    current = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    valid_time = current.replace(
+        minute=(current.minute // 10) * 10,
+        second=0,
+        microsecond=0,
+    )
+    layer = LAYERS["hotspots"]
+    destination = frame_path(root, domain, layer, valid_time)
+    metadata = metadata_path(root, domain, layer, valid_time)
+    if destination.exists() and metadata.exists():
+        try:
+            existing = json.loads(metadata.read_text())
+            if existing.get("renderVersion") == HOTSPOT_RENDER_VERSION:
+                return {
+                    "status": "unchanged",
+                    "validTime": format_utc(valid_time),
+                    "detectionCount": existing.get("detectionCount", 0),
+                }
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    features = fetch_hotspots(domain)
+    summary = render_hotspots(features, domain, destination, current)
+    write_metadata(
+        root,
+        domain,
+        layer,
+        valid_time,
+        destination,
+        {"hotspots": valid_time},
+        source="NRCan CWFIS",
+        source_layer=CWFIS_HOTSPOT_LAYER,
+        extra={**summary, "renderVersion": HOTSPOT_RENDER_VERSION},
+    )
+    return {"status": "rendered", "validTime": format_utc(valid_time), **summary}
 
 
 def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> None:
@@ -377,6 +422,8 @@ def run(
     spool_root = (spool_root or Path.home() / ".local/share/radar-sat/spool/eccc").expanduser()
     output_root.mkdir(parents=True, exist_ok=True)
     native_status: dict[str, object] = {}
+    auxiliary_warnings: list[str] = []
+    hotspot_status: dict[str, object] = {}
     with GeoMetClient() as client:
         for domain_id in domain_ids:
             domain = DOMAINS[domain_id]
@@ -408,6 +455,13 @@ def run(
             )
             trail_hours = spool_hours if domain.id == "bc" and spool_mode != "off" else hours
             derive_lightning_trails(output_root, domain, timelines, max(hours, trail_hours))
+            if domain.id == "bc":
+                try:
+                    hotspot_status[domain.id] = ingest_hotspot_snapshot(output_root, domain)
+                except Exception as error:
+                    auxiliary_warnings.append(
+                        f"CWFIS wildfire hotspots unavailable: {type(error).__name__}: {error}"
+                    )
     prune(output_root, dt.datetime.now(UTC))
     catalog = write_catalog(output_root)
     has_native_rejections = any(
@@ -428,6 +482,8 @@ def run(
                 "ingestHours": spool_hours,
                 "domains": native_status,
             },
+            "hotspots": hotspot_status,
+            "warnings": auxiliary_warnings,
         },
     )
     return catalog
