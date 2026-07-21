@@ -40,10 +40,12 @@ _BasicProcessMemory = namedtuple("_BasicProcessMemory", "rss vms uss")
 def _filter_sr_proc_case_insensitive_python(self, process: dict) -> None:
     command = process.get("cmdline") or []
     if (
-        process.get("pid") == os.getpid()
-        and len(command) > 1
+        len(command) > 1
         and os.path.basename(command[1]) == "sr3_entry.py"
     ):
+        # Wrapper invocations are short-lived managers, never flow workers.
+        # Excluding every concurrent invocation keeps a supervisor sanity pass
+        # from appearing as a sixth process (or as a transient stray) in status.
         return
     name = process.get("name", "")
     if "python" in name.lower():

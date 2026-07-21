@@ -18,10 +18,10 @@ CONFIG_NAMES = (
     "radarsat_bc_site_radar.conf",
 )
 EXPECTED_TOPICS = {
-    "radarsat_goes_west.conf": {"satellite.goes.west.#"},
-    "radarsat_lightning.conf": {"lightning.#"},
+    "radarsat_goes_west.conf": {"*.WXO-DD.satellite.goes.west.#"},
+    "radarsat_lightning.conf": {"*.WXO-DD.lightning.#"},
     "radarsat_bc_site_radar.conf": {
-        f"radar.{product}.GIF.{station}.#"
+        f"*.WXO-DD.radar.{product}.GIF.{station}.#"
         for product in ("DPQPE", "CAPPI")
         for station in ("CASAG", "CASHP", "CASSS", "CASPG")
     },

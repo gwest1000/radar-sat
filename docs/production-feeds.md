@@ -8,11 +8,17 @@ The rendered BC composites and precipitation-type layers still come from GeoMet 
 
 | Config | Broker-side bindings | Client-side files retained | Expected cadence |
 |---|---|---|---|
-| `radarsat_goes_west` | `satellite.goes.west.#` | DayVis/NightIR, standalone 2-km NightIR, convective sandwich/night microphysics IR, snow-fog/night microphysics, natural colour | nominally 10 min; natural colour has a normal overnight gap |
-| `radarsat_lightning` | `lightning.#` | `*_MSC_Lightning_2.5km.tif` | 10 min |
+| `radarsat_goes_west` | `*.WXO-DD.satellite.goes.west.#` | DayVis/NightIR, standalone 2-km NightIR, convective sandwich/night microphysics IR, snow-fog/night microphysics, natural colour | nominally 10 min; natural colour has a normal overnight gap |
+| `radarsat_lightning` | `*.WXO-DD.lightning.#` | `*_MSC_Lightning_2.5km.tif` | 10 min |
 | `radarsat_bc_site_radar` | DPQPE and CAPPI bindings for `CASAG`, `CASHP`, `CASSS`, `CASPG` only | rain/snow DPQPE, contingency DPQPE, standard rain/snow CAPPI | 6 min |
 
 The four radar stations are Aldergrove, Halfmoon Peak, Silver Star Mountain, and Prince George. Configuring each station as its own AMQP binding keeps national-radar traffic out of the queue.
+
+ECCC exposes `/today/` as the convenient current-data HTTPS alias, but live
+AMQP announcements use the dated source path. A key observed during deployment
+began `v02.post.20260721.WXO-DD.`. With `topicPrefix v02.post`, the leading `*`
+matches the single `YYYYMMDD` component and `WXO-DD` selects the Datamart
+source. Omitting both components creates a valid but permanently silent binding.
 
 Files land under:
 
