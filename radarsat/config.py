@@ -347,7 +347,7 @@ PRODUCTS: list[dict[str, object]] = [
         "defaultHours": 3,
         "description": "Aldergrove, Halfmoon Peak, Silver Star Mountain, and Prince George DPQPE imagery.",
         "layers": [{"id": "site-radar", "opacity": 1.0}],
-        "legends": [],
+        "legends": ["radar-rain"],
         "notes": ["Rendered DPQPE site imagery is base-like, but is not base reflectivity or radial velocity."],
     },
 ]
