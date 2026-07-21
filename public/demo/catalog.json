@@ -1452,8 +1452,14 @@
       "description": "Continuous day/night satellite with radar rate, real coverage state, and a 30-minute lightning trail.",
       "layers": [
         {
-          "id": "daynight",
+          "id": "base-dark",
           "opacity": 1.0
+        },
+        {
+          "id": "daynight",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
         },
         {
           "id": "radar-coverage",
@@ -1613,7 +1619,7 @@
       "shortTitle": "Lightning",
       "group": "Lightning",
       "domain": "bc",
-      "anchorLayer": "lightning-trail",
+      "anchorLayer": "lightning",
       "defaultHours": 6,
       "description": "Choose a three-interval age trail or the latest quantitative CLDN flash-density grid over subdued satellite.",
       "layers": [

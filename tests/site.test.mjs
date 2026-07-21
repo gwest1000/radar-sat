@@ -21,6 +21,10 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /filter\(\(item\) => productHasFrames\(catalog, item\)\)/);
   assert.match(viewer, /actualSourceTime\(item\.id, item\.frame\)/);
   assert.match(viewer, /RANGE_OPTIONS = \[3, 6, 12, 24, 168\]/);
+  assert.match(viewer, /Promise\.all\(loads\)/);
+  assert.match(viewer, /first-pass playback can slow down but never flashes a blank frame/);
+  assert.match(viewer, /atOrBeforeSourceTime/);
+  assert.match(viewer, /sourceCount > selectedSourceCount/);
 });
 
 test("ships a runtime data configuration", async () => {
@@ -28,6 +32,11 @@ test("ships a runtime data configuration", async () => {
   assert.equal(typeof config.catalogUrl, "string");
   await access(new URL("../out/config.json", import.meta.url));
   await access(new URL("../out/demo/catalog.json", import.meta.url));
+  const demo = JSON.parse(await readFile(new URL("../public/demo/catalog.json", import.meta.url), "utf8"));
+  const operations = demo.products.find((product) => product.id === "bc-operations");
+  const lightning = demo.products.find((product) => product.id === "bc-lightning");
+  assert.equal(operations.layers.find((layer) => layer.id === "daynight").optional, true);
+  assert.equal(lightning.anchorLayer, "lightning");
 });
 
 test("deploy workflow uses the GitHub Pages artifact flow", async () => {

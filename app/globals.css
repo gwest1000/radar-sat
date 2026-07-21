@@ -24,7 +24,7 @@ html {
 }
 
 body {
-  min-width: 320px;
+  min-width: 0;
   margin: 0;
   background: var(--page);
   color: var(--text);
@@ -179,6 +179,7 @@ input:focus-visible {
   overflow: hidden;
   width: 100%;
   aspect-ratio: var(--map-aspect, 4 / 3);
+  margin-inline: auto;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: #05090c;
@@ -298,6 +299,21 @@ input:focus-visible {
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.78rem;
+}
+
+.timeline-metadata {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+}
+
+.archive-span {
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+  text-align: right;
 }
 
 .timeline-range {
@@ -439,6 +455,12 @@ input:focus-visible {
     gap: 8px;
   }
 
+  .live-summary {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+
   .viewer-grid {
     grid-template-columns: 1fr;
   }
@@ -476,6 +498,7 @@ input:focus-visible {
   }
 
   .product-button {
+    min-height: 44px;
     text-align: left;
   }
 
@@ -489,6 +512,52 @@ input:focus-visible {
     flex-direction: column;
   }
 
+  .control-button,
+  .range-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .field-select {
+    min-height: 44px;
+  }
+
+  .field-select select,
+  .timeline-range {
+    min-height: 44px;
+  }
+
+  .range-actions {
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .field-select input {
+    width: 18px;
+    height: 18px;
+  }
+
+  .timeline-metadata {
+    align-items: flex-start;
+  }
+
+  .archive-span {
+    text-align: left;
+  }
+
+  .legend-rail {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .legend-image {
+    width: auto;
+    max-width: min(100%, 220px);
+    max-height: 340px;
+    margin: 0;
+  }
+
   .map-status {
     top: 5px;
     left: 5px;
@@ -497,6 +566,30 @@ input:focus-visible {
 
   .coverage-key {
     display: none;
+  }
+}
+
+@media (min-width: 841px) and (max-height: 900px) {
+  .app-shell {
+    padding-top: 10px;
+  }
+
+  .site-header {
+    margin-bottom: 8px;
+  }
+
+  .tagline {
+    display: none;
+  }
+
+  .product-nav {
+    margin-bottom: 8px;
+  }
+
+  .map-stage,
+  .timeline-panel {
+    width: min(100%, max(320px, var(--map-cap-width)));
+    margin-inline: auto;
   }
 }
 

@@ -116,6 +116,26 @@ def selected_times(times: Iterable[dt.datetime], hours: float, latest_only: bool
     return [value for value in values if value >= cutoff]
 
 
+def retained_times(
+    times: Iterable[dt.datetime],
+    hours: float,
+    latest_only: bool,
+    now: dt.datetime,
+    tier: str,
+) -> list[dt.datetime]:
+    """Select only source times that can survive the archive policy.
+
+    A long bootstrap should not download every high-frequency source image and
+    then immediately remove most older frames during ``prune``. Apply the same
+    retention rule before each WMS request while preserving the latest-only
+    probe used by diagnostics.
+    """
+    values = selected_times(times, hours, latest_only)
+    if latest_only:
+        return values
+    return [value for value in values if keep_frame(value, now, tier)]
+
+
 def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> None:
     base = root / "static" / domain.id / "base-dark.png"
     boundaries = root / "static" / domain.id / "boundaries.png"
@@ -165,7 +185,13 @@ def ingest_geomet(
             "ptype-coverage",
             "lightning",
         } else 0.0
-        times = selected_times(timeline.times, hours + matching_margin, latest_only)
+        times = retained_times(
+            timeline.times,
+            hours + matching_margin,
+            latest_only,
+            dt.datetime.now(UTC),
+            domain.tier,
+        )
         timelines[layer_id] = list(timeline.times)
         for valid_time in times:
             destination = frame_path(root, domain, layer, valid_time)

@@ -87,6 +87,56 @@ function frameUrl(frame: Frame, base: string): string {
   return url.toString();
 }
 
+type ComposedLayer = {
+  id: string;
+  url: string;
+  opacity: number;
+  frame?: Frame;
+};
+
+function isProductLayerEnabled(
+  recipe: ProductLayer,
+  optionalLayers: Record<string, boolean>,
+): boolean {
+  if (!recipe.optional) return true;
+  return optionalLayers[recipe.id] ?? recipe.defaultEnabled ?? true;
+}
+
+function composeLayers(
+  product: Product,
+  domain: Domain,
+  anchor: Frame,
+  catalogBase: string,
+  optionalLayers: Record<string, boolean>,
+): ComposedLayer[] {
+  return product.layers.flatMap((recipe) => {
+    if (!isProductLayerEnabled(recipe, optionalLayers)) return [];
+    const staticLayer = domain.staticLayers[recipe.id];
+    if (staticLayer) {
+      return [{
+        id: recipe.id,
+        url: absoluteUrl(staticLayer.path, catalogBase),
+        opacity: recipe.opacity,
+      }];
+    }
+    const dynamicLayer = domain.layers[recipe.id];
+    const frames = dynamicLayer?.frames ?? [];
+    // Trail rasters are regenerated on the radar clock, but their actual
+    // observations are ten-minute lightning intervals. Select them by that
+    // source interval so VALID and the 0–10/10–20/20–30 minute bins agree.
+    const frame = recipe.id === "lightning-trail"
+      ? atOrBeforeSourceTime(recipe.id, frames, anchor.validTime, dynamicLayer?.maxAgeMinutes)
+      : atOrBefore(frames, anchor.validTime, dynamicLayer?.maxAgeMinutes);
+    if (!frame) return [];
+    return [{
+      id: recipe.id,
+      url: frameUrl(frame, catalogBase),
+      opacity: recipe.opacity,
+      frame,
+    }];
+  });
+}
+
 function actualSourceTime(layerId: string, frame: Frame): string {
   if (layerId === "lightning-trail" && frame.sourceTimes) {
     const values = Object.values(frame.sourceTimes)
@@ -107,6 +157,43 @@ function atOrBefore(frames: Frame[], target: string, maxAgeMinutes?: number): Fr
   }
   if (selected && maxAgeMinutes !== undefined) {
     const ageMinutes = (targetTime - Date.parse(selected.validTime)) / 60_000;
+    if (!Number.isFinite(ageMinutes) || ageMinutes > maxAgeMinutes) return undefined;
+  }
+  return selected;
+}
+
+function atOrBeforeSourceTime(
+  layerId: string,
+  frames: Frame[],
+  target: string,
+  maxAgeMinutes?: number,
+): Frame | undefined {
+  const targetTime = Date.parse(target);
+  if (!Number.isFinite(targetTime)) return undefined;
+  let selected: Frame | undefined;
+  let selectedSourceTime = -Infinity;
+  let selectedSourceCount = -1;
+  for (const frame of frames) {
+    const sourceTime = Date.parse(actualSourceTime(layerId, frame));
+    const sourceCount = Object.keys(frame.sourceTimes ?? {}).length;
+    if (!Number.isFinite(sourceTime) || sourceTime > targetTime) continue;
+    if (
+      sourceTime > selectedSourceTime
+      || (sourceTime === selectedSourceTime && sourceCount > selectedSourceCount)
+      || (
+        sourceTime === selectedSourceTime
+        && sourceCount === selectedSourceCount
+        && selected
+        && Date.parse(frame.validTime) > Date.parse(selected.validTime)
+      )
+    ) {
+      selected = frame;
+      selectedSourceTime = sourceTime;
+      selectedSourceCount = sourceCount;
+    }
+  }
+  if (selected && maxAgeMinutes !== undefined) {
+    const ageMinutes = (targetTime - selectedSourceTime) / 60_000;
     if (!Number.isFinite(ageMinutes) || ageMinutes > maxAgeMinutes) return undefined;
   }
   return selected;
@@ -141,6 +228,27 @@ function shortClock(value: string): string {
   }).format(new Date(value));
 }
 
+function archiveSpan(frames: Frame[]): string {
+  if (!frames.length) return "No archive coverage";
+  const first = frames[0];
+  const last = frames[frames.length - 1];
+  if (frames.length === 1) return `1 frame · ${utcClock(first.validTime)} UTC`;
+  const spanHours = Math.max(
+    0,
+    (Date.parse(last.validTime) - Date.parse(first.validTime)) / 3_600_000,
+  );
+  const span = spanHours >= 48
+    ? `${(spanHours / 24).toFixed(1)} d available`
+    : `${spanHours.toFixed(1)} h available`;
+  return `${span} · ${utcClock(first.validTime)}–${utcClock(last.validTime)} UTC`;
+}
+
+function sourceAgeLabel(minutes: number): string {
+  if (!Number.isFinite(minutes)) return "newest source unknown";
+  if (minutes < 1) return "newest source <1 min old";
+  return `newest source ${Math.round(minutes)} min old`;
+}
+
 function layerLabel(layerId: string): string {
   if (layerId.startsWith("radar")) return "RADAR";
   if (layerId.startsWith("lightning")) return "LTG";
@@ -157,6 +265,7 @@ function sourceLabel(layerId: string): string | null {
 }
 
 function layerControlLabel(layerId: string): string {
+  if (layerId === "daynight") return "Satellite";
   if (layerId === "radar-rain") return "Rain rate";
   if (layerId === "radar-snow") return "Snow rate";
   if (layerId === "radar-coverage") return "Radar coverage";
@@ -312,12 +421,53 @@ export function RadarViewer() {
   );
 
   useEffect(() => {
-    if (!isAnimating) return;
-    const finalFrame = currentFrameIndex === anchorFrames.length - 1;
-    const delay = finalFrame ? 900 / speed : 1000 / (7 * speed);
-    const timer = window.setTimeout(() => advance(1), delay);
-    return () => window.clearTimeout(timer);
-  }, [advance, anchorFrames.length, currentFrameIndex, isAnimating, speed]);
+    if (!isAnimating || !domain || !product || !catalogBase) return;
+    const nextIndex = (currentFrameIndex + 1) % anchorFrames.length;
+    const nextAnchor = anchorFrames[nextIndex];
+    if (!nextAnchor) return;
+
+    // Live R2 rasters are much larger than the bundled demo. Keep displaying
+    // the current map until every layer in the next composition is ready, so
+    // first-pass playback can slow down but never flashes a blank frame.
+    const nextUrls = composeLayers(
+      product,
+      domain,
+      nextAnchor,
+      catalogBase,
+      optionalLayers,
+    ).map((layer) => layer.url);
+    let cancelled = false;
+    let timer: number | undefined;
+    const loads = nextUrls.map((url) => new Promise<void>((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve();
+      image.onerror = () => resolve();
+      image.src = url;
+      if (image.complete) resolve();
+    }));
+
+    void Promise.all(loads).then(() => {
+      if (cancelled) return;
+      const finalFrame = currentFrameIndex === anchorFrames.length - 1;
+      const delay = finalFrame ? 1200 / speed : 300 / speed;
+      timer = window.setTimeout(() => advance(1), delay);
+    });
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [
+    advance,
+    anchorFrames,
+    catalogBase,
+    currentFrameIndex,
+    domain,
+    isAnimating,
+    optionalLayers,
+    product,
+    speed,
+  ]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -350,22 +500,10 @@ export function RadarViewer() {
   if (!catalog || !product || !domain) return <main className="loading-page">Loading observational loops…</main>;
 
   const anchor = anchorFrames[currentFrameIndex];
-  const isLayerEnabled = (recipe: ProductLayer) => {
-    if (!recipe.optional) return true;
-    return optionalLayers[recipe.id] ?? recipe.defaultEnabled ?? true;
-  };
+  const isLayerEnabled = (recipe: ProductLayer) =>
+    isProductLayerEnabled(recipe, optionalLayers);
   const composedLayers = anchor
-    ? product.layers.flatMap((recipe) => {
-        if (!isLayerEnabled(recipe)) return [];
-        const staticLayer = domain.staticLayers[recipe.id];
-        if (staticLayer) {
-          return [{ id: recipe.id, url: absoluteUrl(staticLayer.path, catalogBase), opacity: recipe.opacity }];
-        }
-        const dynamicLayer = domain.layers[recipe.id];
-        const frame = atOrBefore(dynamicLayer?.frames ?? [], anchor.validTime, dynamicLayer?.maxAgeMinutes);
-        if (!frame) return [];
-        return [{ id: recipe.id, url: frameUrl(frame, catalogBase), opacity: recipe.opacity, frame }];
-      })
+    ? composeLayers(product, domain, anchor, catalogBase, optionalLayers)
     : [];
   const sourceTimes = composedLayers
     .filter((item): item is typeof item & { frame: Frame } => "frame" in item && Boolean(item.frame))
@@ -396,7 +534,15 @@ export function RadarViewer() {
       ? "Current"
       : freshestAge <= delayedLimit
         ? "Delayed"
-        : "Archive";
+      : "Archive";
+  const liveSummaryLabel = freshnessClock === null
+    ? "Checking data freshness"
+    : liveState === "Current"
+      ? `Current · ${sourceAgeLabel(freshestAge)}`
+      : liveState === "Delayed"
+        ? `Data delayed · ${sourceAgeLabel(freshestAge)}`
+        : `Not live · ${sourceAgeLabel(freshestAge)}`;
+  const selectedArchiveSpan = archiveSpan(anchorFrames);
 
   return (
     <main className="app-shell">
@@ -409,7 +555,7 @@ export function RadarViewer() {
         </div>
         <div className="live-summary" aria-live="polite">
           <span className={`status-dot status-${liveState.toLowerCase()}`} aria-hidden="true" />
-          <span>{liveState} · catalog {utcClock(catalog.generatedAt)} UTC</span>
+          <span>{liveSummaryLabel} · catalog {utcClock(catalog.generatedAt)} UTC</span>
         </div>
       </header>
 
@@ -433,12 +579,17 @@ export function RadarViewer() {
       </nav>
 
       <section className="viewer-grid" aria-label={product.title}>
-        <div className="map-column">
+        <div
+          className="map-column"
+          style={{
+            "--map-aspect": `${domain.width} / ${domain.height}`,
+            "--map-cap-width": `calc(${((domain.width / domain.height) * 100).toFixed(6)}vh - ${((domain.width / domain.height) * 300).toFixed(3)}px)`,
+          } as CSSProperties}
+        >
           <div
             className="map-stage"
             role="img"
             aria-label={`${product.title}${anchor ? `, valid ${utcClock(anchor.validTime)} UTC. ${sourceTimes}` : ", no frames available"}`}
-            style={{ "--map-aspect": `${domain.width} / ${domain.height}` } as CSSProperties}
           >
             {!anchor && <div className="map-loading">No frames are available for this product yet.</div>}
             {composedLayers.map((layer) => (
@@ -450,7 +601,14 @@ export function RadarViewer() {
                 alt=""
                 aria-hidden="true"
                 key={`${layer.id}-${layer.url}`}
-                style={{ opacity: layer.opacity }}
+                style={{
+                  opacity: layer.opacity,
+                  filter: product.id === "bc-operations"
+                    && layer.id === "daynight"
+                    && (composedLayerIds.has("radar-rain") || composedLayerIds.has("radar-snow"))
+                    ? "saturate(0.52) brightness(0.78) contrast(1.06)"
+                    : undefined,
+                }}
               />
             ))}
             {anchor && (
@@ -474,7 +632,10 @@ export function RadarViewer() {
                 <button className="control-button primary" type="button" aria-pressed={isAnimating} disabled={anchorFrames.length < 2} onClick={() => setPlaying((value) => !value)}>{isAnimating ? "Pause" : "Play"}</button>
                 <button className="control-button" type="button" aria-label="Next frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(1); }}>›</button>
               </div>
-              <span className="frame-count">{anchorFrames.length ? `${currentFrameIndex + 1} / ${anchorFrames.length}` : "0 / 0"}</span>
+              <div className="timeline-metadata">
+                <span className="frame-count">{anchorFrames.length ? `${currentFrameIndex + 1} / ${anchorFrames.length}` : "0 / 0"}</span>
+                <span className="archive-span">{selectedArchiveSpan}</span>
+              </div>
             </div>
             <input
               className="timeline-range"
@@ -540,7 +701,13 @@ export function RadarViewer() {
           })}
           {!visibleLegends.length && (
             <p className="detail-copy">
-              {product.legends.length ? "No legend-bearing layers are enabled." : "Qualitative RGB product; no numerical scale."}
+              {product.id === "bc-ir"
+                ? "Enhanced RGB; no calibrated brightness-temperature scale."
+                : product.group === "Satellite"
+                  ? "Qualitative satellite RGB; no calibrated numerical scale."
+                  : product.legends.length
+                    ? "No legend-bearing layers are enabled."
+                    : "Qualitative RGB product; no numerical scale."}
             </p>
           )}
         </aside>

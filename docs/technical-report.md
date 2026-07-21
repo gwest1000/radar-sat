@@ -167,11 +167,14 @@ are `0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7.5, 10, 20+ cm/h`.
 Transparent radar means no echo. A light grey one-pixel hatch marks no current
 coverage and has been verified not to overlap valid ptype pixels.
 
-Animation runs at seven frames per second with a final-frame hold, keyboard
-stepping, pause/play, 3/6/12/24-hour and 7-day ranges, UTC plus PDT/PST valid time,
-and the actual SAT/RADAR/PTYPE/LTG source times. The integrated timeline is
-anchored to satellite; other sources must be at or before that time and inside
-their age limit.
+Animation advances only after every raster in the next composition is loaded,
+at a nominal 3.3 frames per second at 1× with a 1.2-second final-frame hold.
+The viewer also provides 0.5×/2× speed choices, keyboard stepping, pause/play,
+3/6/12/24-hour and 7-day ranges, UTC plus PDT/PST valid time, and the actual
+SAT/RADAR/PTYPE/LTG source times. The integrated timeline is anchored to
+satellite; other source observations must be at or before that time and inside
+their age limit. In the Operations view the satellite is subdued while radar
+is enabled and can be turned off entirely.
 
 ## Broad-domain recommendation
 

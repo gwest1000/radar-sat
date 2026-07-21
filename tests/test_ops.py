@@ -15,6 +15,7 @@ from radarsat.pipeline import (
     derive_lightning_trails,
     frame_path,
     metadata_path,
+    retained_times,
     safe_archive_path,
     write_metadata,
 )
@@ -114,6 +115,29 @@ class RetentionTests(unittest.TestCase):
             keep_frame(dt.datetime(2026, 7, 18, 10, 30, tzinfo=UTC), now, "broad")
         )
         self.assertFalse(keep_frame(now - dt.timedelta(days=8), now, "bc"))
+
+    def test_bootstrap_selection_applies_archive_cadence_before_download(self) -> None:
+        now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
+        values = [
+            now - dt.timedelta(hours=25, minutes=minute)
+            for minute in (0, 10, 20, 30, 40, 50)
+        ] + [now - dt.timedelta(hours=3, minutes=10)]
+
+        selected = retained_times(values, 48, False, now, "bc")
+
+        self.assertEqual(
+            selected,
+            [
+                now - dt.timedelta(hours=25, minutes=30),
+                now - dt.timedelta(hours=25),
+                now - dt.timedelta(hours=3, minutes=10),
+            ],
+        )
+
+    def test_latest_only_probe_is_not_removed_by_retention(self) -> None:
+        now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
+        latest = now - dt.timedelta(days=8, minutes=10)
+        self.assertEqual(retained_times([latest], 168, True, now, "bc"), [latest])
 
 
 class LightningCleanupTests(unittest.TestCase):

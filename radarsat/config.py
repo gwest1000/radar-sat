@@ -195,7 +195,8 @@ PRODUCTS: list[dict[str, object]] = [
         "defaultHours": 3,
         "description": "Continuous day/night satellite with radar rate, real coverage state, and a 30-minute lightning trail.",
         "layers": [
-            {"id": "daynight", "opacity": 1.0},
+            {"id": "base-dark", "opacity": 1.0},
+            {"id": "daynight", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "radar-coverage", "opacity": 1.0},
             {"id": "radar-rain", "opacity": 0.82, "optional": True, "defaultEnabled": True, "choiceGroup": "radar-rate"},
             {"id": "radar-snow", "opacity": 0.82, "optional": True, "defaultEnabled": False, "choiceGroup": "radar-rate"},
@@ -269,7 +270,10 @@ PRODUCTS: list[dict[str, object]] = [
         "shortTitle": "Lightning",
         "group": "Lightning",
         "domain": "bc",
-        "anchorLayer": "lightning-trail",
+        # Anchor the display clock to the ten-minute lightning interval rather
+        # than the six-minute radar scan used to derive trail rasters. This
+        # keeps VALID and the 0–10/10–20/20–30 minute age bins unambiguous.
+        "anchorLayer": "lightning",
         "defaultHours": 6,
         "description": "Choose a three-interval age trail or the latest quantitative CLDN flash-density grid over subdued satellite.",
         "layers": [
