@@ -5,7 +5,7 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gwest1000.github.io/radar-sat/"),
-  title: "Radar-Sat | BC Observational Loops",
+  title: "BC Satellite/Radar/Lightning",
   description:
     "Operational satellite, radar, precipitation-type, and lightning loops for British Columbia.",
   icons: {
@@ -13,24 +13,24 @@ export const metadata: Metadata = {
     shortcut: `${basePath}/favicon.svg`,
   },
   openGraph: {
-    title: "Radar-Sat | BC Observational Loops",
+    title: "BC Satellite/Radar/Lightning",
     description:
       "Operational satellite, radar, precipitation-type, and lightning loops for British Columbia.",
     type: "website",
     url: "https://gwest1000.github.io/radar-sat/",
-    siteName: "Radar-Sat",
+    siteName: "BC Satellite/Radar/Lightning",
     images: [
       {
         url: "https://gwest1000.github.io/radar-sat/og-radar-sat.png",
         width: 1200,
         height: 630,
-        alt: "Radar-Sat: BC observational loops",
+        alt: "BC satellite, radar and lightning observational loops",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Radar-Sat | BC Observational Loops",
+    title: "BC Satellite/Radar/Lightning",
     description:
       "Operational satellite, radar, precipitation-type, and lightning loops for British Columbia.",
     images: ["https://gwest1000.github.io/radar-sat/og-radar-sat.png"],

@@ -4,8 +4,7 @@ import test from "node:test";
 
 test("exports the operational viewer", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
-  assert.match(html, /Radar-Sat/);
-  assert.match(html, /BC Observational Loops/);
+  assert.match(html, /BC Satellite\/Radar\/Lightning/);
   assert.match(html, /href="\/radar-sat\/_next\//);
   assert.match(html, /href="\/radar-sat\/favicon\.svg"/);
   assert.match(html, /https:\/\/gwest1000\.github\.io\/radar-sat\/og-radar-sat\.png/);
@@ -25,6 +24,9 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /first-pass playback can slow down but never flashes a blank frame/);
   assert.match(viewer, /atOrBeforeSourceTime/);
   assert.match(viewer, /sourceCount > selectedSourceCount/);
+  assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.5, 0\.75, 1, 1\.5, 2\]/);
+  assert.match(viewer, /setPlaying\(true\)/);
+  assert.match(viewer, /activeAnchorLayer/);
 });
 
 test("ships a runtime data configuration", async () => {
@@ -33,10 +35,10 @@ test("ships a runtime data configuration", async () => {
   await access(new URL("../out/config.json", import.meta.url));
   await access(new URL("../out/demo/catalog.json", import.meta.url));
   const demo = JSON.parse(await readFile(new URL("../public/demo/catalog.json", import.meta.url), "utf8"));
-  const operations = demo.products.find((product) => product.id === "bc-operations");
-  const lightning = demo.products.find((product) => product.id === "bc-lightning");
-  assert.equal(operations.layers.find((layer) => layer.id === "daynight").optional, true);
-  assert.equal(lightning.anchorLayer, "lightning");
+  const overlay = demo.products.find((product) => product.id === "bc-large-overlay");
+  assert.equal(overlay.layers.find((layer) => layer.id === "convective").optional, true);
+  assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
+  assert.equal(demo.products.some((product) => product.id === "bc-lightning"), false);
 });
 
 test("deploy workflow uses the GitHub Pages artifact flow", async () => {

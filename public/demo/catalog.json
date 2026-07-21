@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-21T01:09:10.634897Z",
+  "generatedAt": "2026-07-21T05:41:07.171651Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -280,259 +280,281 @@
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2250Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:45Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T22:50:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:00:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2300Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:45Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:00:00Z",
                 "age10": "2026-07-20T22:50:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:06:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2306Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:46Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:00:00Z",
                 "age10": "2026-07-20T22:50:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:12:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2312Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:48Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:10:00Z",
                 "age10": "2026-07-20T23:00:00Z",
                 "age20": "2026-07-20T22:50:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:18:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2318Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:49Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:10:00Z",
                 "age10": "2026-07-20T23:00:00Z",
                 "age20": "2026-07-20T22:50:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:24:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2324Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:50Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:20:00Z",
                 "age10": "2026-07-20T23:10:00Z",
                 "age20": "2026-07-20T23:00:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:30:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2330Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:51Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:30:00Z",
                 "age10": "2026-07-20T23:20:00Z",
                 "age20": "2026-07-20T23:10:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:36:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2336Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:53Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:30:00Z",
                 "age10": "2026-07-20T23:20:00Z",
                 "age20": "2026-07-20T23:10:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:42:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2342Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:54Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:40:00Z",
                 "age10": "2026-07-20T23:30:00Z",
                 "age20": "2026-07-20T23:20:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:48:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2348Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:55Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:40:00Z",
                 "age10": "2026-07-20T23:30:00Z",
                 "age20": "2026-07-20T23:20:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-20T23:54:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2354Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:57Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:50:00Z",
                 "age10": "2026-07-20T23:40:00Z",
                 "age20": "2026-07-20T23:30:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:00:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0000Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:58Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:00:00Z",
                 "age10": "2026-07-20T23:50:00Z",
                 "age20": "2026-07-20T23:40:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:06:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0006Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:08:59Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:00:00Z",
                 "age10": "2026-07-20T23:50:00Z",
                 "age20": "2026-07-20T23:40:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:12:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0012Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:00Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:10:00Z",
                 "age10": "2026-07-21T00:00:00Z",
                 "age20": "2026-07-20T23:50:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:18:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0018Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:02Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:10:00Z",
                 "age10": "2026-07-21T00:00:00Z",
                 "age20": "2026-07-20T23:50:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:24:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0024Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:03Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:20:00Z",
                 "age10": "2026-07-21T00:10:00Z",
                 "age20": "2026-07-21T00:00:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:30:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0030Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:04Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:30:00Z",
                 "age10": "2026-07-21T00:20:00Z",
                 "age20": "2026-07-21T00:10:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:36:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0036Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:05Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:30:00Z",
                 "age10": "2026-07-21T00:20:00Z",
                 "age20": "2026-07-21T00:10:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:42:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0042Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:07Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:40:00Z",
                 "age10": "2026-07-21T00:30:00Z",
                 "age20": "2026-07-21T00:20:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:48:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0048Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:08Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:40:00Z",
                 "age10": "2026-07-21T00:30:00Z",
                 "age20": "2026-07-21T00:20:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T00:54:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0054Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:09Z",
+              "fetchedAt": "2026-07-21T05:31:49Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:50:00Z",
                 "age10": "2026-07-21T00:40:00Z",
                 "age20": "2026-07-21T00:30:00Z"
-              }
+              },
+              "renderVersion": 2
             },
             {
               "validTime": "2026-07-21T01:00:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0100Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T01:09:10Z",
+              "fetchedAt": "2026-07-21T05:31:50Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:50:00Z",
                 "age20": "2026-07-21T00:40:00Z"
-              }
+              },
+              "renderVersion": 2
             }
           ]
         },
@@ -1416,6 +1438,9 @@
         "base-dark": {
           "path": "static/bc/base-dark.png"
         },
+        "watersheds": {
+          "path": "static/bc/watersheds.png"
+        },
         "boundaries": {
           "path": "static/bc/boundaries.png"
         }
@@ -1442,45 +1467,72 @@
   },
   "products": [
     {
-      "id": "bc-operations",
-      "title": "BC Operations Mosaic",
-      "shortTitle": "Operations",
-      "group": "Situational",
+      "id": "bc-large-overlay",
+      "title": "BC Large Overlay",
+      "shortTitle": "BC Large Overlay",
+      "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "daynight",
+      "anchorLayer": "convective",
       "defaultHours": 3,
-      "description": "Continuous day/night satellite with radar rate, real coverage state, and a 30-minute lightning trail.",
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
           "opacity": 1.0
         },
         {
-          "id": "daynight",
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0,
+          "enabledWith": "radar-rain"
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.84,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "ptype-coverage",
+          "opacity": 1.0,
+          "enabledWith": "ptype"
+        },
+        {
+          "id": "ptype",
+          "opacity": 0.9,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "lightning-trail",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
         },
         {
-          "id": "radar-coverage",
-          "opacity": 1.0
-        },
-        {
-          "id": "radar-rain",
-          "opacity": 0.82,
-          "optional": true,
-          "defaultEnabled": true,
-          "choiceGroup": "radar-rate"
-        },
-        {
-          "id": "radar-snow",
-          "opacity": 0.82,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "radar-rate"
-        },
-        {
-          "id": "lightning-trail",
+          "id": "watersheds",
           "opacity": 1.0
         },
         {
@@ -1490,156 +1542,84 @@
       ],
       "legends": [
         "radar-rain",
-        "radar-snow",
-        "lightning-age"
+        "ptype",
+        "lightning-age",
+        "watersheds"
       ],
       "notes": [
-        "Cloud tops are not corrected for parallax.",
-        "Hatched grey areas have no current radar coverage; transparent radar means no echo."
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
+        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
       ]
     },
     {
-      "id": "bc-radar",
-      "title": "BC Radar Rate + Lightning",
-      "shortTitle": "Radar",
-      "group": "Radar",
-      "domain": "bc",
-      "anchorLayer": "radar-rain",
-      "defaultHours": 3,
-      "description": "Rain and snow precipitation rates on a neutral basemap, with an optional lightning trail.",
-      "layers": [
-        {
-          "id": "base-dark",
-          "opacity": 1.0
-        },
-        {
-          "id": "radar-coverage",
-          "opacity": 1.0
-        },
-        {
-          "id": "radar-rain",
-          "opacity": 0.95,
-          "optional": true,
-          "defaultEnabled": true,
-          "choiceGroup": "radar-rate"
-        },
-        {
-          "id": "radar-snow",
-          "opacity": 0.95,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "radar-rate"
-        },
-        {
-          "id": "lightning-trail",
-          "opacity": 1.0,
-          "optional": true
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
-        }
-      ],
-      "legends": [
-        "radar-rain",
-        "radar-snow",
-        "lightning-age"
-      ],
-      "notes": [
-        "Rates are DPQPE-derived composites, not base reflectivity."
-      ]
-    },
-    {
-      "id": "bc-convective",
-      "title": "BC Convective Satellite",
-      "shortTitle": "Convection",
-      "group": "Satellite",
+      "id": "bc-zoomed-overlay",
+      "title": "BC Zoomed Overlay",
+      "shortTitle": "BC Zoomed Overlay",
+      "group": "Overlay",
       "domain": "bc",
       "anchorLayer": "convective",
-      "defaultHours": 6,
-      "description": "Visible/IR sandwich by day and night microphysics IR after dark, with lightning evolution.",
-      "layers": [
-        {
-          "id": "convective",
-          "opacity": 1.0
-        },
-        {
-          "id": "lightning-trail",
-          "opacity": 1.0
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
-        }
-      ],
-      "legends": [
-        "lightning-age"
-      ],
-      "notes": [
-        "Use cloud-top texture and cooling trends; do not infer a surface position without allowing for parallax."
-      ]
-    },
-    {
-      "id": "bc-ptype",
-      "title": "BC Surface Precipitation Type",
-      "shortTitle": "Precip type",
-      "group": "Radar",
-      "domain": "bc",
-      "anchorLayer": "ptype",
-      "defaultHours": 6,
-      "description": "Model-assisted radar surface precipitation type with its own coverage mask.",
+      "defaultHours": 3,
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
       "layers": [
         {
           "id": "base-dark",
           "opacity": 1.0
+        },
+        {
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0,
+          "enabledWith": "radar-rain"
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.84,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "precipitation"
         },
         {
           "id": "ptype-coverage",
-          "opacity": 1.0
+          "opacity": 1.0,
+          "enabledWith": "ptype"
         },
         {
           "id": "ptype",
-          "opacity": 0.9
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
-        }
-      ],
-      "legends": [
-        "ptype"
-      ],
-      "notes": [
-        "\u201cHail or rain\u201d is not a definitive hail diagnosis. Do not compare this mosaic pixel-for-pixel with rate."
-      ]
-    },
-    {
-      "id": "bc-lightning",
-      "title": "BC Lightning Evolution",
-      "shortTitle": "Lightning",
-      "group": "Lightning",
-      "domain": "bc",
-      "anchorLayer": "lightning",
-      "defaultHours": 6,
-      "description": "Choose a three-interval age trail or the latest quantitative CLDN flash-density grid over subdued satellite.",
-      "layers": [
-        {
-          "id": "daynight",
-          "opacity": 0.64
+          "opacity": 0.9,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "precipitation"
         },
         {
           "id": "lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true,
-          "choiceGroup": "lightning-view"
+          "defaultEnabled": true
         },
         {
-          "id": "lightning",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "lightning-view"
+          "id": "watersheds",
+          "opacity": 1.0
         },
         {
           "id": "boundaries",
@@ -1647,56 +1627,358 @@
         }
       ],
       "legends": [
+        "radar-rain",
+        "ptype",
         "lightning-age",
-        "lightning-density"
+        "watersheds"
       ],
       "notes": [
-        "Density is a ten-minute accumulation normalized to flashes km\u207b\u00b2 min\u207b\u00b9; these are not individual strike data.",
-        "Transparent pixels beyond 250 km of Canadian land or sea borders are outside the CLDN mask, not confirmed zero lightning."
-      ]
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
+        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+      ],
+      "viewport": {
+        "left": 0.0954,
+        "top": 0.1596,
+        "width": 0.8302,
+        "height": 0.6768
+      }
     },
     {
-      "id": "bc-snowfog",
-      "title": "BC Low Cloud / Snow\u2013Fog",
-      "shortTitle": "Snow / fog",
-      "group": "Satellite",
+      "id": "bc-southwest-overlay",
+      "title": "BC Southwest Overlay",
+      "shortTitle": "BC Southwest Overlay",
+      "group": "Overlay",
+      "domain": "bc",
+      "anchorLayer": "convective",
+      "defaultHours": 3,
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
+      "layers": [
+        {
+          "id": "base-dark",
+          "opacity": 1.0
+        },
+        {
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0,
+          "enabledWith": "radar-rain"
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.84,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "ptype-coverage",
+          "opacity": 1.0,
+          "enabledWith": "ptype"
+        },
+        {
+          "id": "ptype",
+          "opacity": 0.9,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "watersheds",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "radar-rain",
+        "ptype",
+        "lightning-age",
+        "watersheds"
+      ],
+      "notes": [
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
+        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+      ],
+      "viewport": {
+        "left": 0.3531,
+        "top": 0.4924,
+        "width": 0.3898,
+        "height": 0.3814
+      }
+    },
+    {
+      "id": "bc-southeast-overlay",
+      "title": "BC Southeast Overlay",
+      "shortTitle": "BC Southeast Overlay",
+      "group": "Overlay",
+      "domain": "bc",
+      "anchorLayer": "convective",
+      "defaultHours": 3,
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
+      "layers": [
+        {
+          "id": "base-dark",
+          "opacity": 1.0
+        },
+        {
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0,
+          "enabledWith": "radar-rain"
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.84,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "ptype-coverage",
+          "opacity": 1.0,
+          "enabledWith": "ptype"
+        },
+        {
+          "id": "ptype",
+          "opacity": 0.9,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "watersheds",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "radar-rain",
+        "ptype",
+        "lightning-age",
+        "watersheds"
+      ],
+      "notes": [
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
+        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+      ],
+      "viewport": {
+        "left": 0.5518,
+        "top": 0.4854,
+        "width": 0.355,
+        "height": 0.3473
+      }
+    },
+    {
+      "id": "bc-northeast-overlay",
+      "title": "BC Northeast Overlay",
+      "shortTitle": "BC Northeast Overlay",
+      "group": "Overlay",
+      "domain": "bc",
+      "anchorLayer": "convective",
+      "defaultHours": 3,
+      "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail and BC major-watershed boundaries.",
+      "layers": [
+        {
+          "id": "base-dark",
+          "opacity": 1.0
+        },
+        {
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0,
+          "enabledWith": "radar-rain"
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.84,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "ptype-coverage",
+          "opacity": 1.0,
+          "enabledWith": "ptype"
+        },
+        {
+          "id": "ptype",
+          "opacity": 0.9,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "watersheds",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "radar-rain",
+        "ptype",
+        "lightning-age",
+        "watersheds"
+      ],
+      "notes": [
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
+        "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins."
+      ],
+      "viewport": {
+        "left": 0.4196,
+        "top": 0.1525,
+        "width": 0.452,
+        "height": 0.4422
+      }
+    },
+    {
+      "id": "bc-zoomed-snowfog",
+      "title": "BC Zoomed Snow / Fog",
+      "shortTitle": "BC Snow / Fog",
+      "group": "Snow / fog",
       "domain": "bc",
       "anchorLayer": "snowfog",
       "defaultHours": 12,
-      "description": "Snow/fog RGB by day and night microphysics after dark for low cloud and terrain obscuration.",
+      "viewport": {
+        "left": 0.0954,
+        "top": 0.1596,
+        "width": 0.8302,
+        "height": 0.6768
+      },
+      "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
       "layers": [
         {
           "id": "snowfog",
           "opacity": 1.0
         },
         {
+          "id": "watersheds",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
       ],
-      "legends": [],
+      "legends": [
+        "watersheds"
+      ],
       "notes": [
         "RGB colours are qualitative; no numerical colourbar applies."
       ]
     },
     {
-      "id": "bc-ir",
-      "title": "BC Infrared Imagery",
-      "shortTitle": "Infrared",
-      "group": "Satellite",
+      "id": "bc-southwest-snowfog",
+      "title": "BC Southwest Snow / Fog",
+      "shortTitle": "SW Snow / Fog",
+      "group": "Snow / fog",
       "domain": "bc",
-      "anchorLayer": "ir",
+      "anchorLayer": "snowfog",
       "defaultHours": 12,
-      "description": "Around-the-clock GOES-West enhanced 2-km infrared RGB for cloud and weather-system structure and motion.",
+      "viewport": {
+        "left": 0.3531,
+        "top": 0.4924,
+        "width": 0.3898,
+        "height": 0.3814
+      },
+      "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
       "layers": [
         {
-          "id": "ir",
+          "id": "snowfog",
           "opacity": 1.0
         },
         {
-          "id": "lightning-trail",
-          "opacity": 1.0,
-          "optional": true
+          "id": "watersheds",
+          "opacity": 1.0
         },
         {
           "id": "boundaries",
@@ -1704,24 +1986,34 @@
         }
       ],
       "legends": [
-        "lightning-age"
+        "watersheds"
       ],
       "notes": [
-        "This public RGB is qualitative rather than calibrated ABI Band 13 brightness temperature; use trends, not numeric cloud-top thresholds."
+        "RGB colours are qualitative; no numerical colourbar applies."
       ]
     },
     {
-      "id": "bc-natural",
-      "title": "BC Visible / Natural Colour",
-      "shortTitle": "Visible",
-      "group": "Satellite",
+      "id": "bc-southeast-snowfog",
+      "title": "BC Southeast Snow / Fog",
+      "shortTitle": "SE Snow / Fog",
+      "group": "Snow / fog",
       "domain": "bc",
-      "anchorLayer": "natural",
+      "anchorLayer": "snowfog",
       "defaultHours": 12,
-      "description": "Daytime natural-colour visible imagery for cloud texture, smoke, snow cover, and surface detail.",
+      "viewport": {
+        "left": 0.5518,
+        "top": 0.4854,
+        "width": 0.355,
+        "height": 0.3473
+      },
+      "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
       "layers": [
         {
-          "id": "natural",
+          "id": "snowfog",
+          "opacity": 1.0
+        },
+        {
+          "id": "watersheds",
           "opacity": 1.0
         },
         {
@@ -1729,31 +2021,47 @@
           "opacity": 1.0
         }
       ],
-      "legends": [],
+      "legends": [
+        "watersheds"
+      ],
       "notes": [
-        "Daylight only; the normal GOES-West overnight gap is not an outage."
+        "RGB colours are qualitative; no numerical colourbar applies."
       ]
     },
     {
-      "id": "bc-site-radar",
-      "title": "BC Site Radar Diagnostic",
-      "shortTitle": "Radar sites",
-      "group": "Radar",
+      "id": "bc-northeast-snowfog",
+      "title": "BC Northeast Snow / Fog",
+      "shortTitle": "NE Snow / Fog",
+      "group": "Snow / fog",
       "domain": "bc",
-      "anchorLayer": "site-radar",
-      "defaultHours": 3,
-      "description": "Aldergrove, Halfmoon Peak, Silver Star Mountain, and Prince George DPQPE imagery.",
+      "anchorLayer": "snowfog",
+      "defaultHours": 12,
+      "viewport": {
+        "left": 0.4196,
+        "top": 0.1525,
+        "width": 0.452,
+        "height": 0.4422
+      },
+      "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
       "layers": [
         {
-          "id": "site-radar",
+          "id": "snowfog",
+          "opacity": 1.0
+        },
+        {
+          "id": "watersheds",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
           "opacity": 1.0
         }
       ],
       "legends": [
-        "radar-rain"
+        "watersheds"
       ],
       "notes": [
-        "Rendered DPQPE site imagery is base-like, but is not base reflectivity or radial velocity."
+        "RGB colours are qualitative; no numerical colourbar applies."
       ]
     }
   ],
@@ -1777,6 +2085,10 @@
     "lightning-density": {
       "title": "Lightning flash density",
       "path": "static/legend-lightning-density.png"
+    },
+    "watersheds": {
+      "title": "BC major watershed boundary",
+      "kind": "watersheds"
     }
   },
   "sources": {

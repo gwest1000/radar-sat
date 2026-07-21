@@ -41,7 +41,11 @@ def build_catalog(root: Path) -> dict[str, Any]:
                         "frames": frames,
                     }
         static_layers: dict[str, Any] = {}
-        for layer_id, filename in (("base-dark", "base-dark.png"), ("boundaries", "boundaries.png")):
+        for layer_id, filename in (
+            ("base-dark", "base-dark.png"),
+            ("watersheds", "watersheds.png"),
+            ("boundaries", "boundaries.png"),
+        ):
             path = root / "static" / domain_id / filename
             if path.exists():
                 static_layers[layer_id] = {"path": path.relative_to(root).as_posix()}

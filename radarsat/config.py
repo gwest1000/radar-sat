@@ -181,175 +181,95 @@ LAYERS: dict[str, Layer] = {
 }
 
 
-PRODUCTS: list[dict[str, object]] = [
-    {
-        "id": "bc-operations",
-        "title": "BC Operations Mosaic",
-        "shortTitle": "Operations",
-        "group": "Situational",
-        "domain": "bc",
-        # Integrated products follow the ten-minute satellite clock.  Radar,
-        # ptype, and lightning are selected at-or-before that observation so a
-        # newer radar scan is never shown under an older satellite timestamp.
-        "anchorLayer": "daynight",
-        "defaultHours": 3,
-        "description": "Continuous day/night satellite with radar rate, real coverage state, and a 30-minute lightning trail.",
-        "layers": [
-            {"id": "base-dark", "opacity": 1.0},
-            {"id": "daynight", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "radar-coverage", "opacity": 1.0},
-            {"id": "radar-rain", "opacity": 0.82, "optional": True, "defaultEnabled": True, "choiceGroup": "radar-rate"},
-            {"id": "radar-snow", "opacity": 0.82, "optional": True, "defaultEnabled": False, "choiceGroup": "radar-rate"},
-            {"id": "lightning-trail", "opacity": 1.0},
-            {"id": "boundaries", "opacity": 1.0},
-        ],
-        "legends": ["radar-rain", "radar-snow", "lightning-age"],
-        "notes": [
-            "Cloud tops are not corrected for parallax.",
-            "Hatched grey areas have no current radar coverage; transparent radar means no echo.",
-        ],
-    },
-    {
-        "id": "bc-radar",
-        "title": "BC Radar Rate + Lightning",
-        "shortTitle": "Radar",
-        "group": "Radar",
-        "domain": "bc",
-        "anchorLayer": "radar-rain",
-        "defaultHours": 3,
-        "description": "Rain and snow precipitation rates on a neutral basemap, with an optional lightning trail.",
-        "layers": [
-            {"id": "base-dark", "opacity": 1.0},
-            {"id": "radar-coverage", "opacity": 1.0},
-            {"id": "radar-rain", "opacity": 0.95, "optional": True, "defaultEnabled": True, "choiceGroup": "radar-rate"},
-            {"id": "radar-snow", "opacity": 0.95, "optional": True, "defaultEnabled": False, "choiceGroup": "radar-rate"},
-            {"id": "lightning-trail", "opacity": 1.0, "optional": True},
-            {"id": "boundaries", "opacity": 1.0},
-        ],
-        "legends": ["radar-rain", "radar-snow", "lightning-age"],
-        "notes": ["Rates are DPQPE-derived composites, not base reflectivity."],
-    },
-    {
-        "id": "bc-convective",
-        "title": "BC Convective Satellite",
-        "shortTitle": "Convection",
-        "group": "Satellite",
+VIEWPORTS: dict[str, dict[str, float]] = {
+    # Normalized crops of the common EPSG:3005 BC grid. Reusing the same
+    # aligned rasters gives regional displays without multiplying R2 storage.
+    "zoomed": {"left": 0.0954, "top": 0.1596, "width": 0.8302, "height": 0.6768},
+    "southwest": {"left": 0.3531, "top": 0.5300, "width": 0.3898, "height": 0.3438},
+    "southeast": {"left": 0.5518, "top": 0.4854, "width": 0.3550, "height": 0.3473},
+    "northeast": {"left": 0.4196, "top": 0.1525, "width": 0.4520, "height": 0.4422},
+}
+
+
+def _overlay_product(
+    product_id: str,
+    title: str,
+    short_title: str,
+    viewport: dict[str, float] | None = None,
+) -> dict[str, object]:
+    product: dict[str, object] = {
+        "id": product_id,
+        "title": title,
+        "shortTitle": short_title,
+        "group": "Overlay",
         "domain": "bc",
         "anchorLayer": "convective",
-        "defaultHours": 6,
-        "description": "Visible/IR sandwich by day and night microphysics IR after dark, with lightning evolution.",
-        "layers": [
-            {"id": "convective", "opacity": 1.0},
-            {"id": "lightning-trail", "opacity": 1.0},
-            {"id": "boundaries", "opacity": 1.0},
-        ],
-        "legends": ["lightning-age"],
-        "notes": ["Use cloud-top texture and cooling trends; do not infer a surface position without allowing for parallax."],
-    },
-    {
-        "id": "bc-ptype",
-        "title": "BC Surface Precipitation Type",
-        "shortTitle": "Precip type",
-        "group": "Radar",
-        "domain": "bc",
-        "anchorLayer": "ptype",
-        "defaultHours": 6,
-        "description": "Model-assisted radar surface precipitation type with its own coverage mask.",
+        "defaultHours": 3,
+        "description": (
+            "A configurable satellite, radar or precipitation-type overlay with "
+            "a 30-minute lightning trail and BC major-watershed boundaries."
+        ),
         "layers": [
             {"id": "base-dark", "opacity": 1.0},
-            {"id": "ptype-coverage", "opacity": 1.0},
-            {"id": "ptype", "opacity": 0.90},
+            {"id": "natural", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "convective", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
+            {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
+            {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
+            {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
+            {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
+            {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "watersheds", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
         ],
-        "legends": ["ptype"],
-        "notes": ["“Hail or rain” is not a definitive hail diagnosis. Do not compare this mosaic pixel-for-pixel with rate."],
-    },
-    {
-        "id": "bc-lightning",
-        "title": "BC Lightning Evolution",
-        "shortTitle": "Lightning",
-        "group": "Lightning",
-        "domain": "bc",
-        # Anchor the display clock to the ten-minute lightning interval rather
-        # than the six-minute radar scan used to derive trail rasters. This
-        # keeps VALID and the 0–10/10–20/20–30 minute age bins unambiguous.
-        "anchorLayer": "lightning",
-        "defaultHours": 6,
-        "description": "Choose a three-interval age trail or the latest quantitative CLDN flash-density grid over subdued satellite.",
-        "layers": [
-            {"id": "daynight", "opacity": 0.64},
-            {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "lightning-view"},
-            {"id": "lightning", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "lightning-view"},
-            {"id": "boundaries", "opacity": 1.0},
-        ],
-        "legends": ["lightning-age", "lightning-density"],
+        "legends": ["radar-rain", "ptype", "lightning-age", "watersheds"],
         "notes": [
-            "Density is a ten-minute accumulation normalized to flashes km⁻² min⁻¹; these are not individual strike data.",
-            "Transparent pixels beyond 250 km of Canadian land or sea borders are outside the CLDN mask, not confirmed zero lightning.",
+            "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+            "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height.",
+            "Watersheds are the public DataBC major-watershed layer, used as the closest authoritative public proxy for BC Hydro operational basins.",
         ],
-    },
-    {
-        "id": "bc-snowfog",
-        "title": "BC Low Cloud / Snow–Fog",
-        "shortTitle": "Snow / fog",
-        "group": "Satellite",
+    }
+    if viewport is not None:
+        product["viewport"] = viewport
+    return product
+
+
+def _snowfog_product(
+    product_id: str,
+    title: str,
+    short_title: str,
+    viewport: dict[str, float],
+) -> dict[str, object]:
+    return {
+        "id": product_id,
+        "title": title,
+        "shortTitle": short_title,
+        "group": "Snow / fog",
         "domain": "bc",
         "anchorLayer": "snowfog",
         "defaultHours": 12,
-        "description": "Snow/fog RGB by day and night microphysics after dark for low cloud and terrain obscuration.",
+        "viewport": viewport,
+        "description": "Snow/fog RGB by day and night microphysics after dark, with BC major-watershed boundaries.",
         "layers": [
             {"id": "snowfog", "opacity": 1.0},
+            {"id": "watersheds", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
         ],
-        "legends": [],
+        "legends": ["watersheds"],
         "notes": ["RGB colours are qualitative; no numerical colourbar applies."],
-    },
-    {
-        "id": "bc-ir",
-        "title": "BC Infrared Imagery",
-        "shortTitle": "Infrared",
-        "group": "Satellite",
-        "domain": "bc",
-        "anchorLayer": "ir",
-        "defaultHours": 12,
-        "description": "Around-the-clock GOES-West enhanced 2-km infrared RGB for cloud and weather-system structure and motion.",
-        "layers": [
-            {"id": "ir", "opacity": 1.0},
-            {"id": "lightning-trail", "opacity": 1.0, "optional": True},
-            {"id": "boundaries", "opacity": 1.0},
-        ],
-        "legends": ["lightning-age"],
-        "notes": ["This public RGB is qualitative rather than calibrated ABI Band 13 brightness temperature; use trends, not numeric cloud-top thresholds."],
-    },
-    {
-        "id": "bc-natural",
-        "title": "BC Visible / Natural Colour",
-        "shortTitle": "Visible",
-        "group": "Satellite",
-        "domain": "bc",
-        "anchorLayer": "natural",
-        "defaultHours": 12,
-        "description": "Daytime natural-colour visible imagery for cloud texture, smoke, snow cover, and surface detail.",
-        "layers": [
-            {"id": "natural", "opacity": 1.0},
-            {"id": "boundaries", "opacity": 1.0},
-        ],
-        "legends": [],
-        "notes": ["Daylight only; the normal GOES-West overnight gap is not an outage."],
-    },
-    {
-        "id": "bc-site-radar",
-        "title": "BC Site Radar Diagnostic",
-        "shortTitle": "Radar sites",
-        "group": "Radar",
-        "domain": "bc",
-        "anchorLayer": "site-radar",
-        "defaultHours": 3,
-        "description": "Aldergrove, Halfmoon Peak, Silver Star Mountain, and Prince George DPQPE imagery.",
-        "layers": [{"id": "site-radar", "opacity": 1.0}],
-        "legends": ["radar-rain"],
-        "notes": ["Rendered DPQPE site imagery is base-like, but is not base reflectivity or radial velocity."],
-    },
+    }
+
+
+PRODUCTS: list[dict[str, object]] = [
+    _overlay_product("bc-large-overlay", "BC Large Overlay", "BC Large Overlay"),
+    _overlay_product("bc-zoomed-overlay", "BC Zoomed Overlay", "BC Zoomed Overlay", VIEWPORTS["zoomed"]),
+    _overlay_product("bc-southwest-overlay", "BC Southwest Overlay", "BC Southwest Overlay", VIEWPORTS["southwest"]),
+    _overlay_product("bc-southeast-overlay", "BC Southeast Overlay", "BC Southeast Overlay", VIEWPORTS["southeast"]),
+    _overlay_product("bc-northeast-overlay", "BC Northeast Overlay", "BC Northeast Overlay", VIEWPORTS["northeast"]),
+    _snowfog_product("bc-zoomed-snowfog", "BC Zoomed Snow / Fog", "BC Snow / Fog", VIEWPORTS["zoomed"]),
+    _snowfog_product("bc-southwest-snowfog", "BC Southwest Snow / Fog", "SW Snow / Fog", VIEWPORTS["southwest"]),
+    _snowfog_product("bc-southeast-snowfog", "BC Southeast Snow / Fog", "SE Snow / Fog", VIEWPORTS["southeast"]),
+    _snowfog_product("bc-northeast-snowfog", "BC Northeast Snow / Fog", "NE Snow / Fog", VIEWPORTS["northeast"]),
 ]
 
 
@@ -373,5 +293,9 @@ LEGENDS: dict[str, dict[str, str]] = {
     "lightning-density": {
         "title": "Lightning flash density",
         "path": "static/legend-lightning-density.png",
+    },
+    "watersheds": {
+        "title": "BC major watershed boundary",
+        "kind": "watersheds",
     },
 }

@@ -38,8 +38,10 @@ The dated Datamart tree currently retains 30 days
 ([Datamart guide](https://eccc-msc.github.io/open-data/msc-datamart/readme_en/)).
 
 Lag is not a service guarantee. The ranges above combine the July 20 live audit
-with conservative alert thresholds. Radar-Sat warns at 25/40 minutes for
-satellite, 12/20 for radar, 18/30 for ptype, and 22/35 for lightning.
+with conservative, source-aware alert thresholds. The interface treats
+satellite as current/delayed at 45/75 minutes, radar at 15/30, precipitation
+type at 20/35, and lightning at 25/45. This avoids reporting the normal
+15–35-minute ECCC satellite publication delay as a local ingest outage.
 
 ## Acquisition and reliability
 
@@ -134,32 +136,51 @@ output only.
 
 ## Display specification
 
-The initial operational set is intentionally complementary:
+The operational interface now concentrates on two complementary families:
 
-1. **Operations mosaic:** day-visible/night-IR → no-coverage hatch → rain rate
-   → lightning age → boundaries. This is the default situational display.
-2. **Radar rate:** neutral basemap with mutually clear rain/snow controls and
-   optional lightning. Rain and snow are not silently stacked.
-3. **Convective satellite:** visible/IR sandwich by day, night microphysics
-   after dark, with lightning but no filled radar competing with the RGB.
-4. **Surface precipitation type:** ptype alone on a dark map with its own
-   coverage mask; freezing rain and “hail or rain” retain ECCC wording.
-5. **Lightning evolution:** choose an age trail (oldest orange, then cyan,
-   current white) or quantitative ten-minute flash density using ECCC's
-   `0–2+ flashes km⁻² min⁻¹` scale.
-6. **Station radar diagnostic:** synchronized Aldergrove, Halfmoon Peak, Silver
-   Star and Prince George panels, shown only after all four native streams have
-   produced a usable time.
-7. **Snow/fog**, **standalone 2-km IR**, and **visible/natural colour:**
-   qualitative source RGBs, reprojected and display-compressed. IR can carry an
-   optional lightning trail; visible is daylight-only.
+1. **Overlay:** large BC, zoomed BC, southwest, southeast and northeast views.
+   Visible, infrared and VisIR are a mutually exclusive satellite group; radar
+   and precipitation type are a second mutually exclusive group; lightning can
+   be switched independently. Coverage hatching follows the selected radar
+   product. The chosen satellite clock anchors the loop; if no satellite is
+   enabled, the selected radar/ptype or lightning clock takes over.
+2. **Snow/fog:** zoomed BC and the same three regional views. These use the
+   qualitative day snow/fog/night-microphysics RGB with watershed and political
+   boundaries.
+
+The regional displays magnify normalized crops of the common BC grid rather
+than duplicating frames in R2. This preserves the storage plan and avoids fake
+upsampling: source ceilings remain 1 km for visible/radar/ptype, 2 km for IR,
+and 2.5 km for lightning.
+
+DataBC's public [BC Major Watersheds](https://catalogue.data.gov.bc.ca/dataset/bc-major-watersheds)
+layer is drawn with a dark halo and cyan centreline. No downloadable,
+province-wide BC Hydro operational-basin layer was found, so this is labelled
+as a public proxy rather than misrepresented as an internal BCH boundary set.
 
 The standalone IR RGB is useful for cloud-top structure and motion but is not a
 calibrated ABI Band 13 brightness-temperature field; the visible RGB is not a
 calibrated reflectance grid. Numeric cold-cloud or reflectance thresholds would
 require adding a raw NOAA ABI radiance/Cloud-and-Moisture-Imagery decoder.
 Lightning-density transparency beyond 250 km of Canadian land or sea borders is
-outside the CLDN mask and must not be read as confirmed zero lightning.
+outside the CLDN mask and must not be read as confirmed zero lightning. Positive
+2.5-km density cells are grouped into compact circular markers, not labelled as
+individual strikes. New flashes use a magenta core, white ring and dark halo;
+the core, ring and marker size fade through the 10–20 and 20–30-minute bins so
+they remain visible over strong radar echoes.
+
+### Satellite parallax
+
+A physically defensible parallax correction is possible, but not from the
+current rendered RGBs alone. It requires a per-pixel cloud-top height field and
+the GOES-West viewing geometry, then relocates each cloudy pixel from its
+apparent satellite line of sight to the corresponding surface intercept. NOAA's
+ABI [cloud-top-height product](https://www.goes-r.gov/products/baseline-cloud-top-height-cloud-layer.html)
+provides the needed height retrieval. A single fixed displacement would move
+low cloud, terrain and deep convection by the same amount and would be more
+misleading than leaving the imagery uncorrected. The current interface states
+this limitation; a future correction should ingest the height product, retain
+quality flags, and mark any pixel lacking a valid height as uncorrected.
 
 Radar uses ECCC's discrete authoritative legends. Rain thresholds are
 `0.1, 1, 2, 4, 8, 12, 16, 24, 32, 50, 64, 100, 125, 200+ mm/h`; snow thresholds
@@ -169,12 +190,10 @@ coverage and has been verified not to overlap valid ptype pixels.
 
 Animation advances only after every raster in the next composition is loaded,
 at a nominal 3.3 frames per second at 1× with a 1.2-second final-frame hold.
-The viewer also provides 0.5×/2× speed choices, keyboard stepping, pause/play,
-3/6/12/24-hour and 7-day ranges, UTC plus PDT/PST valid time, and the actual
-SAT/RADAR/PTYPE/LTG source times. The integrated timeline is anchored to
-satellite; other source observations must be at or before that time and inside
-their age limit. In the Operations view the satellite is subdued while radar
-is enabled and can be turned off entirely.
+A five-stop slider provides 0.5×, 0.75×, 1×, 1.5× and 2×; product and layer
+changes restart playback automatically. The viewer also provides keyboard
+stepping, pause/play, 3/6/12/24-hour and 7-day ranges, UTC plus PDT/PST valid
+time, and the actual SAT/RADAR/PTYPE/LTG source times.
 
 ## Broad-domain recommendation
 

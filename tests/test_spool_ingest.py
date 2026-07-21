@@ -13,6 +13,7 @@ from PIL import Image
 from rasterio.transform import from_bounds
 
 from radarsat.config import LAYERS, Domain
+from radarsat.images import lightning_trail
 from radarsat.pipeline import (
     derive_lightning_trails,
     frame_path,
@@ -138,6 +139,39 @@ class NativeDiscoveryTests(unittest.TestCase):
 
 
 class NativeRenderTests(unittest.TestCase):
+    def test_lightning_trail_uses_haloed_circles_with_a_flash_core(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.png"
+            destination = root / "trail.png"
+            image = Image.new("RGBA", (80, 60), (0, 0, 0, 0))
+            image.putpixel((40, 30), (127, 0, 0, 255))
+            image.save(source, "PNG")
+
+            lightning_trail([source, None, None], destination)
+
+            rendered = np.asarray(Image.open(destination).convert("RGBA"))
+            alpha = rendered[:, :, 3]
+            y, x = np.where(alpha > 0)
+            self.assertGreater(len(x), 80)
+            self.assertLess(len(x), 230)
+            # Circular corners remain transparent; a square dilation would not.
+            self.assertEqual(int(alpha[y.min(), x.min()]), 0)
+            white_ring = (
+                (rendered[:, :, 0] > 240)
+                & (rendered[:, :, 1] > 240)
+                & (rendered[:, :, 2] > 240)
+                & (alpha > 0)
+            )
+            magenta_core = (
+                (rendered[:, :, 0] > 220)
+                & (rendered[:, :, 1] < 120)
+                & (rendered[:, :, 2] > 170)
+                & (alpha > 0)
+            )
+            self.assertTrue(np.any(white_ring))
+            self.assertTrue(np.any(magenta_core))
+
     def test_lightning_density_palette_is_transparent_at_zero_and_red_at_legend_ceiling(self) -> None:
         rgba = _lightning_rgba(np.asarray([[np.nan, 0.0, 0.2, 1.0, 2.0, 5.0]], dtype=np.float32))
 

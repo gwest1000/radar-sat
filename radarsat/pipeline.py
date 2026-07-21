@@ -12,11 +12,19 @@ from PIL import Image
 from .catalog import write_catalog
 from .config import DOMAINS, LAYERS, Domain, Layer
 from .geomet import GeoMetClient, at_or_before, format_utc, frame_stamp
-from .images import lightning_trail, render_static_maps, save_coverage, save_overlay, save_satellite
+from .images import (
+    lightning_trail,
+    render_static_maps,
+    render_watershed_overlay,
+    save_coverage,
+    save_overlay,
+    save_satellite,
+)
 from .retention import keep_frame
 
 
 UTC = dt.timezone.utc
+LIGHTNING_TRAIL_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
     "ir",
@@ -141,6 +149,9 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
     boundaries = root / "static" / domain.id / "boundaries.png"
     if not base.exists() or not boundaries.exists():
         render_static_maps(domain, base, boundaries)
+    watersheds = root / "static" / domain.id / "watersheds.png"
+    if domain.id == "bc" and not watersheds.exists():
+        render_watershed_overlay(domain, watersheds)
 
     legend_specs = {
         "legend-radar-rain.png": LAYERS["radar-rain"],
@@ -302,12 +313,19 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             if value
         }
         current_sources: dict[str, str] = {}
+        current_render_version: int | None = None
         if meta.exists():
             try:
-                current_sources = json.loads(meta.read_text()).get("sourceTimes", {})
+                current_metadata = json.loads(meta.read_text())
+                current_sources = current_metadata.get("sourceTimes", {})
+                current_render_version = current_metadata.get("renderVersion")
             except (OSError, json.JSONDecodeError):
                 current_sources = {}
-        if not destination.exists() or current_sources != expected_sources:
+        if (
+            not destination.exists()
+            or current_sources != expected_sources
+            or current_render_version != LIGHTNING_TRAIL_RENDER_VERSION
+        ):
             lightning_trail(existing, destination)
             write_metadata(
                 root,
@@ -316,6 +334,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 anchor,
                 destination,
                 {f"age{index * 10}": value for index, value in enumerate(source_times) if value},
+                extra={"renderVersion": LIGHTNING_TRAIL_RENDER_VERSION},
             )
 
 

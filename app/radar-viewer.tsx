@@ -33,6 +33,14 @@ type ProductLayer = {
   optional?: boolean;
   defaultEnabled?: boolean;
   choiceGroup?: string;
+  enabledWith?: string;
+};
+
+type Viewport = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 };
 
 type Product = {
@@ -47,6 +55,7 @@ type Product = {
   layers: ProductLayer[];
   legends: string[];
   notes: string[];
+  viewport?: Viewport;
 };
 
 type Legend = {
@@ -69,7 +78,9 @@ type SiteConfig = {
 };
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
+const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
+const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
 
 function absoluteUrl(path: string, base: string): string {
   return new URL(path, base).toString();
@@ -97,9 +108,23 @@ type ComposedLayer = {
 function isProductLayerEnabled(
   recipe: ProductLayer,
   optionalLayers: Record<string, boolean>,
+  recipes: ProductLayer[] = [],
 ): boolean {
+  if (recipe.enabledWith) {
+    const controller = recipes.find((candidate) => candidate.id === recipe.enabledWith);
+    return Boolean(controller && isProductLayerEnabled(controller, optionalLayers, recipes));
+  }
   if (!recipe.optional) return true;
   return optionalLayers[recipe.id] ?? recipe.defaultEnabled ?? true;
+}
+
+function activeAnchorLayer(product: Product, optionalLayers: Record<string, boolean>): string {
+  const enabled = (id: string) => {
+    const recipe = product.layers.find((candidate) => candidate.id === id);
+    return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
+  };
+  return ["natural", "ir", "convective", "radar-rain", "ptype", "lightning-trail"]
+    .find(enabled) ?? product.anchorLayer;
 }
 
 function composeLayers(
@@ -110,7 +135,7 @@ function composeLayers(
   optionalLayers: Record<string, boolean>,
 ): ComposedLayer[] {
   return product.layers.flatMap((recipe) => {
-    if (!isProductLayerEnabled(recipe, optionalLayers)) return [];
+    if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
     const staticLayer = domain.staticLayers[recipe.id];
     if (staticLayer) {
       return [{
@@ -243,10 +268,10 @@ function archiveSpan(frames: Frame[]): string {
   return `${span} · ${utcClock(first.validTime)}–${utcClock(last.validTime)} UTC`;
 }
 
-function sourceAgeLabel(minutes: number): string {
-  if (!Number.isFinite(minutes)) return "newest source unknown";
-  if (minutes < 1) return "newest source <1 min old";
-  return `newest source ${Math.round(minutes)} min old`;
+function ageLabel(minutes: number): string {
+  if (!Number.isFinite(minutes)) return "unknown";
+  if (minutes < 1) return "<1m";
+  return `${Math.round(minutes)}m`;
 }
 
 function layerLabel(layerId: string): string {
@@ -265,12 +290,15 @@ function sourceLabel(layerId: string): string | null {
 }
 
 function layerControlLabel(layerId: string): string {
-  if (layerId === "daynight") return "Satellite";
-  if (layerId === "radar-rain") return "Rain rate";
+  if (layerId === "natural") return "Visible Satellite";
+  if (layerId === "ir") return "Infra-Red Satellite";
+  if (layerId === "convective") return "VisIR Blend";
+  if (layerId === "radar-rain") return "Radar";
   if (layerId === "radar-snow") return "Snow rate";
   if (layerId === "radar-coverage") return "Radar coverage";
   if (layerId === "ptype-coverage") return "Precipitation-type coverage";
-  if (layerId === "lightning-trail") return "Age trail";
+  if (layerId === "ptype") return "Precip type";
+  if (layerId === "lightning-trail") return "Lightning";
   if (layerId === "lightning") return "Flash density";
   return layerLabel(layerId);
 }
@@ -282,17 +310,20 @@ function legendLayerId(legendId: string): string {
 }
 
 function freshnessThresholds(layerId: string): [number, number] {
-  if (layerId.startsWith("radar") || layerId === "site-radar") return [12, 20];
-  if (layerId === "ptype") return [18, 30];
-  if (layerId.startsWith("lightning")) return [22, 35];
-  return [25, 40];
+  if (layerId.startsWith("radar") || layerId === "site-radar") return [15, 30];
+  if (layerId === "ptype") return [20, 35];
+  if (layerId.startsWith("lightning")) return [25, 45];
+  // The source valid time typically trails receipt by roughly 20–40 minutes;
+  // use source-aware limits so normal ECCC publication latency is not reported
+  // as a local ingest outage.
+  return [45, 75];
 }
 
 function LightningLegend() {
   const rows = [
-    ["0–10 min", "#ffffff"],
-    ["10–20 min", "#00e5ff"],
-    ["20–30 min", "#ff9f1c"],
+    ["0–10 min", "#ff42d6"],
+    ["10–20 min", "#c26ad5"],
+    ["20–30 min", "#807ea4"],
   ];
   return (
     <div className="lightning-legend" aria-label="Lightning age legend">
@@ -306,14 +337,23 @@ function LightningLegend() {
   );
 }
 
+function WatershedLegend() {
+  return (
+    <div className="watershed-legend" aria-label="BC major watershed boundary legend">
+      <span className="watershed-symbol" aria-hidden="true" />
+      <span>BC major watershed</span>
+    </div>
+  );
+}
+
 export function RadarViewer() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [catalogBase, setCatalogBase] = useState("");
   const [error, setError] = useState("");
-  const [productId, setProductId] = useState("bc-operations");
+  const [productId, setProductId] = useState("bc-large-overlay");
   const [frameIndex, setFrameIndex] = useState(NEWEST_FRAME);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1);
+  const [speedIndex, setSpeedIndex] = useState(2);
   const [rangeHours, setRangeHours] = useState(3);
   const [optionalLayers, setOptionalLayers] = useState<Record<string, boolean>>({});
   const [freshnessClock, setFreshnessClock] = useState<number | null>(null);
@@ -347,7 +387,7 @@ export function RadarViewer() {
             if (!cancelled) {
               setCatalog(nextCatalog);
               setCatalogBase(resolved);
-              const preferred = availableProducts.find((item) => item.id === "bc-operations") ?? availableProducts[0];
+              const preferred = availableProducts.find((item) => item.id === "bc-large-overlay") ?? availableProducts[0];
               setProductId((current) => availableProducts.some((item) => item.id === current) ? current : preferred.id);
               setError("");
               if (!initialized) {
@@ -397,14 +437,20 @@ export function RadarViewer() {
     [availableProducts, productId],
   );
   const domain = product ? catalog?.domains[product.domain] : undefined;
+  const activeAnchorId = useMemo(
+    () => product ? activeAnchorLayer(product, optionalLayers) : "",
+    [optionalLayers, product],
+  );
   const anchorFrames = useMemo(() => {
     if (!domain || !product) return [];
-    const frames = domain.layers[product.anchorLayer]?.frames ?? [];
+    const frames = domain.layers[activeAnchorId]?.frames ?? [];
     if (!frames.length) return [];
     const newest = Date.parse(frames[frames.length - 1].validTime);
     const cutoff = newest - rangeHours * 60 * 60 * 1000;
     return frames.filter((frame) => Date.parse(frame.validTime) >= cutoff);
-  }, [domain, product, rangeHours]);
+  }, [activeAnchorId, domain, product, rangeHours]);
+
+  const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
 
   const currentFrameIndex = Math.min(frameIndex, Math.max(0, anchorFrames.length - 1));
   const isAnimating = playing && anchorFrames.length > 1;
@@ -492,7 +538,7 @@ export function RadarViewer() {
   if (error) {
     return (
       <main className="app-shell">
-        <h1 className="brand">Radar-Sat</h1>
+        <h1 className="brand">BC Satellite/Radar/Lightning</h1>
         <div className="error-panel" role="alert">{error}</div>
       </main>
     );
@@ -501,7 +547,7 @@ export function RadarViewer() {
 
   const anchor = anchorFrames[currentFrameIndex];
   const isLayerEnabled = (recipe: ProductLayer) =>
-    isProductLayerEnabled(recipe, optionalLayers);
+    isProductLayerEnabled(recipe, optionalLayers, product.layers);
   const composedLayers = anchor
     ? composeLayers(product, domain, anchor, catalogBase, optionalLayers)
     : [];
@@ -523,35 +569,55 @@ export function RadarViewer() {
     const recipe = product.layers.find((layer) => layer.id === legendLayerId(legendId));
     return !recipe || isLayerEnabled(recipe);
   });
-  const newestAnchor = anchorFrames[anchorFrames.length - 1];
-  const freshestAge = newestAnchor && freshnessClock !== null
-    ? Math.max(0, (freshnessClock - Date.parse(actualSourceTime(product.anchorLayer, newestAnchor))) / 60_000)
-    : Infinity;
-  const [currentLimit, delayedLimit] = freshnessThresholds(product.anchorLayer);
+  const activeSourceFreshness = product.layers
+    .filter(isLayerEnabled)
+    .flatMap((recipe) => {
+      const frames = domain.layers[recipe.id]?.frames ?? [];
+      const frame = frames[frames.length - 1];
+      const label = sourceLabel(recipe.id);
+      if (!frame || !label || freshnessClock === null) return [];
+      const age = Math.max(0, (freshnessClock - Date.parse(actualSourceTime(recipe.id, frame))) / 60_000);
+      const [currentLimit, delayedLimit] = freshnessThresholds(recipe.id);
+      return [{ label, age, currentLimit, delayedLimit }];
+    })
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.label === item.label) === index);
+  const allSourcesCurrent = activeSourceFreshness.length > 0
+    && activeSourceFreshness.every((item) => item.age <= item.currentLimit);
+  const anySourceUsable = activeSourceFreshness.some((item) => item.age <= item.delayedLimit);
   const liveState = freshnessClock === null
     ? "Checking"
-    : freshestAge <= currentLimit
+    : allSourcesCurrent
       ? "Current"
-      : freshestAge <= delayedLimit
+      : anySourceUsable
         ? "Delayed"
       : "Archive";
+  const freshnessDetails = activeSourceFreshness
+    .map((item) => `${item.label} ${ageLabel(item.age)}`)
+    .join(" · ");
   const liveSummaryLabel = freshnessClock === null
     ? "Checking data freshness"
     : liveState === "Current"
-      ? `Current · ${sourceAgeLabel(freshestAge)}`
+      ? `Current${freshnessDetails ? ` · ${freshnessDetails}` : ""}`
       : liveState === "Delayed"
-        ? `Data delayed · ${sourceAgeLabel(freshestAge)}`
-        : `Not live · ${sourceAgeLabel(freshestAge)}`;
+        ? `Mixed freshness${freshnessDetails ? ` · ${freshnessDetails}` : ""}`
+        : `Not live${freshnessDetails ? ` · ${freshnessDetails}` : ""}`;
   const selectedArchiveSpan = archiveSpan(anchorFrames);
+  const viewport = product.viewport ?? FULL_VIEWPORT;
+  const mapAspect = (domain.width * viewport.width) / (domain.height * viewport.height);
+  const cropStyle: CSSProperties = {
+    left: `${-(viewport.left / viewport.width) * 100}%`,
+    top: `${-(viewport.top / viewport.height) * 100}%`,
+    right: "auto",
+    bottom: "auto",
+    width: `${100 / viewport.width}%`,
+    height: `${100 / viewport.height}%`,
+  };
 
   return (
     <main className="app-shell">
       <header className="site-header">
-        <div>
-          <div className="brand-row">
-            <h1 className="brand">Radar<span className="brand-mark">–Sat</span></h1>
-          </div>
-          <p className="tagline">BC observational loops · satellite, radar, precipitation type, and lightning</p>
+        <div className="brand-row">
+          <h1 className="brand">BC Satellite<span className="brand-mark">/</span>Radar<span className="brand-mark">/</span>Lightning</h1>
         </div>
         <div className="live-summary" aria-live="polite">
           <span className={`status-dot status-${liveState.toLowerCase()}`} aria-hidden="true" />
@@ -567,7 +633,7 @@ export function RadarViewer() {
             aria-pressed={item.id === product.id}
             key={item.id}
             onClick={() => {
-              setPlaying(false);
+              setPlaying(true);
               setProductId(item.id);
               setRangeHours(item.defaultHours);
               setFrameIndex(NEWEST_FRAME);
@@ -582,10 +648,85 @@ export function RadarViewer() {
         <div
           className="map-column"
           style={{
-            "--map-aspect": `${domain.width} / ${domain.height}`,
-            "--map-cap-width": `calc(${((domain.width / domain.height) * 100).toFixed(6)}vh - ${((domain.width / domain.height) * 300).toFixed(3)}px)`,
+            "--map-aspect": `${mapAspect}`,
+            "--map-cap-width": `calc(${(mapAspect * 100).toFixed(6)}vh - ${(mapAspect * 330).toFixed(3)}px)`,
           } as CSSProperties}
         >
+          <div className="timeline-panel">
+            <div className="transport-row">
+              <div className="transport-actions">
+                <button className="control-button" type="button" aria-label="Previous frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(-1); }}>‹</button>
+                <button className="control-button primary" type="button" aria-pressed={isAnimating} disabled={anchorFrames.length < 2} onClick={() => setPlaying((value) => !value)}>{isAnimating ? "Pause" : "Play"}</button>
+                <button className="control-button" type="button" aria-label="Next frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(1); }}>›</button>
+              </div>
+              <label className="speed-control">
+                <span>Speed</span>
+                <input
+                  className="speed-range"
+                  type="range"
+                  min={0}
+                  max={PLAYBACK_SPEEDS.length - 1}
+                  step={1}
+                  value={speedIndex}
+                  aria-valuetext={`${speed} times`}
+                  onChange={(event) => setSpeedIndex(Number(event.target.value))}
+                />
+                <span className="speed-value">{speed}×</span>
+              </label>
+              <div className="timeline-metadata">
+                <span className="frame-count">{anchorFrames.length ? `${currentFrameIndex + 1} / ${anchorFrames.length}` : "0 / 0"}</span>
+                <span className="archive-span">{selectedArchiveSpan}</span>
+              </div>
+            </div>
+            <div className="range-row">
+              <div className="range-actions" role="group" aria-label="Archive range">
+                {RANGE_OPTIONS.map((hours) => (
+                  <button className="range-button" type="button" aria-pressed={rangeHours === hours} key={hours} onClick={() => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); }}>
+                    {hours === 168 ? "7 d" : `${hours} h`}
+                  </button>
+                ))}
+              </div>
+              {optional.length > 0 && (
+                <div className="layer-actions" role="group" aria-label="Overlay layers">
+                  {optional.map((layer) => (
+                    <label className="field-select" key={layer.id}>
+                      <input
+                        type="checkbox"
+                        checked={isLayerEnabled(layer)}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setOptionalLayers((current) => {
+                            const next = { ...current };
+                            if (checked && layer.choiceGroup) {
+                              for (const peer of optional) {
+                                if (peer.choiceGroup === layer.choiceGroup) next[peer.id] = false;
+                              }
+                            }
+                            next[layer.id] = checked;
+                            return next;
+                          });
+                          setFrameIndex(NEWEST_FRAME);
+                          setPlaying(true);
+                        }}
+                      />
+                      {layerControlLabel(layer.id)}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <input
+              className="timeline-range"
+              aria-label="Loop frame"
+              type="range"
+              min={0}
+              max={Math.max(0, anchorFrames.length - 1)}
+              value={currentFrameIndex}
+              disabled={anchorFrames.length < 2}
+              onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)); }}
+            />
+          </div>
+
           <div
             className="map-stage"
             role="img"
@@ -602,10 +743,11 @@ export function RadarViewer() {
                 aria-hidden="true"
                 key={`${layer.id}-${layer.url}`}
                 style={{
+                  ...cropStyle,
                   opacity: layer.opacity,
-                  filter: product.id === "bc-operations"
-                    && layer.id === "daynight"
-                    && (composedLayerIds.has("radar-rain") || composedLayerIds.has("radar-snow"))
+                  filter: product.group === "Overlay"
+                    && ["natural", "ir", "convective"].includes(layer.id)
+                    && (composedLayerIds.has("radar-rain") || composedLayerIds.has("ptype"))
                     ? "saturate(0.52) brightness(0.78) contrast(1.06)"
                     : undefined,
                 }}
@@ -624,67 +766,6 @@ export function RadarViewer() {
               <div className="coverage-key"><span className="hatch-swatch" /> No radar coverage</div>
             )}
           </div>
-
-          <div className="timeline-panel">
-            <div className="transport-row">
-              <div className="transport-actions">
-                <button className="control-button" type="button" aria-label="Previous frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(-1); }}>‹</button>
-                <button className="control-button primary" type="button" aria-pressed={isAnimating} disabled={anchorFrames.length < 2} onClick={() => setPlaying((value) => !value)}>{isAnimating ? "Pause" : "Play"}</button>
-                <button className="control-button" type="button" aria-label="Next frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(1); }}>›</button>
-              </div>
-              <div className="timeline-metadata">
-                <span className="frame-count">{anchorFrames.length ? `${currentFrameIndex + 1} / ${anchorFrames.length}` : "0 / 0"}</span>
-                <span className="archive-span">{selectedArchiveSpan}</span>
-              </div>
-            </div>
-            <input
-              className="timeline-range"
-              aria-label="Loop frame"
-              type="range"
-              min={0}
-              max={Math.max(0, anchorFrames.length - 1)}
-              value={currentFrameIndex}
-              disabled={anchorFrames.length < 2}
-              onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)); }}
-            />
-            <div className="range-row">
-              <div className="range-actions" role="group" aria-label="Archive range">
-                {RANGE_OPTIONS.map((hours) => (
-                  <button className="range-button" type="button" aria-pressed={rangeHours === hours} key={hours} onClick={() => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); }}>
-                    {hours === 168 ? "7 d" : `${hours} h`}
-                  </button>
-                ))}
-              </div>
-              <div className="range-actions" role="group" aria-label="Layer visibility and playback speed">
-                {optional.map((layer) => (
-                  <label className="field-select" key={layer.id}>
-                    <input
-                      type={layer.choiceGroup ? "radio" : "checkbox"}
-                      name={layer.choiceGroup ? `${product.id}-${layer.choiceGroup}` : undefined}
-                      checked={isLayerEnabled(layer)}
-                      onChange={(event) => setOptionalLayers((current) => {
-                        if (!layer.choiceGroup) return { ...current, [layer.id]: event.target.checked };
-                        const next = { ...current };
-                        for (const peer of optional) {
-                          if (peer.choiceGroup === layer.choiceGroup) next[peer.id] = peer.id === layer.id;
-                        }
-                        return next;
-                      })}
-                    />
-                    {layerControlLabel(layer.id)}
-                  </label>
-                ))}
-                <label className="field-select">
-                  Speed
-                  <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-                    <option value={0.5}>0.5×</option>
-                    <option value={1}>1×</option>
-                    <option value={2}>2×</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          </div>
         </div>
 
         <aside className="legend-rail" aria-label="Map legends">
@@ -693,6 +774,7 @@ export function RadarViewer() {
             const legend = catalog.legends[legendId];
             if (!legend) return null;
             if (legend.kind === "lightning-age") return <LightningLegend key={legendId} />;
+            if (legend.kind === "watersheds") return <WatershedLegend key={legendId} />;
             return legend.path ? (
               // Legend rasters are supplied by the authoritative data source.
               // eslint-disable-next-line @next/next/no-img-element

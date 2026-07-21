@@ -1,4 +1,4 @@
-# Radar-Sat
+# BC Satellite/Radar/Lightning
 
 Operational satellite, radar, precipitation-type, and lightning loops for
 British Columbia and its upstream weather. The viewer uses one set of aligned
@@ -9,22 +9,21 @@ Public site: <https://gwest1000.github.io/radar-sat/>
 
 ## Launch products
 
-- **Operations:** continuous GOES-West day-visible/night-IR, rain rate, radar
-  coverage, and a 30-minute lightning trail.
-- **Radar:** rain or snow rate on a neutral map, with optional lightning.
-- **Convection:** visible/IR sandwich by day and night-microphysics IR after
-  dark.
-- **Precip type:** ECCC model-assisted surface precipitation type and its own
-  dynamic coverage mask.
-- **Lightning:** three ten-minute CLDN intervals over subdued satellite.
-- **Snow / fog**, **infrared**, and **visible:** standalone qualitative satellite
-  RGB products; infrared can carry an optional lightning trail.
-- **Radar sites:** a synchronized four-station DPQPE diagnostic loop for
-  Aldergrove, Halfmoon Peak, Silver Star, and Prince George. It appears only
-  after the native station feeds have produced a usable synchronized time.
+- **Overlay:** large BC, zoomed BC, southwest, southeast and northeast views.
+  Each provides mutually exclusive visible/IR/VisIR backgrounds, mutually
+  exclusive radar/precipitation-type overlays, and independent lightning.
+- **Snow / fog:** zoomed BC, southwest, southeast and northeast qualitative RGB
+  loops.
+
+The regional displays crop the shared aligned BC grid, gaining on-screen detail
+without storing four duplicate seven-day archives. DataBC major-watershed
+boundaries are included as the closest authoritative public proxy for BC Hydro
+operational basins.
 
 Every map shows the real source timestamps. Old data is never silently relabelled
 as current, and hatched grey means no current radar coverage rather than no echo.
+Lightning density cells are rendered as white-ringed flash markers that fade
+with age rather than opaque grid squares.
 
 ## Architecture
 
