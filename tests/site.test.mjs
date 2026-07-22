@@ -24,7 +24,9 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /first-pass playback can slow down but never flashes a blank frame/);
   assert.match(viewer, /atOrBeforeSourceTime/);
   assert.match(viewer, /sourceCount > selectedSourceCount/);
-  assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.5, 0\.75, 1, 1\.5, 2, 3, 4, 5\]/);
+  assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.25, 0\.5, 0\.75, 1, 1\.25, 1\.5, 1\.75, 2\]/);
+  assert.match(viewer, /useState\(3\)/);
+  assert.match(viewer, /finalFrame \? 300 \/ speed : 75 \/ speed/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
   assert.match(viewer, /AUTO_REFRESH_MS = 5 \* 60_000/);
@@ -47,6 +49,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /nextPointReferences\.forEach\(\(reference\) => preloadPointFrame/);
   assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
   assert.match(viewer, /active-fire-marker/);
+  assert.match(viewer, /clusterNotableFires/);
+  assert.match(viewer, /className="fire-count"/);
   assert.match(viewer, /BCWS Wildfire of Note/);
   assert.match(viewer, /U\.S\. current ICS-209 large incident/);
   assert.match(viewer, /highlight === 0/);
@@ -55,12 +59,15 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /<FlameIcon filled=\{marker\.kind === "active"\} \/>/);
   assert.match(viewer, /Low-confidence detection/);
   assert.match(viewer, /ecccFallbackPointReferences/);
-  assert.match(viewer, /layerId === "westwx-visir"\) return "VisIR Blend"/);
+  assert.match(viewer, /layerId === "westwx-visir"\) return "NOAA VIS\/IR"/);
+  assert.match(viewer, /layerId === "daynight"\) return "ECCC VIS\/IR"/);
+  assert.match(viewer, /pointDomain = domain\?\.layers\["active-fire-points"\]/);
   assert.match(viewer, /layerId\.startsWith\("westwx-"\)/);
   assert.match(pointData, /coordinateSpace\.origin === "top-left"/);
   assert.match(styles, /\.lightning-marker\.age-0/);
   assert.match(styles, /\.fire-marker\.age-2/);
   assert.match(styles, /\.active-fire-marker\.fire-notable/);
+  assert.match(styles, /\.fire-count/);
   assert.match(styles, /\.hotspot-fire-marker svg/);
   assert.match(styles, /\.eccc-north-fallback/);
   assert.match(styles, /@keyframes lightning-arrival/);
@@ -91,6 +98,10 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-visible").choiceGroup, "satellite");
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-ir").choiceGroup, "satellite");
+  assert.deepEqual(
+    overlay.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
+    ["raw-visible", "raw-visir", "raw-ir", "natural", "daynight", "ir", "convective"],
+  );
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");
   assert.match(overlay.notes.join(" "), /54-polygon BC Hydro boundary source/);

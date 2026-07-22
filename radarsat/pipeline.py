@@ -1718,7 +1718,7 @@ def run(
                     auxiliary_warnings.append(
                         f"CWFIS wildfire hotspots unavailable: {type(error).__name__}: {error}"
                     )
-            if domain.id == "north-america":
+            if domain.id in {"bc", "north-america"}:
                 try:
                     active_fire_status[domain.id] = ingest_active_fire_snapshot(output_root, domain)
                     warnings = active_fire_status[domain.id].get("warnings", [])

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T19:48:22.518964Z",
+  "generatedAt": "2026-07-22T23:01:46.277599Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -1542,28 +1542,7 @@
           "opacity": 1.0
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "convective",
+          "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -1577,14 +1556,35 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-visible",
+          "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-ir",
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "daynight",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -1650,7 +1650,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1672,28 +1672,7 @@
           "opacity": 1.0
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "convective",
+          "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -1707,14 +1686,35 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-visible",
+          "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-ir",
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "daynight",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -1780,7 +1780,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1808,28 +1808,7 @@
           "opacity": 1.0
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "convective",
+          "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -1843,14 +1822,35 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-visible",
+          "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-ir",
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "daynight",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -1916,7 +1916,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1944,28 +1944,7 @@
           "opacity": 1.0
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "convective",
+          "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -1979,14 +1958,35 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-visible",
+          "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-ir",
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "daynight",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -2052,7 +2052,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -2080,28 +2080,7 @@
           "opacity": 1.0
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "convective",
+          "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -2115,14 +2094,35 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-visible",
+          "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-ir",
+          "id": "natural",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "daynight",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -2188,7 +2188,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
+        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",

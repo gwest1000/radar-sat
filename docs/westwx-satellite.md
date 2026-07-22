@@ -40,6 +40,33 @@ radar/Pacific cycle without starting an unbounded catch-up. Source files are
 still processed one at a time and deleted after the compact display rasters
 are installed.
 
+## Five-minute and higher-resolution limits
+
+NOAA's operational ABI mode provides a full disk every ten minutes. The
+five-minute `MCMIPC` products are fixed regional sectors, not a second
+five-minute full disk. On 2026-07-22, the embedded product bounds reached only
+53.50°N for GOES-18 PACUS and 56.76°N for GOES-19 CONUS. They can improve the
+southern/central part of a western display, but neither supplies reliable
+five-minute coverage for all of BC or Alaska. Movable mesoscale sectors are
+faster but cannot be assumed to remain over BC.
+
+Measured multiband sector files were 55–59 MB each, or about 16–17 GB/day at
+five-minute cadence per satellite. Adding both sectors would therefore add
+roughly 33 GB/day of transient network transfer while still leaving northern
+BC on the ten-minute full-disk clock. With the existing retention policy and
+current WebP sizes, changing three BC satellite layers from ten to five minutes
+for day one would add only about 0.21 GB to R2; source availability and transfer,
+not retained bucket space, are the limiting factors.
+
+The current multiband full-disk file places its true-colour composite on a 2 km
+grid. Native C01/C02/C03 visible-channel files can support a roughly 1 km
+composite (C02 is 0.5 km at nadir), but the measured files totalled about
+603 MB per scan versus 366 MB for the present all-channel multiband source.
+An all-day ten-minute high-resolution visible ingest would be about 87 GB/day
+of source transfer before rendering. A daylight-only BC/regional proof is the
+reasonable next experiment; merely enlarging the current raster would smooth
+pixels without adding meteorological detail.
+
 Inspect a one-frame benchmark plan, then download and time only that scan:
 
 ```bash

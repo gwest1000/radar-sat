@@ -44,6 +44,7 @@ type FireMarker = {
   notable: boolean;
   highlight: 0 | 1 | 2;
   signal: number;
+  count: number;
 };
 
 type ViewerPreferences = {
@@ -120,9 +121,9 @@ type SiteConfig = {
 };
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
-const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
+const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const AUTO_REFRESH_MS = 5 * 60_000;
-const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences";
+const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v2";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
 const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
@@ -282,6 +283,42 @@ function remapFirePoint(
   return undefined;
 }
 
+function clusterNotableFires(markers: FireMarker[], targetDomain: string): FireMarker[] {
+  if (targetDomain !== "bc") return markers;
+  const regular = markers.filter((marker) => !marker.notable);
+  const remaining = markers.filter((marker) => marker.notable);
+  const clustered: FireMarker[] = [];
+  const clusterDistance = 0.8;
+  while (remaining.length) {
+    const seed = remaining.shift();
+    if (!seed) break;
+    const group = [seed];
+    for (let index = remaining.length - 1; index >= 0; index -= 1) {
+      const candidate = remaining[index];
+      if (
+        candidate.highlight === seed.highlight
+        && Math.hypot(candidate.x - seed.x, candidate.y - seed.y) < clusterDistance
+      ) {
+        group.push(candidate);
+        remaining.splice(index, 1);
+      }
+    }
+    if (group.length === 1) {
+      clustered.push(seed);
+      continue;
+    }
+    clustered.push({
+      ...seed,
+      id: `notable-cluster-${group.map((marker) => marker.id).join("-")}`,
+      x: group.reduce((sum, marker) => sum + marker.x, 0) / group.length,
+      y: group.reduce((sum, marker) => sum + marker.y, 0) / group.length,
+      signal: Math.max(...group.map((marker) => marker.signal)),
+      count: group.reduce((sum, marker) => sum + marker.count, 0),
+    });
+  }
+  return [...regular, ...clustered];
+}
+
 async function buildFireMarkers(
   activeReference: PointFrameReference | undefined,
   hotspotReference: PointFrameReference | undefined,
@@ -311,8 +348,10 @@ async function buildFireMarkers(
       notable: highlight > 0,
       highlight,
       signal: sizeHectares,
+      count: 1,
     }];
   });
+  const displayedActiveMarkers = clusterNotableFires(activeMarkers, targetDomain);
   const hotspotMarkers = (hotspotPayload?.points ?? []).flatMap((point, index): FireMarker[] => {
     const [x, y, pointAge = 0, frpValue] = point;
     const frp = Number.isFinite(frpValue) ? frpValue : 0;
@@ -321,7 +360,7 @@ async function buildFireMarkers(
     const mapped = remapFirePoint(x, y, hotspotPayload?.domain ?? targetDomain, targetDomain);
     if (!mapped) return [];
     const duplicateDistance = targetDomain === "bc" ? 0.012 : 0.0035;
-    if (activeMarkers.some((active) => {
+    if (displayedActiveMarkers.some((active) => {
       const dx = mapped[0] - active.x / 100;
       const dy = mapped[1] - active.y / 100;
       return dx * dx + dy * dy < duplicateDistance * duplicateDistance;
@@ -336,9 +375,10 @@ async function buildFireMarkers(
       notable: false,
       highlight: 0,
       signal: frp,
+      count: 1,
     }];
   });
-  return [...hotspotMarkers, ...activeMarkers].sort((left, right) => (
+  return [...hotspotMarkers, ...displayedActiveMarkers].sort((left, right) => (
     Number(left.notable) - Number(right.notable) || left.signal - right.signal
   ));
 }
@@ -368,7 +408,7 @@ function activeAnchorLayer(product: Product, optionalLayers: Record<string, bool
     const recipe = product.layers.find((candidate) => candidate.id === id);
     return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
   };
-  return ["raw-visible", "raw-ir", "natural", "ir", "daynight", "convective", "radar-rain", "ptype", "lightning-trail", "hotspots"]
+  return ["raw-visible", "raw-visir", "raw-ir", "natural", "daynight", "ir", "convective", "radar-rain", "ptype", "lightning-trail", "hotspots"]
     .find(enabled) ?? product.anchorLayer;
 }
 
@@ -548,16 +588,16 @@ function sourceLabel(layerId: string): string | null {
 }
 
 function layerControlLabel(layerId: string): string {
-  if (layerId === "natural") return "Visible Satellite";
-  if (layerId === "ir") return "Infra-Red Satellite";
-  if (layerId === "daynight") return "VisIR Blend";
-  if (layerId === "convective") return "Convective Satellite";
-  if (layerId === "westwx-visible") return "Visible Satellite";
-  if (layerId === "westwx-visir") return "VisIR Blend";
-  if (layerId === "westwx-ir") return "Infra-Red Satellite";
-  if (layerId === "raw-visible") return "Raw True Colour";
-  if (layerId === "raw-visir") return "Raw VisIR Blend";
-  if (layerId === "raw-ir") return "Raw Enhanced IR";
+  if (layerId === "natural") return "ECCC Visible";
+  if (layerId === "ir") return "ECCC IR";
+  if (layerId === "daynight") return "ECCC VIS/IR";
+  if (layerId === "convective") return "ECCC Convective";
+  if (layerId === "westwx-visible") return "NOAA Visible";
+  if (layerId === "westwx-visir") return "NOAA VIS/IR";
+  if (layerId === "westwx-ir") return "NOAA IR";
+  if (layerId === "raw-visible") return "NOAA Visible";
+  if (layerId === "raw-visir") return "NOAA VIS/IR";
+  if (layerId === "raw-ir") return "NOAA IR";
   if (layerId === "radar-rain") return "Radar";
   if (layerId === "radar-snow") return "Snow rate";
   if (layerId === "radar-coverage") return "Radar coverage";
@@ -740,7 +780,7 @@ export function RadarViewer() {
   const [productId, setProductId] = useState("bc-large-overlay");
   const [frameIndex, setFrameIndex] = useState(NEWEST_FRAME);
   const [playing, setPlaying] = useState(false);
-  const [speedIndex, setSpeedIndex] = useState(2);
+  const [speedIndex, setSpeedIndex] = useState(3);
   const [rangeHours, setRangeHours] = useState(3);
   const [optionalLayers, setOptionalLayers] = useState<Record<string, boolean>>({});
   const [freshnessClock, setFreshnessClock] = useState<number | null>(null);
@@ -749,7 +789,7 @@ export function RadarViewer() {
   const [fireMarkers, setFireMarkers] = useState<FireMarker[]>([]);
   const preferencesRef = useRef<ViewerPreferences>({
     productId: "bc-large-overlay",
-    speedIndex: 2,
+    speedIndex: 3,
     rangeHours: 3,
     optionalLayers: {},
   });
@@ -972,13 +1012,16 @@ export function RadarViewer() {
       || !fireController
       || !isProductLayerEnabled(fireController, optionalLayers, product.layers)
     ) return [];
+    const pointDomain = domain?.layers["active-fire-points"]?.frames?.length
+      ? domain
+      : catalog.domains["north-america"];
     return latestRollingPointFrameReferences(
-      catalog.domains["north-america"]?.layers["active-fire-points"]?.frames ?? [],
+      pointDomain?.layers["active-fire-points"]?.frames ?? [],
       anchor.validTime,
       catalogBase,
       6 * 60,
     );
-  }, [anchor, catalog, catalogBase, fireController, optionalLayers, product]);
+  }, [anchor, catalog, catalogBase, domain, fireController, optionalLayers, product]);
 
   const advance = useCallback(
     (amount: number) => {
@@ -1078,8 +1121,11 @@ export function RadarViewer() {
     });
     const fireRecipe = product.layers.find((recipe) => recipe.id === "hotspots");
     if (fireRecipe && isProductLayerEnabled(fireRecipe, optionalLayers, product.layers)) {
+      const activePointDomain = domain.layers["active-fire-points"]?.frames?.length
+        ? domain
+        : catalog.domains["north-america"];
       nextPointReferences.push(...latestRollingPointFrameReferences(
-        catalog.domains["north-america"]?.layers["active-fire-points"]?.frames ?? [],
+        activePointDomain?.layers["active-fire-points"]?.frames ?? [],
         nextAnchor.validTime,
         catalogBase,
         6 * 60,
@@ -1117,7 +1163,8 @@ export function RadarViewer() {
     void Promise.all(loads).then(() => {
       if (cancelled) return;
       const finalFrame = currentFrameIndex === anchorFrames.length - 1;
-      const delay = finalFrame ? 1200 / speed : 300 / speed;
+      // The former 4× timing is now the easier-to-understand 1× baseline.
+      const delay = finalFrame ? 300 / speed : 75 / speed;
       timer = window.setTimeout(() => advance(1), delay);
     });
 
@@ -1451,7 +1498,9 @@ export function RadarViewer() {
                     key={marker.id}
                     style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
                     title={marker.highlight === 1
-                      ? "BCWS Wildfire of Note"
+                      ? marker.count > 1
+                        ? `${marker.count} nearby BCWS Wildfires of Note`
+                        : "BCWS Wildfire of Note"
                       : marker.highlight === 2
                         ? "U.S. current ICS-209 large incident"
                         : marker.kind === "active"
@@ -1459,6 +1508,7 @@ export function RadarViewer() {
                           : "Satellite thermal hotspot"}
                   >
                     <FlameIcon filled={marker.kind === "active"} />
+                    {marker.count > 1 && <span className="fire-count">{marker.count}</span>}
                   </span>
                 ))}
               </div>
