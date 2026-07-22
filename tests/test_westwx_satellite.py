@@ -124,7 +124,7 @@ class WestWxDiscoveryTests(unittest.TestCase):
                 for value, size in zip(values, (100, 150, 50), strict=True)
             )
             ready = scans[0]
-            for layer_id in ("westwx-visir", "westwx-ir"):
+            for layer_id in ("westwx-visible", "westwx-visir", "westwx-ir"):
                 layer = LAYERS[layer_id]
                 image = frame_path(root, domain, layer, ready.valid_time)
                 image.parent.mkdir(parents=True, exist_ok=True)
@@ -207,7 +207,7 @@ class WestWxRenderTests(unittest.TestCase):
             )
 
             self.assertEqual(result.status, "rendered")
-            for layer_id in ("westwx-visir", "westwx-ir"):
+            for layer_id in ("westwx-visible", "westwx-visir", "westwx-ir"):
                 layer = LAYERS[layer_id]
                 image = frame_path(root, domain, layer, value)
                 payload = json.loads(metadata_path(root, domain, layer, value).read_text())

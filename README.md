@@ -16,8 +16,9 @@ Public site: <https://gwest1000.github.io/radar-sat/>
   hotspots.
 - **Snow / fog:** BC Small, southwest, southeast and northeast qualitative RGB
   loops.
-- **North America:** configurable raw GOES-18/19 true colour or enhanced IR,
-  with the ECCC continental radar composite and honest coverage hatching.
+- **North America:** configurable ten-minute GOES-18 true colour, day/night
+  VisIR or enhanced IR, with the ECCC continental radar composite and honest
+  coverage hatching.
 - **North Pacific:** Himawari-9/GOES-18 true colour or enhanced IR on a
   dateline-safe grid, with the real West Coast radar footprint.
 
@@ -47,8 +48,9 @@ GitHub Pages static viewer ◀────────────────�
 - BC grid: EPSG:3005, 1920×1472, approximately 145–108°W and 45–63°N.
 - BC retention: all observations for 24 hours, then `:00`/`:30` through day 7
   (432 ten-minute or 528 six-minute times per layer).
-- Broad satellite target: 30 minutes for 24 hours, then hourly through day 7;
-  GOES-18 smoke and total lightning are processed on a separate 10-minute clock.
+- North America satellite target: 10 minutes for 24 hours, then hourly through
+  day 7. The Himawari-9/GOES-18 North Pacific blend remains 30 minutes for 24
+  hours, then hourly; GOES-18 smoke and total lightning use a 10-minute clock.
 - Dynamic clients can use `glm-lightning-points` and `hotspot-points` instead
   of the legacy symbol PNGs. Each compact JSON frame uses normalized top-left
   coordinates and tuple schemas `[x,y,ageMinutes,count]` for GLM or

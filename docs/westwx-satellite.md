@@ -3,14 +3,16 @@
 WestWX has a dedicated North America satellite ingest that is deliberately
 separate from the Forecast Graphics raw-satellite products. It reads genuine
 NOAA GOES-18 ABI Level-2 full-disk scans at their nominal ten-minute cadence,
-keeps the scan-start seconds from the NOAA filename, and writes only:
+keeps the scan-start seconds from the NOAA filename, and writes:
 
+- `westwx-visible`: calibrated true colour for daylight use;
 - `westwx-visir`: calibrated true colour in daylight blended into neutral IR
   through twilight; and
 - `westwx-ir`: the existing enhanced C13 brightness-temperature rendering.
 
-It does not change `raw-visible`, `raw-visir`, `raw-ir`, their half-hour clock,
-the GOES-18/19 North America blend, or any Forecast Graphics product.
+Radar-Sat and WestWX share these compact rendered layers. It does not change
+`raw-visible`, `raw-visir`, `raw-ir`, their half-hour clock, the GOES-18/19
+North America blend, or any Forecast Graphics product.
 GOES-18-only imagery cannot cover the far eastern edge as well as the blended
 Forecast Graphics product; that is the intentional bandwidth tradeoff for a
 ten-minute WestWX loop.
@@ -23,6 +25,12 @@ total compressed NOAA source bytes are hard bounds. Each source file is capped
 again immediately before download. A failed scan is reported without stopping
 later scans. Raw NetCDF and intermediate rasters are deleted after each scan;
 only Satpy auxiliary data is cached.
+
+The scheduled production cycle permits at most two scans and 0.7 GB of source
+downloads. That lets it recover the occasional scan left behind by a long
+radar/Pacific cycle without starting an unbounded catch-up. Source files are
+still processed one at a time and deleted after the compact display rasters
+are installed.
 
 Inspect a one-frame benchmark plan, then download and time only that scan:
 
@@ -37,7 +45,7 @@ PYTHONPATH=. .venv/bin/python scripts/backfill_westwx_satellite.py \
 ```
 
 The measured source-object sizes should be checked before widening the bounds.
-At roughly 250–265 MB per scan, a complete day is about 36–38 GB of source
+At roughly 300–310 MB per scan, a complete day is about 43–45 GB of source
 transfer even though the retained WebP archive is much smaller. No command in
 the normal pipeline starts that full backfill automatically.
 
@@ -54,11 +62,11 @@ Then the exact 24-hour catch-up command is:
 ```bash
 PYTHONPATH=. .venv/bin/python scripts/backfill_westwx_satellite.py \
   --output-root data/output --hours 24 --max-frames 144 \
-  --max-download-gb 40 --apply
+  --max-download-gb 46 --apply
 ```
 
 The second command resumes rather than redownloading the first three hours.
-If current object sizes make the 40 GB boundary insufficient, it stops at a
+If current object sizes make the 46 GB boundary insufficient, it stops at a
 contiguous newest-first prefix; rerun with a deliberately reviewed higher byte
 cap. Status and per-scan download/render timings are written to
 `data/output/status/westwx-satellite-backfill.json`.

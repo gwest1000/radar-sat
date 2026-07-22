@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-21T07:29:21.415787Z",
+  "generatedAt": "2026-07-22T15:43:59.029672Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -8,6 +8,11 @@
       "width": 1920,
       "height": 1472,
       "projection": "EPSG:3005",
+      "retention": {
+        "allFramesHours": 24,
+        "archiveDays": 7,
+        "archiveCadenceMinutes": 30
+      },
       "layers": {
         "convective": {
           "title": "GOES-West visible/IR sandwich",
@@ -62,7 +67,9 @@
               "sourceLayer": "GOES-West_1km_VisibleIRSandwich-NightMicrophysicsIR",
               "fetchedAt": "2026-07-21T01:07:24Z"
             }
-          ]
+          ],
+          "role": "background",
+          "format": "image/jpeg"
         },
         "daynight": {
           "title": "GOES-West day visible / night IR",
@@ -117,7 +124,9 @@
               "sourceLayer": "GOES-West_1km_DayVis-NightIR",
               "fetchedAt": "2026-07-21T01:06:56Z"
             }
-          ]
+          ],
+          "role": "background",
+          "format": "image/jpeg"
         },
         "hotspots": {
           "title": "Satellite-detected wildfire hotspots",
@@ -137,7 +146,9 @@
               "windowHours": 24,
               "renderVersion": 2
             }
-          ]
+          ],
+          "role": "overlay",
+          "format": "image/png"
         },
         "ir": {
           "title": "GOES-West enhanced infrared imagery",
@@ -192,7 +203,9 @@
               "sourceLayer": "GOES-West_2km_NightIR",
               "fetchedAt": "2026-07-21T01:07:03Z"
             }
-          ]
+          ],
+          "role": "background",
+          "format": "image/jpeg"
         },
         "lightning": {
           "title": "CLDN 10-minute flash density",
@@ -289,7 +302,9 @@
               "sourceLayer": "Lightning_2.5km_Density",
               "fetchedAt": "2026-07-21T01:08:44Z"
             }
-          ]
+          ],
+          "role": "overlay",
+          "format": "image/png"
         },
         "lightning-trail": {
           "title": "CLDN 30-minute age trail",
@@ -576,7 +591,9 @@
               },
               "renderVersion": 2
             }
-          ]
+          ],
+          "role": "overlay",
+          "format": "image/png"
         },
         "natural": {
           "title": "GOES-West natural colour",
@@ -631,7 +648,9 @@
               "sourceLayer": "GOES-West_1km_NaturalColor",
               "fetchedAt": "2026-07-21T01:07:13Z"
             }
-          ]
+          ],
+          "role": "background",
+          "format": "image/jpeg"
         },
         "ptype": {
           "title": "Surface precipitation type",
@@ -784,7 +803,9 @@
               "sourceLayer": "Radar_1km_SfcPrecipType",
               "fetchedAt": "2026-07-21T01:08:32Z"
             }
-          ]
+          ],
+          "role": "overlay",
+          "format": "image/png"
         },
         "ptype-coverage": {
           "title": "Precipitation-type no-coverage mask",
@@ -937,7 +958,9 @@
               "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
               "fetchedAt": "2026-07-21T01:08:39Z"
             }
-          ]
+          ],
+          "role": "overlay",
+          "format": "image/png"
         },
         "radar-coverage": {
           "title": "Radar no-coverage mask",
@@ -1090,7 +1113,9 @@
               "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
               "fetchedAt": "2026-07-21T01:08:13Z"
             }
-          ]
+          ],
+          "role": "overlay",
+          "format": "image/png"
         },
         "radar-rain": {
           "title": "Radar rain rate",
@@ -1243,7 +1268,9 @@
               "sourceLayer": "RADAR_1KM_RRAI",
               "fetchedAt": "2026-07-21T01:07:50Z"
             }
-          ]
+          ],
+          "role": "overlay",
+          "format": "image/png"
         },
         "radar-snow": {
           "title": "Radar snow rate",
@@ -1396,7 +1423,9 @@
               "sourceLayer": "RADAR_1KM_RSNO",
               "fetchedAt": "2026-07-21T01:08:06Z"
             }
-          ]
+          ],
+          "role": "overlay",
+          "format": "image/png"
         },
         "snowfog": {
           "title": "GOES-West snow/fog and night microphysics",
@@ -1451,7 +1480,9 @@
               "sourceLayer": "GOES-West_1km_SnowFog-NightMicrophysics",
               "fetchedAt": "2026-07-21T01:07:34Z"
             }
-          ]
+          ],
+          "role": "background",
+          "format": "image/jpeg"
         }
       },
       "staticLayers": {
@@ -1472,6 +1503,11 @@
       "width": 1440,
       "height": 1080,
       "projection": "EPSG:3857",
+      "retention": {
+        "allFramesHours": 24,
+        "archiveDays": 7,
+        "archiveCadenceMinutes": 60
+      },
       "layers": {},
       "staticLayers": {}
     },
@@ -1481,6 +1517,11 @@
       "width": 1600,
       "height": 900,
       "projection": "EPSG:3832",
+      "retention": {
+        "allFramesHours": 24,
+        "archiveDays": 7,
+        "archiveCadenceMinutes": 60
+      },
       "layers": {},
       "staticLayers": {}
     }
@@ -1529,6 +1570,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
@@ -1541,6 +1589,12 @@
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
+        },
+        {
+          "id": "smoke",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         },
         {
           "id": "radar-coverage",
@@ -1591,12 +1645,14 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "smoke-confidence",
         "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ]
@@ -1644,6 +1700,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
@@ -1656,6 +1719,12 @@
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
+        },
+        {
+          "id": "smoke",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         },
         {
           "id": "radar-coverage",
@@ -1706,12 +1775,14 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "smoke-confidence",
         "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ],
@@ -1765,6 +1836,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
@@ -1777,6 +1855,12 @@
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
+        },
+        {
+          "id": "smoke",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         },
         {
           "id": "radar-coverage",
@@ -1827,12 +1911,14 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "smoke-confidence",
         "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ],
@@ -1886,6 +1972,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
@@ -1898,6 +1991,12 @@
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
+        },
+        {
+          "id": "smoke",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         },
         {
           "id": "radar-coverage",
@@ -1948,12 +2047,14 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "smoke-confidence",
         "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ],
@@ -2007,6 +2108,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
@@ -2019,6 +2127,12 @@
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
+        },
+        {
+          "id": "smoke",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         },
         {
           "id": "radar-coverage",
@@ -2069,12 +2183,14 @@
         "radar-rain",
         "ptype",
         "lightning-age",
+        "smoke-confidence",
         "hotspots",
         "watersheds"
       ],
       "notes": [
         "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
+        "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters."
       ],
@@ -2235,27 +2351,40 @@
       "shortTitle": "North America",
       "group": "Broad",
       "domain": "north-america",
-      "anchorLayer": "raw-ir",
+      "anchorLayer": "westwx-ir",
       "defaultHours": 24,
-      "description": "GOES-18/19 calibrated satellite imagery with the ECCC continental radar composite.",
+      "description": "Ten-minute GOES-18 calibrated satellite imagery with the ECCC continental radar composite.",
       "layers": [
         {
           "id": "base-dark",
           "opacity": 1.0
         },
         {
-          "id": "raw-visible",
+          "id": "westwx-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "westwx-visible",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
-          "id": "raw-ir",
+          "id": "westwx-ir",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
+        },
+        {
+          "id": "smoke",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         },
         {
           "id": "radar-coverage",
@@ -2269,17 +2398,29 @@
           "defaultEnabled": true
         },
         {
+          "id": "glm-lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
       ],
       "legends": [
-        "raw-ir",
-        "radar-rain"
+        "westwx-ir",
+        "radar-rain",
+        "glm-lightning-age",
+        "smoke-confidence"
       ],
       "notes": [
-        "GOES-18 supplies the west and GOES-19 the east, blended on a common 2 km display grid.",
-        "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder."
+        "GOES-18 supplies genuine ten-minute scan times on the common 2 km display grid; the far eastern edge has weaker viewing geometry than the legacy GOES-18/19 blend.",
+        "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder.",
+        "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
+        "North America satellite backgrounds use genuine GOES-18 scan times at a nominal ten-minute cadence; the far eastern edge is outside the best GOES-West viewing geometry.",
+        "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; useful GOES-18 coverage ends near 52\u00b0N.",
+        "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ]
     },
     {
@@ -2297,6 +2438,13 @@
           "opacity": 1.0
         },
         {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "raw-visible",
           "opacity": 1.0,
           "optional": true,
@@ -2307,8 +2455,14 @@
           "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
+        },
+        {
+          "id": "smoke",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         },
         {
           "id": "radar-coverage",
@@ -2322,17 +2476,28 @@
           "defaultEnabled": true
         },
         {
+          "id": "glm-lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
       ],
       "legends": [
         "raw-ir",
-        "radar-rain"
+        "radar-rain",
+        "glm-lightning-age",
+        "smoke-confidence"
       ],
       "notes": [
         "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
-        "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit."
+        "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
+        "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
+        "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; useful GOES-18 coverage ends near 52\u00b0N.",
+        "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ]
     }
   ],
@@ -2353,6 +2518,14 @@
       "title": "Lightning age",
       "kind": "lightning-age"
     },
+    "glm-lightning-age": {
+      "title": "GLM total-lightning age",
+      "kind": "lightning-age"
+    },
+    "smoke-confidence": {
+      "title": "Satellite smoke detection confidence",
+      "kind": "smoke-confidence"
+    },
     "lightning-density": {
       "title": "Lightning flash density",
       "path": "static/legend-lightning-density.png"
@@ -2368,12 +2541,17 @@
     "raw-ir": {
       "title": "10.3 \u00b5m cloud-top temperature",
       "kind": "raw-ir"
+    },
+    "westwx-ir": {
+      "title": "10.3 \u00b5m cloud-top temperature",
+      "kind": "raw-ir"
     }
   },
   "sources": {
     "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
     "ECCC Datamart": "https://dd.weather.gc.ca/",
     "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf",
-    "NOAA Open Data": "https://registry.opendata.aws/collab/noaa/"
+    "NOAA Open Data": "https://www.ncei.noaa.gov/products/ncei-data-noaa-open-dissemination-program",
+    "NOAA GOES-18": "https://www.ncei.noaa.gov/products/satellite/goes-r-series"
   }
 }

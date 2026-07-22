@@ -51,6 +51,14 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.some((product) => product.id === "bc-lightning"), false);
   assert.equal(demo.products.some((product) => product.id === "north-america-overlay"), true);
   assert.equal(demo.products.some((product) => product.id === "north-pacific-overlay"), true);
+  const northAmerica = demo.products.find((product) => product.id === "north-america-overlay");
+  const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
+  assert.equal(northAmerica.anchorLayer, "westwx-ir");
+  assert.deepEqual(
+    northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
+    ["westwx-visir", "westwx-visible", "westwx-ir"],
+  );
+  assert.equal(northPacific.anchorLayer, "raw-ir");
 });
 
 test("deploy workflow uses the GitHub Pages artifact flow", async () => {

@@ -86,17 +86,18 @@ if (( primary_ingest_status != 0 )); then
   print -u2 "Warning: primary Radar-Sat ingest failed with status ${primary_ingest_status}; continuing isolated recovery and publication steps."
 fi
 
-# This high-bandwidth WestWX-only path is opt-in until its one-scan benchmark
-# has been reviewed. It has a dedicated cache and a hard one-frame-per-cycle
-# bound. A failure is isolated so Forecast Graphics ingest/publication can
-# continue; the command writes its own detailed status file.
+# This high-bandwidth WestWX-only path has a dedicated cache and a small
+# bounded catch-up allowance so a long radar/Pacific cycle cannot leave holes
+# in the ten-minute satellite clock. A failure is isolated so Forecast
+# Graphics ingest/publication can continue; the command writes its own
+# detailed status file.
 if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
   if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_westwx_satellite.py" \
     --output-root "${OUTPUT_ROOT}" \
     --cache-root "${RADARSAT_WESTWX_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/westwx-satellite}" \
     --hours "${RADARSAT_WESTWX_SATELLITE_HOURS:-3}" \
-    --max-frames 1 \
-    --max-download-gb "${RADARSAT_WESTWX_SATELLITE_MAX_DOWNLOAD_GB:-0.4}" \
+    --max-frames "${RADARSAT_WESTWX_SATELLITE_MAX_FRAMES:-2}" \
+    --max-download-gb "${RADARSAT_WESTWX_SATELLITE_MAX_DOWNLOAD_GB:-0.7}" \
     --max-source-mb "${RADARSAT_WESTWX_SATELLITE_MAX_SOURCE_MB:-350}" \
     --apply; then
     print -u2 "Warning: isolated WestWX ten-minute satellite catch-up failed; continuing normal cycle."

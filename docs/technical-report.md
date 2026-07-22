@@ -88,16 +88,22 @@ cadence rather than being uniform:
 6-minute radar/ptype/site/trail: 24 h × 10/h + 6 d × 48/d = 528
 ```
 
-The phase-two broad-domain target is 30-minute data for day one and hourly
+The North America satellite display now uses ten-minute GOES-18 data for day
+one and hourly data thereafter, or 288 times per layer:
+
+```text
+24 h × 6/h + 6 d × 24/d = 288
+```
+
+The North Pacific blend remains 30-minute data for day one and hourly
 thereafter, or 192 times per layer:
 
 ```text
 24 h × 2/h + 6 d × 24/d = 192
 ```
 
-That broad downsampling must be enabled with the phase-two ingest; the current
-generic retention function alone would retain all source observations during
-day one.
+The generic broad retention function enforces the hourly archive after day one;
+the source-specific ingests determine the ten- or thirty-minute live cadence.
 
 The July 20 BC sample at 1920×1472 measured 0.64–0.90 MB per 1-km satellite
 WebP; the 2-km standalone IR product is another reusable background.
@@ -304,9 +310,11 @@ ECCC RGBs as fallback:
    labelled kelvin/°C enhancement, solar-corrected visible or true colour,
    standard snow/fog/night-microphysics, and day-convection RGB. Compare every
    product against CIRA SLIDER and the existing ECCC version.
-2. **North America:** blend GOES-18 and GOES-19 by view angle rather than draw a
-   hard seam. Publish at 30-minute live cadence and hourly after day one. Radar
-   remains visible only where actual networks provide coverage.
+2. **North America:** use the shared ten-minute GOES-18 feed for the live
+   visible, VisIR and enhanced-IR loop, with hourly retention after day one.
+   Retain the lower-cadence GOES-18/19 blend as a fallback when stronger far-east
+   viewing geometry matters. Radar remains visible only where actual networks
+   provide coverage.
 3. **North Pacific:** blend GOES-18 with Himawari-9 in their broad overlap,
    again at 30-minute live and hourly archive cadence. Never imply radar over
    the open ocean.

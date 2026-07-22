@@ -238,7 +238,7 @@ LAYERS: dict[str, Layer] = {
     ),
     "westwx-visir": Layer(
         id="westwx-visir",
-        title="WestWX GOES-18 ten-minute true-colour / neutral infrared",
+        title="GOES-18 ten-minute true-colour / neutral infrared",
         source_layer=None,
         image_format="image/webp",
         extension="webp",
@@ -246,9 +246,20 @@ LAYERS: dict[str, Layer] = {
         source="NOAA GOES-18",
         max_age_minutes=25,
     ),
+    "westwx-visible": Layer(
+        id="westwx-visible",
+        title="GOES-18 ten-minute calibrated true-colour satellite imagery",
+        source_layer=None,
+        image_format="image/webp",
+        extension="webp",
+        role="background",
+        source="NOAA GOES-18",
+        max_age_minutes=25,
+        daylight_only=True,
+    ),
     "westwx-ir": Layer(
         id="westwx-ir",
-        title="WestWX GOES-18 ten-minute enhanced infrared",
+        title="GOES-18 ten-minute enhanced infrared",
         source_layer=None,
         image_format="image/webp",
         extension="webp",
@@ -394,30 +405,38 @@ def _broad_product(
     description: str,
     notes: list[str],
 ) -> dict[str, object]:
+    rapid_north_america = domain == "north-america"
+    satellite_prefix = "westwx" if rapid_north_america else "raw"
+    anchor_layer = f"{satellite_prefix}-ir"
     return {
         "id": product_id,
         "title": title,
         "shortTitle": short_title,
         "group": "Broad",
         "domain": domain,
-        "anchorLayer": "raw-ir",
+        "anchorLayer": anchor_layer,
         "defaultHours": 24,
         "description": description,
         "layers": [
             {"id": "base-dark", "opacity": 1.0},
-            {"id": "raw-visir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
-            {"id": "raw-visible", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
-            {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": f"{satellite_prefix}-visir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
+            {"id": f"{satellite_prefix}-visible", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": anchor_layer, "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "boundaries", "opacity": 1.0},
         ],
-        "legends": ["raw-ir", "radar-rain", "glm-lightning-age", "smoke-confidence"],
+        "legends": [anchor_layer, "radar-rain", "glm-lightning-age", "smoke-confidence"],
         "notes": notes
         + [
             "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 µm infrared at night; no false-colour IR is mixed across the terminator.",
+            *(
+                ["North America satellite backgrounds use genuine GOES-18 scan times at a nominal ten-minute cadence; the far eastern edge is outside the best GOES-West viewing geometry."]
+                if rapid_north_america
+                else []
+            ),
             "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; useful GOES-18 coverage ends near 52°N.",
             "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         ],
@@ -439,9 +458,9 @@ PRODUCTS: list[dict[str, object]] = [
         "North America Satellite / Radar",
         "North America",
         "north-america",
-        "GOES-18/19 calibrated satellite imagery with the ECCC continental radar composite.",
+        "Ten-minute GOES-18 calibrated satellite imagery with the ECCC continental radar composite.",
         [
-            "GOES-18 supplies the west and GOES-19 the east, blended on a common 2 km display grid.",
+            "GOES-18 supplies genuine ten-minute scan times on the common 2 km display grid; the far eastern edge has weaker viewing geometry than the legacy GOES-18/19 blend.",
             "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder.",
         ],
     ),
@@ -497,6 +516,10 @@ LEGENDS: dict[str, dict[str, str]] = {
         "kind": "hotspots",
     },
     "raw-ir": {
+        "title": "10.3 µm cloud-top temperature",
+        "kind": "raw-ir",
+    },
+    "westwx-ir": {
         "title": "10.3 µm cloud-top temperature",
         "kind": "raw-ir",
     },

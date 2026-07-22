@@ -1,9 +1,9 @@
 """Dedicated ten-minute GOES-18 satellite ingest for WestWX.
 
 This module intentionally does not change the lower-cadence, multi-satellite
-Forecast Graphics path in :mod:`radarsat.pipeline`.  It renders only the
-``north-america`` grid used by WestWX and writes separate ``westwx-visir`` and
-``westwx-ir`` layers.
+path in :mod:`radarsat.pipeline`. It renders only the ``north-america`` grid
+and writes shared ten-minute ``westwx-visible``, ``westwx-visir`` and
+``westwx-ir`` layers used by WestWX and Radar-Sat.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ WESTWX_DOMAIN_ID = "north-america"
 WESTWX_PRODUCT = "ABI-L2-MCMIPF"
 WESTWX_SOURCE = "NOAA GOES-18"
 WESTWX_SOURCE_LAYER = "ABI-L2-MCMIPF"
-WESTWX_RENDER_VERSION = 1
+WESTWX_RENDER_VERSION = 2
 DEFAULT_MAX_SOURCE_BYTES = 350_000_000
 
 
@@ -198,7 +198,7 @@ def westwx_scan_ready(
     domain: Domain | None = None,
 ) -> bool:
     selected = domain or DOMAINS[WESTWX_DOMAIN_ID]
-    for layer_id in ("westwx-visir", "westwx-ir"):
+    for layer_id in ("westwx-visible", "westwx-visir", "westwx-ir"):
         layer = LAYERS[layer_id]
         image = frame_path(root, selected, layer, scan.valid_time)
         metadata = metadata_path(root, selected, layer, scan.valid_time)
@@ -255,9 +255,9 @@ def plan_backfill(
     )
 
 
-def _stage_infrared(rendered: RenderedSatellite, destination: Path) -> None:
+def _stage_rgb(source_path: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(rendered.infrared) as source:
+    with Image.open(source_path) as source:
         source.convert("RGB").save(
             destination,
             "WEBP",
@@ -324,6 +324,7 @@ def render_westwx_scan(
         )
         staging = cache_root / "westwx-staging"
         staging.mkdir(parents=True, exist_ok=True)
+        staged_visible = staging / f"{stem}-visible.webp"
         staged_visir = staging / f"{stem}-visir.webp"
         staged_ir = staging / f"{stem}-ir.webp"
         compose_details = compose_visible_infrared(
@@ -333,12 +334,16 @@ def render_westwx_scan(
             scan.valid_time,
             staged_visir,
         )
-        _stage_infrared(rendered, staged_ir)
+        _stage_rgb(rendered.visible, staged_visible)
+        _stage_rgb(rendered.infrared, staged_ir)
 
+        visible_layer = LAYERS["westwx-visible"]
         visir_layer = LAYERS["westwx-visir"]
         ir_layer = LAYERS["westwx-ir"]
+        visible_destination = frame_path(root, selected_domain, visible_layer, scan.valid_time)
         visir_destination = frame_path(root, selected_domain, visir_layer, scan.valid_time)
         ir_destination = frame_path(root, selected_domain, ir_layer, scan.valid_time)
+        _install_staged(staged_visible, visible_destination)
         _install_staged(staged_visir, visir_destination)
         _install_staged(staged_ir, ir_destination)
         common_extra: dict[str, object] = {
@@ -350,6 +355,17 @@ def render_westwx_scan(
             "westwxOnly": True,
         }
         source_times = {"GOES-18 ABI scan start": scan.valid_time}
+        write_metadata(
+            root,
+            selected_domain,
+            visible_layer,
+            scan.valid_time,
+            visible_destination,
+            source_times,
+            source=WESTWX_SOURCE,
+            source_layer=f"{WESTWX_SOURCE_LAYER} true colour",
+            extra=common_extra,
+        )
         write_metadata(
             root,
             selected_domain,
