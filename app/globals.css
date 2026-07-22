@@ -234,8 +234,27 @@ input:focus-visible {
 .fire-marker.age-2 { color: #ffcf86; opacity: 0.64; }
 
 .fire-marker svg {
-  width: clamp(9px, 1.35vw, 17px);
-  height: clamp(9px, 1.35vw, 17px);
+  width: clamp(7px, 0.9vw, 12px);
+  height: clamp(7px, 0.9vw, 12px);
+}
+
+.active-fire-marker {
+  color: #ff7956;
+  filter: drop-shadow(0 0 2px rgba(255, 229, 190, 0.75)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.76));
+}
+
+.active-fire-marker.fire-notable svg {
+  width: clamp(12px, 1.5vw, 19px);
+  height: clamp(12px, 1.5vw, 19px);
+}
+
+.hotspot-fire-marker { color: #ffb05d; }
+.hotspot-fire-marker.age-1 { color: #f08d43; opacity: 0.72; }
+.hotspot-fire-marker.age-2 { color: #c9663b; opacity: 0.44; }
+
+.hotspot-fire-marker svg {
+  width: clamp(7px, 1.02vw, 13px);
+  height: clamp(7px, 1.02vw, 13px);
 }
 
 .legend-marker {
@@ -248,10 +267,24 @@ input:focus-visible {
   animation: none !important;
 }
 
-.legend-marker.lightning-marker svg,
-.legend-marker.fire-marker svg {
+.legend-marker.lightning-marker svg {
   width: 14px;
   height: 14px;
+}
+
+.legend-marker.active-fire-marker svg {
+  width: 11px;
+  height: 11px;
+}
+
+.legend-marker.active-fire-marker.fire-notable svg {
+  width: 17px;
+  height: 17px;
+}
+
+.legend-marker.hotspot-fire-marker svg {
+  width: 12px;
+  height: 12px;
 }
 
 @keyframes lightning-arrival {

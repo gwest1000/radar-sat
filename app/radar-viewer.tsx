@@ -14,6 +14,7 @@ type Frame = {
   detectionCount?: number;
   newestDetectionTime?: string | null;
   availability?: string;
+  lowConfidencePixels?: number;
   mediumConfidencePixels?: number;
   highConfidencePixels?: number;
   mappedFlashCount?: number;
@@ -39,6 +40,9 @@ type FireMarker = {
   x: number;
   y: number;
   age: 0 | 1 | 2;
+  kind: "active" | "hotspot";
+  notable: boolean;
+  signal: number;
 };
 
 type DynamicLayer = {
@@ -111,11 +115,12 @@ const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
+const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
 const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
-  left: "26.9%",
-  top: "25.8%",
-  width: "28.6%",
-  height: "33.3%",
+  left: `${BC_ON_NORTH_AMERICA.left * 100}%`,
+  top: `${BC_ON_NORTH_AMERICA.top * 100}%`,
+  width: `${BC_ON_NORTH_AMERICA.width * 100}%`,
+  height: `${BC_ON_NORTH_AMERICA.height * 100}%`,
 };
 const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]);
 
@@ -167,6 +172,55 @@ function pointFrameReferences(
     }));
 }
 
+function rollingPointFrameReferences(
+  frames: Frame[],
+  target: string,
+  catalogBase: string,
+  maxAgeMinutes: number,
+): PointFrameReference[] {
+  const references = pointFrameReferences(frames, target, catalogBase, maxAgeMinutes, 1);
+  if (references.length) return references;
+  const latest = frames[frames.length - 1];
+  const targetTime = Date.parse(target);
+  const latestTime = latest ? Date.parse(latest.validTime) : Number.NaN;
+  if (
+    !latest
+    || !Number.isFinite(targetTime)
+    || !Number.isFinite(latestTime)
+    || latestTime < targetTime
+    || latestTime - targetTime > maxAgeMinutes * 60_000
+  ) return [];
+  return [{
+    validTime: latest.validTime,
+    url: frameUrl(latest, catalogBase),
+    ageMinutes: 0,
+    frame: latest,
+  }];
+}
+
+function latestRollingPointFrameReferences(
+  frames: Frame[],
+  target: string,
+  catalogBase: string,
+  maxOffsetMinutes: number,
+): PointFrameReference[] {
+  const latest = frames[frames.length - 1];
+  const targetTime = Date.parse(target);
+  const latestTime = latest ? Date.parse(latest.validTime) : Number.NaN;
+  if (
+    !latest
+    || !Number.isFinite(targetTime)
+    || !Number.isFinite(latestTime)
+    || Math.abs(latestTime - targetTime) > maxOffsetMinutes * 60_000
+  ) return [];
+  return [{
+    validTime: latest.validTime,
+    url: frameUrl(latest, catalogBase),
+    ageMinutes: Math.max(0, (targetTime - latestTime) / 60_000),
+    frame: latest,
+  }];
+}
+
 async function buildLightningMarkers(
   references: PointFrameReference[],
   idPrefix = "",
@@ -194,6 +248,84 @@ async function buildLightningMarkers(
     });
   }
   return [...byLocation.values()].sort((left, right) => right.age - left.age);
+}
+
+function remapFirePoint(
+  x: number,
+  y: number,
+  sourceDomain: string,
+  targetDomain: string,
+): [number, number] | undefined {
+  if (sourceDomain === targetDomain) return [x, y];
+  if (sourceDomain === "north-america" && targetDomain === "bc") {
+    const mappedX = (x - BC_ON_NORTH_AMERICA.left) / BC_ON_NORTH_AMERICA.width;
+    const mappedY = (y - BC_ON_NORTH_AMERICA.top) / BC_ON_NORTH_AMERICA.height;
+    if (mappedX < 0 || mappedX > 1 || mappedY < 0 || mappedY > 1) return undefined;
+    return [mappedX, mappedY];
+  }
+  if (sourceDomain === "bc" && targetDomain === "north-america") {
+    return [
+      BC_ON_NORTH_AMERICA.left + x * BC_ON_NORTH_AMERICA.width,
+      BC_ON_NORTH_AMERICA.top + y * BC_ON_NORTH_AMERICA.height,
+    ];
+  }
+  return undefined;
+}
+
+async function buildFireMarkers(
+  activeReference: PointFrameReference | undefined,
+  hotspotReference: PointFrameReference | undefined,
+  targetDomain: string,
+): Promise<FireMarker[]> {
+  const [activePayload, hotspotPayload] = await Promise.all([
+    activeReference ? loadPointFrame(activeReference.url) : Promise.resolve(undefined),
+    hotspotReference ? loadPointFrame(hotspotReference.url) : Promise.resolve(undefined),
+  ]);
+  const overview = targetDomain === "north-america";
+  const activeMarkers = (activePayload?.points ?? []).flatMap((point, index): FireMarker[] => {
+    const [x, y, , sizeValue] = point;
+    const sizeHectares = Number.isFinite(sizeValue) ? sizeValue : 0;
+    if (![x, y].every(Number.isFinite) || x < 0 || x > 1 || y < 0 || y > 1) return [];
+    if (overview && sizeHectares < 5_000) return [];
+    const mapped = remapFirePoint(x, y, activePayload?.domain ?? "north-america", targetDomain);
+    if (!mapped) return [];
+    return [{
+      id: `active-${activeReference?.validTime}-${index}`,
+      x: mapped[0] * 100,
+      y: mapped[1] * 100,
+      age: 0,
+      kind: "active",
+      notable: sizeHectares >= 5_000,
+      signal: sizeHectares,
+    }];
+  });
+  const hotspotMarkers = (hotspotPayload?.points ?? []).flatMap((point, index): FireMarker[] => {
+    const [x, y, pointAge = 0, frpValue] = point;
+    const frp = Number.isFinite(frpValue) ? frpValue : 0;
+    if (![x, y, pointAge].every(Number.isFinite) || x < 0 || x > 1 || y < 0 || y > 1) return [];
+    if (overview && frp < 100) return [];
+    const mapped = remapFirePoint(x, y, hotspotPayload?.domain ?? targetDomain, targetDomain);
+    if (!mapped) return [];
+    const duplicateDistance = targetDomain === "bc" ? 0.012 : 0.0035;
+    if (activeMarkers.some((active) => {
+      const dx = mapped[0] - active.x / 100;
+      const dy = mapped[1] - active.y / 100;
+      return dx * dx + dy * dy < duplicateDistance * duplicateDistance;
+    })) return [];
+    const totalAge = Math.max(0, (hotspotReference?.ageMinutes ?? 0) + pointAge);
+    return [{
+      id: `hotspot-${hotspotReference?.validTime}-${index}`,
+      x: mapped[0] * 100,
+      y: mapped[1] * 100,
+      age: totalAge <= 6 * 60 ? 0 : totalAge <= 12 * 60 ? 1 : 2,
+      kind: "hotspot",
+      notable: false,
+      signal: frp,
+    }];
+  });
+  return [...hotspotMarkers, ...activeMarkers].sort((left, right) => (
+    Number(left.notable) - Number(right.notable) || left.signal - right.signal
+  ));
 }
 
 type ComposedLayer = {
@@ -421,7 +553,7 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "glm-lightning-trail") return "GLM Total Lightning";
   if (layerId === "glm-lightning") return "GLM flash bins";
   if (layerId === "smoke") return "Satellite Smoke Detection";
-  if (layerId === "hotspots") return "Wildfire Hotspots (24 h)";
+  if (layerId === "hotspots") return "Fires & Hotspots";
   return layerLabel(layerId);
 }
 
@@ -455,9 +587,9 @@ function ZapIcon() {
   );
 }
 
-function FlameIcon() {
+function FlameIcon({ filled = true }: { filled?: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth={filled ? "2" : "2.6"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" />
     </svg>
   );
@@ -502,6 +634,10 @@ function SmokeLegend({ frame }: { frame?: Frame }) {
         <span className="hotspot-symbol" style={{ background: "rgba(188, 204, 205, .72)" }} />
         <span>Medium-confidence detection</span>
       </div>
+      <div className="hotspot-key-row">
+        <span className="hotspot-symbol" style={{ background: "rgba(188, 204, 205, .72)" }} />
+        <span>Low-confidence detection</span>
+      </div>
       <p>
         {frame?.availability === "unavailable"
           ? "Unavailable for this scene"
@@ -511,26 +647,35 @@ function SmokeLegend({ frame }: { frame?: Frame }) {
   );
 }
 
-function HotspotLegend({ frame }: { frame?: Frame }) {
-  const rows = [
+function FireLegend({ hotspotFrame, activeFrame }: { hotspotFrame?: Frame; activeFrame?: Frame }) {
+  const hotspotRows = [
     ["0–6 h", "age-0"],
     ["6–12 h", "age-1"],
     ["12–24 h", "age-2"],
   ];
   return (
-    <div className="hotspot-legend" aria-label="Wildfire hotspot detection age legend">
-      {rows.map(([label, ageClass]) => (
+    <div className="hotspot-legend" aria-label="Active wildfire and thermal hotspot legend">
+      <div className="hotspot-key-row">
+        <span className="fire-marker active-fire-marker fire-notable legend-marker"><FlameIcon /></span>
+        <span>Wildfire of note (≥5,000 ha)</span>
+      </div>
+      <div className="hotspot-key-row">
+        <span className="fire-marker active-fire-marker legend-marker"><FlameIcon /></span>
+        <span>Other active wildfire</span>
+      </div>
+      {hotspotRows.map(([label, ageClass]) => (
         <div className="hotspot-key-row" key={label}>
-          <span className={`fire-marker legend-marker ${ageClass}`}><FlameIcon /></span>
-          <span>{label}</span>
+          <span className={`fire-marker hotspot-fire-marker legend-marker ${ageClass}`}><FlameIcon filled={false} /></span>
+          <span>Thermal hotspot · {label}</span>
         </div>
       ))}
       <p>
-        {typeof frame?.pointCount === "number"
-          ? `${frame.pointCount} mapped detections in this 24 h snapshot`
-          : typeof frame?.detectionCount === "number"
-            ? `${frame.detectionCount} mapped detections in this 24 h snapshot`
-          : "Satellite thermal detections"}
+        {typeof activeFrame?.pointCount === "number" ? `${activeFrame.pointCount} agency-reported fires · ` : ""}
+        {typeof hotspotFrame?.pointCount === "number"
+          ? `${hotspotFrame.pointCount} mapped thermal detections`
+          : typeof hotspotFrame?.detectionCount === "number"
+            ? `${hotspotFrame.detectionCount} mapped thermal detections`
+            : "Agency fires and satellite thermal detections"}
       </p>
     </div>
   );
@@ -719,15 +864,32 @@ export function RadarViewer() {
       || !fireController
       || !isProductLayerEnabled(fireController, optionalLayers, product.layers)
     ) return [];
-    const pointDomain = product.domain === "north-america" ? catalog?.domains.bc : domain;
-    return pointFrameReferences(
+    const pointDomain = domain.layers["hotspot-points"]?.frames?.length
+      ? domain
+      : catalog?.domains.bc;
+    return rollingPointFrameReferences(
       pointDomain?.layers["hotspot-points"]?.frames ?? [],
       anchor.validTime,
       catalogBase,
       6 * 60,
-      1,
     );
   }, [anchor, catalog, catalogBase, domain, fireController, optionalLayers, product]);
+  const activeFirePointReferences = useMemo(() => {
+    if (
+      !catalog
+      || !product
+      || !anchor
+      || !catalogBase
+      || !fireController
+      || !isProductLayerEnabled(fireController, optionalLayers, product.layers)
+    ) return [];
+    return latestRollingPointFrameReferences(
+      catalog.domains["north-america"]?.layers["active-fire-points"]?.frames ?? [],
+      anchor.validTime,
+      catalogBase,
+      6 * 60,
+    );
+  }, [anchor, catalog, catalogBase, fireController, optionalLayers, product]);
 
   const advance = useCallback(
     (amount: number) => {
@@ -772,31 +934,20 @@ export function RadarViewer() {
 
   useEffect(() => {
     let cancelled = false;
-    const reference = firePointReferences[0];
-    if (!reference) {
+    const hotspotReference = firePointReferences[0];
+    const activeReference = activeFirePointReferences[0];
+    if (!hotspotReference && !activeReference) {
       const clearMarkers = window.setTimeout(() => setFireMarkers([]), 0);
       return () => window.clearTimeout(clearMarkers);
     }
 
-    void loadPointFrame(reference.url).then((payload) => {
-      if (cancelled) return;
-      const markers = payload.points.flatMap((point, index): FireMarker[] => {
-        const [x, y, detectionAge = 0] = point;
-        if (![x, y, detectionAge].every(Number.isFinite) || x < 0 || x > 1 || y < 0 || y > 1) return [];
-        const totalAge = Math.max(0, reference.ageMinutes + detectionAge);
-        return [{
-          id: `${reference.validTime}-${index}`,
-          x: x * 100,
-          y: y * 100,
-          age: totalAge <= 6 * 60 ? 0 : totalAge <= 12 * 60 ? 1 : 2,
-        }];
-      });
-      setFireMarkers(markers);
+    void buildFireMarkers(activeReference, hotspotReference, product?.domain ?? "bc").then((markers) => {
+      if (!cancelled) setFireMarkers(markers);
     }).catch(() => {
       if (!cancelled) setFireMarkers([]);
     });
     return () => { cancelled = true; };
-  }, [firePointReferences]);
+  }, [activeFirePointReferences, firePointReferences, product?.domain]);
 
   useEffect(() => {
     if (!isAnimating || !catalog || !domain || !product || !catalogBase) return;
@@ -818,17 +969,33 @@ export function RadarViewer() {
       if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
       const pointsId = pointLayerId(recipe.id);
       if (!pointsId) return [];
-      const pointDomain = recipe.id === "hotspots" && product.domain === "north-america"
+      const pointDomain = recipe.id === "hotspots" && !domain.layers[pointsId]?.frames?.length
         ? catalog.domains.bc
         : domain;
-      return pointFrameReferences(
-        pointDomain?.layers[pointsId]?.frames ?? [],
+      return recipe.id === "hotspots"
+        ? rollingPointFrameReferences(
+            pointDomain?.layers[pointsId]?.frames ?? [],
+            nextAnchor.validTime,
+            catalogBase,
+            6 * 60,
+          )
+        : pointFrameReferences(
+            pointDomain?.layers[pointsId]?.frames ?? [],
+            nextAnchor.validTime,
+            catalogBase,
+            32,
+            3,
+          );
+    });
+    const fireRecipe = product.layers.find((recipe) => recipe.id === "hotspots");
+    if (fireRecipe && isProductLayerEnabled(fireRecipe, optionalLayers, product.layers)) {
+      nextPointReferences.push(...latestRollingPointFrameReferences(
+        catalog.domains["north-america"]?.layers["active-fire-points"]?.frames ?? [],
         nextAnchor.validTime,
         catalogBase,
-        recipe.id === "hotspots" ? 6 * 60 : 32,
-        recipe.id === "hotspots" ? 1 : 3,
-      );
-    });
+        6 * 60,
+      ));
+    }
     if (
       product.domain === "north-america"
       && product.layers.some((recipe) => (
@@ -929,8 +1096,13 @@ export function RadarViewer() {
             .sort((left, right) => Date.parse(right) - Date.parse(left))[0],
         }
       : undefined,
-    firePointReferences[0]
-      ? { label: "FIRE", validTime: firePointReferences[0].validTime }
+    firePointReferences[0] || activeFirePointReferences[0]
+      ? {
+          label: "FIRE",
+          validTime: [firePointReferences[0]?.validTime, activeFirePointReferences[0]?.validTime]
+            .filter((value): value is string => Boolean(value))
+            .sort((left, right) => Date.parse(right) - Date.parse(left))[0],
+        }
       : undefined,
   ].filter((item): item is { label: string; validTime: string } => Boolean(item));
   const sourceTimes = composedLayers
@@ -945,7 +1117,9 @@ export function RadarViewer() {
   if (lightningController && (lightningPointReferences.length || ecccFallbackPointReferences.length)) {
     composedLayerIds.add(lightningController.id);
   }
-  if (fireController && firePointReferences.length) composedLayerIds.add(fireController.id);
+  if (fireController && (firePointReferences.length || activeFirePointReferences.length)) {
+    composedLayerIds.add(fireController.id);
+  }
   const missingLayers = product.layers
     .filter((recipe) => isLayerEnabled(recipe) && !domain.staticLayers[recipe.id] && !composedLayerIds.has(recipe.id))
     .map((recipe) => layerControlLabel(recipe.id))
@@ -1178,17 +1352,17 @@ export function RadarViewer() {
             {fireMarkers.length > 0 && (
               <div
                 className="point-symbol-layer"
-                style={product.domain === "north-america" ? BC_ON_NORTH_AMERICA_STYLE : cropStyle}
+                style={cropStyle}
                 role="img"
-                aria-label="NRCan satellite-detected wildfire hotspots"
+                aria-label="Agency-reported active wildfires and satellite thermal hotspots"
               >
-                {fireMarkers.map((hotspot) => (
+                {fireMarkers.map((marker) => (
                   <span
-                    className={`fire-marker age-${hotspot.age}`}
-                    key={hotspot.id}
-                    style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
+                    className={`fire-marker ${marker.kind === "active" ? "active-fire-marker" : "hotspot-fire-marker"}${marker.notable ? " fire-notable" : ""} age-${marker.age}`}
+                    key={marker.id}
+                    style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
                   >
-                    <FlameIcon />
+                    <FlameIcon filled={marker.kind === "active"} />
                   </span>
                 ))}
               </div>
@@ -1221,7 +1395,7 @@ export function RadarViewer() {
             if (legend.kind === "hotspots") {
               const hotspotFrame = firePointReferences[0]?.frame
                 ?? composedLayers.find((layer) => layer.id === "hotspots")?.frame;
-              return <HotspotLegend frame={hotspotFrame} key={legendId} />;
+              return <FireLegend hotspotFrame={hotspotFrame} activeFrame={activeFirePointReferences[0]?.frame} key={legendId} />;
             }
             if (legend.kind === "raw-ir") return <InfraredLegend key={legendId} />;
             if (legend.kind === "watersheds") return <WatershedLegend key={legendId} />;
