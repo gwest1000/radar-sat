@@ -600,6 +600,196 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
         )
 
 
+def ingest_goes_smoke_archive(
+    root: Path,
+    domain_ids: Iterable[str],
+    now: dt.datetime | None = None,
+    *,
+    client: object | None = None,
+    lookback_hours: float = 24.0,
+    max_scans: int = 150,
+    max_download_bytes: int = 600_000_000,
+    max_object_bytes: int | None = None,
+) -> dict[str, object]:
+    """Catch up bounded GOES-18 ADPF history, committing one scan at a time.
+
+    Completed image/metadata pairs are the restart boundary. Discovery and
+    rendering proceed oldest-to-newest, existing pairs at the current render
+    version are skipped, and a failed scan or domain does not roll back older
+    successes. A fully unavailable nighttime scan is still a valid archived
+    frame: its transparent PNG and availability metadata distinguish it from a
+    missing source scan.
+    """
+    from .goes_hazards import (
+        ADP_ARCHIVE_HOURS,
+        ADP_MAX_DISCOVERY_BYTES,
+        ADP_MAX_SCANS,
+        GoesHazardClient,
+        decode_smoke_product,
+        render_smoke_overlay,
+        ten_minute_clock,
+    )
+    from .raw_satellite import PublicObject, clear_downloads
+
+    selected = [DOMAINS[domain_id] for domain_id in domain_ids if domain_id in DOMAINS]
+    if not selected:
+        return {"status": "disabled", "domains": [], "warnings": []}
+    if not 0 < lookback_hours <= ADP_ARCHIVE_HOURS:
+        raise ValueError(f"Smoke lookback_hours must be in (0, {ADP_ARCHIVE_HOURS}]")
+    if not 0 < max_scans <= ADP_MAX_SCANS:
+        raise ValueError(f"Smoke max_scans must be in [1, {ADP_MAX_SCANS}]")
+    if not 0 < max_download_bytes <= ADP_MAX_DISCOVERY_BYTES:
+        raise ValueError(
+            f"Smoke max_download_bytes must be in [1, {ADP_MAX_DISCOVERY_BYTES}]"
+        )
+
+    current = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    object_cap = (
+        max_object_bytes
+        if max_object_bytes is not None
+        else int(os.environ.get("RADARSAT_GOES_HAZARD_MAX_BYTES", "100000000"))
+    )
+    if object_cap <= 0:
+        raise ValueError("Smoke max_object_bytes must be positive")
+
+    warnings: list[str] = []
+    rendered_domains: set[str] = set()
+    rendered_times: dict[str, list[str]] = {domain.id: [] for domain in selected}
+    downloaded_bytes = 0
+    skipped_frames = 0
+    attempted_scans = 0
+    owned_client = client is None
+    hazard_client = client or GoesHazardClient()
+    scans: list[PublicObject] = []
+    try:
+        try:
+            discover_history = getattr(hazard_client, "adp_scans", None)
+            if callable(discover_history):
+                scans = list(
+                    discover_history(
+                        current,
+                        lookback_hours=lookback_hours,
+                        max_scans=max_scans,
+                        max_total_bytes=max_download_bytes,
+                    )
+                )
+            else:
+                # Retain compatibility with small injected clients that expose
+                # only the original latest-scan interface.
+                scans = [hazard_client.latest_adp(current)]  # type: ignore[attr-defined]
+            if not scans:
+                warnings.append(
+                    "GOES-18 ADP discovery returned no scans in the requested window"
+                )
+        except Exception as error:
+            warnings.append(
+                f"GOES-18 ADP discovery unavailable: {type(error).__name__}: {error}"
+            )
+            scans = []
+
+        with tempfile.TemporaryDirectory(prefix="radarsat-goes-smoke-") as temporary:
+            cache_root = Path(temporary)
+            smoke_layer = LAYERS["smoke"]
+            # adp_scans guarantees oldest-to-newest order. Sorting here also
+            # keeps injected test clients honest without altering selection.
+            for adp in sorted(scans, key=lambda item: (item.valid_time, item.key)):
+                valid_time = ten_minute_clock(adp.valid_time)
+                needed = [
+                    domain
+                    for domain in selected
+                    if not _rendered_frame_ready(
+                        root,
+                        domain,
+                        smoke_layer,
+                        valid_time,
+                        SMOKE_RENDER_VERSION,
+                    )
+                ]
+                skipped_frames += len(selected) - len(needed)
+                if not needed:
+                    continue
+                if downloaded_bytes + adp.size > max_download_bytes:
+                    warnings.append(
+                        "GOES-18 ADP catch-up stopped at the aggregate download cap: "
+                        f"{downloaded_bytes + adp.size:,} > {max_download_bytes:,} bytes"
+                    )
+                    break
+
+                attempted_scans += 1
+                source_path: Path | None = None
+                try:
+                    source_path = hazard_client.download(  # type: ignore[attr-defined]
+                        adp,
+                        cache_root,
+                        min(object_cap, max_download_bytes - downloaded_bytes),
+                    )
+                    downloaded_bytes += adp.size
+                    product = decode_smoke_product(source_path)
+                    # NetCDF input is no longer needed after decode. Delete it
+                    # before any potentially slow per-domain rendering.
+                    source_path.unlink(missing_ok=True)
+                    source_path = None
+                except Exception as error:
+                    warnings.append(
+                        "GOES-18 ADP scan ingest unavailable at "
+                        f"{format_utc(valid_time)}: {type(error).__name__}: {error}"
+                    )
+                    continue
+                finally:
+                    if source_path is not None:
+                        source_path.unlink(missing_ok=True)
+                    clear_downloads(cache_root)
+
+                for domain in needed:
+                    destination = frame_path(root, domain, smoke_layer, valid_time)
+                    try:
+                        summary = render_smoke_overlay(product, domain, destination)
+                        write_metadata(
+                            root,
+                            domain,
+                            smoke_layer,
+                            valid_time,
+                            destination,
+                            {"GOES-18 ADP": product.start_time},
+                            source="NOAA GOES-18",
+                            source_layer="ABI-L2-ADPF",
+                            extra={
+                                **summary,
+                                "scanEnd": format_utc(product.end_time),
+                                "sourceFile": Path(adp.key).name,
+                                "renderVersion": SMOKE_RENDER_VERSION,
+                            },
+                        )
+                    except Exception as error:
+                        warnings.append(
+                            "GOES-18 ADP frame render unavailable for "
+                            f"{domain.id} at {format_utc(valid_time)}: "
+                            f"{type(error).__name__}: {error}"
+                        )
+                        continue
+                    rendered_domains.add(domain.id)
+                    rendered_times[domain.id].append(format_utc(valid_time))
+    finally:
+        if owned_client:
+            hazard_client.close()  # type: ignore[attr-defined]
+
+    frames_rendered = sum(len(values) for values in rendered_times.values())
+    return {
+        "status": "warning" if warnings else "rendered" if frames_rendered else "unchanged",
+        "domains": sorted(rendered_domains),
+        "renderedTimes": rendered_times,
+        "scansDiscovered": len(scans),
+        "scansAttempted": attempted_scans,
+        "framesRendered": frames_rendered,
+        "framesSkipped": skipped_frames,
+        "downloadBytes": downloaded_bytes,
+        "downloadCapBytes": max_download_bytes,
+        "scanCap": max_scans,
+        "lookbackHours": lookback_hours,
+        "warnings": warnings,
+    }
+
+
 def ingest_goes_hazards(
     root: Path,
     domain_ids: Iterable[str],
@@ -607,19 +797,16 @@ def ingest_goes_hazards(
     *,
     client: object | None = None,
 ) -> dict[str, object]:
-    """Ingest one current ADP scan and one complete ten-minute GLM window.
+    """Catch up ADPF smoke history and ingest one complete GLM window.
 
-    NOAA NetCDF inputs exist only inside a temporary directory and each GLM
-    object is removed immediately after its flash centroids are decoded.
+    NOAA NetCDF inputs exist only inside temporary directories and are removed
+    immediately after their display data is decoded.
     """
     from .goes_hazards import (
         GoesHazardClient,
         combine_glm_flashes,
-        decode_smoke_product,
         read_glm_flashes,
         render_glm_bins,
-        render_smoke_overlay,
-        ten_minute_clock,
     )
     from .raw_satellite import clear_downloads
 
@@ -637,13 +824,32 @@ def ingest_goes_hazards(
     downloaded_bytes = 0
     owned_client = client is None
     hazard_client = client or GoesHazardClient()
-    adp = None
+    smoke_status: dict[str, object] = {}
     glm_window = None
     try:
         try:
-            adp = hazard_client.latest_adp(current)  # type: ignore[attr-defined]
+            smoke_status = ingest_goes_smoke_archive(
+                root,
+                [domain.id for domain in selected],
+                current,
+                client=hazard_client,
+                max_object_bytes=max_bytes,
+            )
+            smoke_domains = smoke_status.get("domains", [])
+            if isinstance(smoke_domains, list):
+                rendered["smoke"] = [str(value) for value in smoke_domains]
+            downloaded_bytes += int(smoke_status.get("downloadBytes", 0))
+            smoke_warnings = smoke_status.get("warnings", [])
+            if isinstance(smoke_warnings, list):
+                warnings.extend(str(value) for value in smoke_warnings)
         except Exception as error:
-            warnings.append(f"GOES-18 ADP discovery unavailable: {type(error).__name__}: {error}")
+            warnings.append(
+                f"GOES-18 ADP catch-up unavailable: {type(error).__name__}: {error}"
+            )
+            smoke_status = {
+                "status": "warning",
+                "error": f"{type(error).__name__}: {error}",
+            }
         try:
             glm_window = hazard_client.latest_complete_glm_window(current)  # type: ignore[attr-defined]
         except Exception as error:
@@ -651,51 +857,6 @@ def ingest_goes_hazards(
 
         with tempfile.TemporaryDirectory(prefix="radarsat-goes-hazards-") as temporary:
             cache_root = Path(temporary)
-            if adp is not None:
-                valid_time = ten_minute_clock(adp.valid_time)
-                smoke_layer = LAYERS["smoke"]
-                needed = [
-                    domain
-                    for domain in selected
-                    if not _rendered_frame_ready(
-                        root, domain, smoke_layer, valid_time, SMOKE_RENDER_VERSION
-                    )
-                ]
-                if needed:
-                    source_path: Path | None = None
-                    try:
-                        source_path = hazard_client.download(adp, cache_root, max_bytes)  # type: ignore[attr-defined]
-                        downloaded_bytes += adp.size
-                        product = decode_smoke_product(source_path)
-                        source_path.unlink(missing_ok=True)
-                        source_path = None
-                        for domain in needed:
-                            destination = frame_path(root, domain, smoke_layer, valid_time)
-                            summary = render_smoke_overlay(product, domain, destination)
-                            write_metadata(
-                                root,
-                                domain,
-                                smoke_layer,
-                                valid_time,
-                                destination,
-                                {"GOES-18 ADP": product.start_time},
-                                source="NOAA GOES-18",
-                                source_layer="ABI-L2-ADPF",
-                                extra={
-                                    **summary,
-                                    "scanEnd": format_utc(product.end_time),
-                                    "sourceFile": Path(adp.key).name,
-                                    "renderVersion": SMOKE_RENDER_VERSION,
-                                },
-                            )
-                            rendered["smoke"].append(domain.id)
-                    except Exception as error:
-                        warnings.append(f"GOES-18 ADP ingest unavailable: {type(error).__name__}: {error}")
-                    finally:
-                        if source_path is not None:
-                            source_path.unlink(missing_ok=True)
-                        clear_downloads(cache_root)
-
             if glm_window is not None:
                 lightning_layer = LAYERS["glm-lightning"]
                 point_layer = LAYERS["glm-lightning-points"]
@@ -838,6 +999,7 @@ def ingest_goes_hazards(
         "legacyTrailDomains": legacy_trails,
         "downloadBytes": downloaded_bytes,
         "cacheCapBytes": max_bytes,
+        "smokeCatchup": smoke_status,
         "warnings": warnings,
     }
 

@@ -22,6 +22,9 @@ ADP_PRODUCT = "ABI-L2-ADPF"
 GLM_PRODUCT = "GLM-L2-LCFA"
 GLM_MAXIMUM_LATITUDE = 52.0
 EXPECTED_GLM_FILES_PER_WINDOW = 30
+ADP_ARCHIVE_HOURS = 24.0
+ADP_MAX_SCANS = 150
+ADP_MAX_DISCOVERY_BYTES = 600_000_000
 
 
 def ten_minute_clock(value: dt.datetime) -> dt.datetime:
@@ -72,9 +75,11 @@ class GoesHazardClient(PublicSatelliteClient):
     ) -> list[PublicObject]:
         bucket = GOES_BUCKETS[satellite]
         current = now.astimezone(UTC)
+        cutoff = current - dt.timedelta(hours=lookback_hours)
+        first_hour = cutoff.replace(minute=0, second=0, microsecond=0)
+        hour = current.replace(minute=0, second=0, microsecond=0)
         objects: dict[tuple[str, dt.datetime], PublicObject] = {}
-        for hour_offset in range(lookback_hours):
-            hour = current.replace(minute=0, second=0, microsecond=0) - dt.timedelta(hours=hour_offset)
+        while hour >= first_hour:
             prefix = f"{product}/{hour:%Y}/{hour:%j}/{hour:%H}/"
             for key, size in self.list_prefix(bucket, prefix):
                 match = GOES_FILENAME.search(key)
@@ -85,11 +90,72 @@ class GoesHazardClient(PublicSatelliteClient):
                     f"{match.group('minute')}{match.group('second')}",
                     "%Y%j%H%M%S",
                 ).replace(tzinfo=UTC)
-                if valid_time > current:
+                if valid_time < cutoff or valid_time > current:
                     continue
                 item = PublicObject(bucket, key, size, valid_time)
                 objects[(key, valid_time)] = item
+            hour -= dt.timedelta(hours=1)
         return sorted(objects.values(), key=lambda item: (item.valid_time, item.key))
+
+    def adp_scans(
+        self,
+        now: dt.datetime | None = None,
+        *,
+        lookback_hours: float = ADP_ARCHIVE_HOURS,
+        max_scans: int = ADP_MAX_SCANS,
+        max_total_bytes: int = ADP_MAX_DISCOVERY_BYTES,
+    ) -> list[PublicObject]:
+        """Return a bounded, restart-safe ADPF history in render order.
+
+        NOAA publishes one full-disk ADPF object per ten-minute scan.  If a
+        bucket ever contains more than one candidate, the latest scan start
+        (and then key) wins.  Bounds are selected newest-first so a constrained
+        run retains the freshest contiguous history, then returned
+        oldest-first so every completed frame is useful after an interruption.
+        """
+        if not 0 < lookback_hours <= ADP_ARCHIVE_HOURS:
+            raise ValueError(f"ADPF lookback_hours must be in (0, {ADP_ARCHIVE_HOURS}]")
+        if not 0 < max_scans <= ADP_MAX_SCANS:
+            raise ValueError(f"ADPF max_scans must be in [1, {ADP_MAX_SCANS}]")
+        if not 0 < max_total_bytes <= ADP_MAX_DISCOVERY_BYTES:
+            raise ValueError(
+                f"ADPF max_total_bytes must be in [1, {ADP_MAX_DISCOVERY_BYTES}]"
+            )
+
+        current = (now or dt.datetime.now(UTC)).astimezone(UTC)
+        # Round up because _objects accepts an integer number of hours and
+        # applies the exact floating-point cutoff below.
+        discovery_hours = max(1, int(np.ceil(lookback_hours)))
+        cutoff = current - dt.timedelta(hours=lookback_hours)
+        candidates = [
+            item
+            for item in self._objects(ADP_PRODUCT, current, lookback_hours=discovery_hours)
+            if cutoff <= item.valid_time <= current
+        ]
+        by_bucket: dict[dt.datetime, PublicObject] = {}
+        for item in candidates:
+            bucket = ten_minute_clock(item.valid_time)
+            previous = by_bucket.get(bucket)
+            if previous is None or (item.valid_time, item.key) > (
+                previous.valid_time,
+                previous.key,
+            ):
+                by_bucket[bucket] = item
+
+        selected_newest_first: list[PublicObject] = []
+        selected_bytes = 0
+        for item in sorted(
+            by_bucket.values(),
+            key=lambda value: (value.valid_time, value.key),
+            reverse=True,
+        ):
+            if len(selected_newest_first) >= max_scans:
+                break
+            if selected_bytes + item.size > max_total_bytes:
+                break
+            selected_newest_first.append(item)
+            selected_bytes += item.size
+        return list(reversed(selected_newest_first))
 
     def latest_adp(self, now: dt.datetime | None = None) -> PublicObject:
         current = (now or dt.datetime.now(UTC)).astimezone(UTC)

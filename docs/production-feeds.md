@@ -131,10 +131,15 @@ where only visible is missing and uses transparency where both channels are
 unavailable, allowing the map beneath to show through without invented pixels.
 
 The lightweight GOES-18 hazard path runs independently of that half-hourly
-imagery clock. For each cycle it selects the latest ABI Aerosol Detection
-Product (`ABI-L2-ADPF`) and the latest complete set of thirty 20-second GLM
-Lightning Cluster Filter Algorithm files (`GLM-L2-LCFA`) in a ten-minute
-window. It produces these transparent PNG layers:
+imagery clock. For each cycle it discovers up to 24 hours of ABI Aerosol
+Detection Product (`ABI-L2-ADPF`) scans so an outage or nighttime-only first
+run catches up the available daytime smoke history. Discovery spans UTC hour
+and day boundaries, is hard-bounded to 150 scans and 600 MB of source objects,
+and processes missing scans oldest-to-newest. Already complete display frames
+are skipped. Each successful scan remains archived if a later download or
+render fails. The same cycle selects the latest complete set of thirty
+20-second GLM Lightning Cluster Filter Algorithm files (`GLM-L2-LCFA`) in a
+ten-minute window. It produces these transparent PNG layers:
 
 - `smoke`: medium- and high-confidence daytime, clear-sky ADP detections. The
   pale tint is a confidence overlay, not an estimate of concentration or proof
@@ -147,10 +152,21 @@ window. It produces these transparent PNG layers:
 
 Every downloaded ADPF or GLM source object is capped independently by
 `RADARSAT_GOES_HAZARD_MAX_BYTES` (100 MB by default), decoded, and deleted
-immediately. Only the processed PNG and JSON metadata archive persists. Set
+immediately. Fully unavailable nighttime ADPF scans retain a transparent PNG
+and metadata with `availability: unavailable`; that is deliberately distinct
+from a missing scan and does not assert smoke-free conditions. Only the
+processed PNG and JSON metadata archive persists. Set
 `RADARSAT_GOES_HAZARDS_ENABLED=0` to disable this path. The separate ECCC CLDN
 density layer remains the northern-coverage source on the BC grid; a single
 masked GLM/CLDN hybrid layer for broad domains is not yet generated.
+
+To perform the same bounded North America smoke catch-up once and atomically
+refresh `catalog.json` without running the other ingest paths:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/backfill_goes_smoke.py \
+  --output-root data/output
+```
 
 At the first production sample, the compressed display pairs averaged 0.32 MB
 for BC, 0.56 MB for North America and 0.63 MB for the North Pacific. The
