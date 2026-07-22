@@ -21,6 +21,8 @@ class OpsScriptTests(unittest.TestCase):
         executable.write_text(
             "#!/bin/zsh\n"
             'print -r -- "$*" >> "${RADARSAT_TEST_CALLS}"\n'
+            'if [[ "${RADARSAT_TEST_FAIL_WESTWX:-0}" == "1" '
+            '&& "$*" == *backfill_westwx_satellite.py* ]]; then exit 7; fi\n'
         )
         executable.chmod(0o755)
         return executable, log
@@ -67,6 +69,39 @@ class OpsScriptTests(unittest.TestCase):
             self.assertIn("--ingest-status", calls[1])
             self.assertIn("scripts/publish_r2.py", calls[2])
             self.assertFalse(lock.exists())
+
+    def test_opt_in_westwx_scan_is_bounded_and_failure_does_not_block_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable, log = self._fake_python(root)
+            environment = self._environment(root, executable, log)
+            environment.update(
+                {
+                    "RADARSAT_WESTWX_SATELLITE_ENABLED": "1",
+                    "RADARSAT_TEST_FAIL_WESTWX": "1",
+                }
+            )
+
+            result = subprocess.run(
+                ["/bin/zsh", str(RUN_CYCLE)],
+                cwd=PROJECT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            calls = log.read_text().splitlines()
+            self.assertEqual(len(calls), 4)
+            self.assertIn("scripts/run_ingest.py", calls[0])
+            self.assertIn("scripts/backfill_westwx_satellite.py", calls[1])
+            self.assertIn("--max-frames 1", calls[1])
+            self.assertIn("--max-download-gb 0.4", calls[1])
+            self.assertTrue(calls[1].endswith("--apply"))
+            self.assertIn("scripts/prune_eccc_spool.py", calls[2])
+            self.assertIn("scripts/publish_r2.py", calls[3])
+            self.assertIn("isolated WestWX", result.stderr)
 
     def test_cycle_does_not_overlap_a_live_owner(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

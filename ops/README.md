@@ -74,3 +74,21 @@ cycle exits cleanly, while a dead owner's stale lock is recovered automatically.
 `RADARSAT_SPOOL_INGEST_HOURS` defaults to 12 hours, matching the broker recovery
 window independently of the three-hour GeoMet query. Thus an outage backlog is
 rendered before its raw staging files are eligible for deletion.
+
+The separate genuine ten-minute GOES-18 WestWX path is installed in the same
+locked cycle but disabled by default because it transfers roughly 36–38 GB of
+compressed NOAA input per full day. First run the one-scan benchmark documented
+in `docs/westwx-satellite.md`. To activate the scheduled isolated catch-up, set
+this in `.env`; no LaunchAgent reinstall is required:
+
+```text
+RADARSAT_WESTWX_SATELLITE_ENABLED=1
+```
+
+Each cycle processes at most one missing newest-first frame with a 0.4 GB
+download cap and a separate cache. A failure writes WestWX status and warns but
+does not prevent normal Forecast Graphics publication. The environment knobs
+`RADARSAT_WESTWX_SATELLITE_HOURS`,
+`RADARSAT_WESTWX_SATELLITE_MAX_DOWNLOAD_GB`, and
+`RADARSAT_WESTWX_SATELLITE_MAX_SOURCE_MB` may tighten the defaults; do not widen
+them without reviewing a dry-run plan.

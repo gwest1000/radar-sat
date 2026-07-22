@@ -81,6 +81,23 @@ export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
   --spool-mode "${RADARSAT_SPOOL_MODE:-auto}" \
   --spool-hours "${RADARSAT_SPOOL_INGEST_HOURS:-12}"
 
+# This high-bandwidth WestWX-only path is opt-in until its one-scan benchmark
+# has been reviewed. It has a dedicated cache and a hard one-frame-per-cycle
+# bound. A failure is isolated so Forecast Graphics ingest/publication can
+# continue; the command writes its own detailed status file.
+if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
+  if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_westwx_satellite.py" \
+    --output-root "${OUTPUT_ROOT}" \
+    --cache-root "${RADARSAT_WESTWX_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/westwx-satellite}" \
+    --hours "${RADARSAT_WESTWX_SATELLITE_HOURS:-3}" \
+    --max-frames 1 \
+    --max-download-gb "${RADARSAT_WESTWX_SATELLITE_MAX_DOWNLOAD_GB:-0.4}" \
+    --max-source-mb "${RADARSAT_WESTWX_SATELLITE_MAX_SOURCE_MB:-350}" \
+    --apply; then
+    print -u2 "Warning: isolated WestWX ten-minute satellite catch-up failed; continuing normal cycle."
+  fi
+fi
+
 # The renderer is read-only and has completed successfully at this point, so
 # raw staging objects older than the recovery window can now be discarded.
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/prune_eccc_spool.py" \
