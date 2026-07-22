@@ -71,6 +71,7 @@ fi
 export PYTHONPATH="${PROJECT_ROOT}"
 export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
 
+primary_ingest_status=0
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/run_ingest.py" \
   --output-root "${OUTPUT_ROOT}" \
   --domain bc \
@@ -79,7 +80,11 @@ export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
   --hours "${RADARSAT_INGEST_HOURS:-3}" \
   --spool-root "${RADARSAT_SPOOL_ROOT:-${HOME}/.local/share/radar-sat/spool/eccc}" \
   --spool-mode "${RADARSAT_SPOOL_MODE:-auto}" \
-  --spool-hours "${RADARSAT_SPOOL_INGEST_HOURS:-12}"
+  --spool-hours "${RADARSAT_SPOOL_INGEST_HOURS:-12}" || primary_ingest_status=$?
+
+if (( primary_ingest_status != 0 )); then
+  print -u2 "Warning: primary Radar-Sat ingest failed with status ${primary_ingest_status}; continuing isolated recovery and publication steps."
+fi
 
 # This high-bandwidth WestWX-only path is opt-in until its one-scan benchmark
 # has been reviewed. It has a dedicated cache and a hard one-frame-per-cycle
@@ -98,15 +103,24 @@ if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
   fi
 fi
 
-# The renderer is read-only and has completed successfully at this point, so
-# raw staging objects older than the recovery window can now be discarded.
-"${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/prune_eccc_spool.py" \
-  --spool "${RADARSAT_SPOOL_ROOT:-${HOME}/.local/share/radar-sat/spool/eccc}" \
-  --older-than-hours "${RADARSAT_RAW_RETENTION_HOURS:-3}" \
-  --ingest-status "${OUTPUT_ROOT}/status/ingest.json" \
-  --apply
+# Raw staging objects may be discarded only when the primary renderer has
+# successfully consumed and classified them. A failed ingest keeps the entire
+# recovery window intact for the next cycle.
+if (( primary_ingest_status == 0 )); then
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/prune_eccc_spool.py" \
+    --spool "${RADARSAT_SPOOL_ROOT:-${HOME}/.local/share/radar-sat/spool/eccc}" \
+    --older-than-hours "${RADARSAT_RAW_RETENTION_HOURS:-3}" \
+    --ingest-status "${OUTPUT_ROOT}/status/ingest.json" \
+    --apply
+else
+  print -u2 "Warning: skipping raw spool prune because primary ingest did not complete."
+fi
 
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/publish_r2.py" \
   --root "${OUTPUT_ROOT}" \
   --state-path "${STATE_ROOT}/state/r2-publish.sqlite3" \
   --status-path "${STATE_ROOT}/status/publish.json"
+
+if (( primary_ingest_status != 0 )); then
+  exit "${primary_ingest_status}"
+fi
