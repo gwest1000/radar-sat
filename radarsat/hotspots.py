@@ -35,19 +35,24 @@ def fetch_hotspots(
     request_get: Callable[..., Any] = requests.get,
     timeout: int = 60,
 ) -> list[dict[str, Any]]:
-    """Fetch current BC satellite thermal detections from the public CWFIS WFS."""
+    """Fetch current satellite thermal detections from the public CWFIS WFS."""
+    params = {
+        "service": "WFS",
+        "version": "1.0.0",
+        "request": "GetFeature",
+        "typeName": CWFIS_HOTSPOT_LAYER,
+        "srsName": "EPSG:4326",
+        "maxFeatures": "20000" if domain.id == "north-america" else "10000",
+        "outputFormat": "application/json",
+    }
+    # Preserve the compact BC feed used by the legacy Radar-Sat product. The
+    # WestWX North America layer keeps all CWFIS detections that project inside
+    # its shared map domain.
+    if domain.id == "bc":
+        params["CQL_FILTER"] = "agency='BC'"
     response = request_get(
         CWFIS_WFS_URL,
-        params={
-            "service": "WFS",
-            "version": "1.0.0",
-            "request": "GetFeature",
-            "typeName": CWFIS_HOTSPOT_LAYER,
-            "srsName": "EPSG:4326",
-            "CQL_FILTER": "agency='BC'",
-            "maxFeatures": "10000",
-            "outputFormat": "application/json",
-        },
+        params=params,
         headers={"User-Agent": "Radar-Sat/0.1 (+https://github.com/gwest1000/radar-sat)"},
         timeout=timeout,
     )

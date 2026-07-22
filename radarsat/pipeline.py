@@ -12,6 +12,13 @@ from typing import Iterable
 
 from PIL import Image
 
+from .active_fires import (
+    CWFIF_ACTIVE_FIRE_LAYER,
+    NIFC_ACTIVE_FIRE_URL,
+    fetch_canadian_active_fires,
+    fetch_us_active_fires,
+    project_active_fires,
+)
 from .catalog import write_catalog
 from .config import DOMAINS, LAYERS, Domain, Layer
 from .geomet import GeoMetClient, at_or_before, format_utc, frame_stamp
@@ -41,9 +48,10 @@ LIGHTNING_TRAIL_RENDER_VERSION = 2
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 3
 HOTSPOT_POINT_RENDER_VERSION = 1
+ACTIVE_FIRE_POINT_RENDER_VERSION = 1
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
-SMOKE_RENDER_VERSION = 1
+SMOKE_RENDER_VERSION = 2
 GLM_LIGHTNING_RENDER_VERSION = 1
 GLM_LIGHTNING_TRAIL_RENDER_VERSION = 1
 GLM_LIGHTNING_POINT_RENDER_VERSION = 1
@@ -277,6 +285,106 @@ def ingest_hotspot_snapshot(
         "validTime": format_utc(valid_time),
         "pointCount": len(points),
         **summary,
+    }
+
+
+def ingest_active_fire_snapshot(
+    root: Path,
+    domain: Domain,
+    now: dt.datetime | None = None,
+) -> dict[str, object]:
+    """Archive current Canadian and U.S. agency-reported active wildfires."""
+    current = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    valid_time = current.replace(
+        minute=(current.minute // 10) * 10,
+        second=0,
+        microsecond=0,
+    )
+    layer = LAYERS["active-fire-points"]
+    if _rendered_frame_ready(
+        root,
+        domain,
+        layer,
+        valid_time,
+        ACTIVE_FIRE_POINT_RENDER_VERSION,
+    ):
+        return {"status": "unchanged", "validTime": format_utc(valid_time)}
+
+    canadian: list[dict[str, object]] = []
+    united_states: list[dict[str, object]] = []
+    source_errors: list[str] = []
+    try:
+        canadian = fetch_canadian_active_fires(current)
+    except Exception as error:
+        source_errors.append(f"CWFIF: {type(error).__name__}: {error}")
+    try:
+        united_states = fetch_us_active_fires()
+    except Exception as error:
+        source_errors.append(f"NIFC WFIGS: {type(error).__name__}: {error}")
+    if len(source_errors) == 2:
+        raise RuntimeError("; ".join(source_errors))
+
+    projected = project_active_fires(canadian, united_states, domain, current)
+    points: list[list[float | int | None]] = []
+    for point in projected:
+        x, y = normalized_pixel(point.x, point.y, domain)
+        points.append(
+            [
+                x,
+                y,
+                round(point.status_age_minutes, 3) if point.status_age_minutes is not None else None,
+                round(point.size_hectares, 3),
+                point.source_code,
+            ]
+        )
+
+    destination = frame_path(root, domain, layer, valid_time)
+    write_point_frame(
+        destination,
+        layer=layer.id,
+        domain=domain,
+        valid_time=valid_time,
+        window_start=current,
+        window_end=current,
+        age_reference_time=current,
+        point_schema=layer.point_schema,
+        points=points,
+        age_mode="source-status-time",
+        age_precision_seconds=60,
+    )
+    details = point_frame_metadata(
+        points=points,
+        point_schema=layer.point_schema,
+        window_start=current,
+        window_end=current,
+        age_reference_time=current,
+        age_mode="source-status-time",
+        age_precision_seconds=60,
+        render_version=ACTIVE_FIRE_POINT_RENDER_VERSION,
+    )
+    write_metadata(
+        root,
+        domain,
+        layer,
+        valid_time,
+        destination,
+        {"CWFIF active fires": current, "NIFC WFIGS active fires": current},
+        source="NRCan CWFIS + NIFC WFIGS",
+        source_layer=f"{CWFIF_ACTIVE_FIRE_LAYER} + {NIFC_ACTIVE_FIRE_URL}",
+        extra={
+            **details,
+            "canadianFeatureCount": len(canadian),
+            "usFeatureCount": len(united_states),
+            "sourceErrors": source_errors,
+        },
+    )
+    return {
+        "status": "rendered",
+        "validTime": format_utc(valid_time),
+        "pointCount": len(points),
+        "canadianFeatureCount": len(canadian),
+        "usFeatureCount": len(united_states),
+        "warnings": source_errors,
     }
 
 
@@ -1538,6 +1646,7 @@ def run(
     native_status: dict[str, object] = {}
     auxiliary_warnings: list[str] = []
     hotspot_status: dict[str, object] = {}
+    active_fire_status: dict[str, object] = {}
     raw_satellite_status: dict[str, object] = {}
     goes_hazard_status: dict[str, object] = {}
     with GeoMetClient() as client:
@@ -1573,11 +1682,23 @@ def run(
             if domain.id == "bc":
                 trail_hours = spool_hours if spool_mode != "off" else hours
                 derive_lightning_trails(output_root, domain, timelines, max(hours, trail_hours))
+            if domain.id in {"bc", "north-america"}:
                 try:
                     hotspot_status[domain.id] = ingest_hotspot_snapshot(output_root, domain)
                 except Exception as error:
                     auxiliary_warnings.append(
                         f"CWFIS wildfire hotspots unavailable: {type(error).__name__}: {error}"
+                    )
+            if domain.id == "north-america":
+                try:
+                    active_fire_status[domain.id] = ingest_active_fire_snapshot(output_root, domain)
+                    warnings = active_fire_status[domain.id].get("warnings", [])
+                    if isinstance(warnings, list):
+                        auxiliary_warnings.extend(str(value) for value in warnings)
+                except Exception as error:
+                    auxiliary_warnings.append(
+                        "Agency-reported active fires unavailable: "
+                        f"{type(error).__name__}: {error}"
                     )
         if os.environ.get("RADARSAT_RAW_SAT_ENABLED", "1").lower() not in {"0", "false", "no"}:
             try:
@@ -1626,6 +1747,7 @@ def run(
                 "domains": native_status,
             },
             "hotspots": hotspot_status,
+            "activeFires": active_fire_status,
             "rawSatellite": raw_satellite_status,
             "goesHazards": goes_hazard_status,
             "warnings": auxiliary_warnings,

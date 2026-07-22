@@ -108,7 +108,7 @@ class HazardDiscoveryTests(unittest.TestCase):
 
 
 class HazardDecodeTests(unittest.TestCase):
-    def test_smoke_classification_keeps_only_medium_and_high_daylight_clear_pixels(self) -> None:
+    def test_smoke_classification_keeps_low_medium_and_high_daylight_clear_pixels(self) -> None:
         smoke = np.ones((1, 6), dtype=np.int8)
         dqf = np.asarray([[0x00, 0x04, 0x08, 0x0C, 0x00, 0x00]], dtype=np.uint16)
         cloud = np.asarray([[0, 0, 0, 0, 1, 0]], dtype=np.int8)
@@ -116,7 +116,7 @@ class HazardDecodeTests(unittest.TestCase):
 
         classes = classify_smoke(smoke, dqf, cloud, pqi2)
 
-        self.assertTrue(np.array_equal(classes, [[2, 1, 255, 255, 255, 255]]))
+        self.assertTrue(np.array_equal(classes, [[2, 1, 3, 255, 255, 255]]))
 
     def test_adpf_decoder_builds_the_native_geostationary_grid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -185,7 +185,7 @@ class HazardRenderTests(unittest.TestCase):
             destination = Path(temporary) / "smoke.png"
             crs = CRS.from_epsg(3857)
             product = SmokeProduct(
-                np.asarray([[2, 1], [0, 255]], dtype=np.uint8),
+                np.asarray([[2, 1], [3, 255]], dtype=np.uint8),
                 from_bounds(0, 0, 20_000, 20_000, 2, 2),
                 crs,
                 VALID,
@@ -209,9 +209,10 @@ class HazardRenderTests(unittest.TestCase):
 
             rgba = np.asarray(Image.open(destination).convert("RGBA"))
             self.assertGreater(int(rgba[0, 0, 3]), int(rgba[0, 1, 3]))
-            self.assertEqual(int(rgba[1, 0, 3]), 0)
+            self.assertEqual(int(rgba[1, 0, 3]), int(rgba[0, 1, 3]))
             self.assertEqual(summary["highConfidencePixels"], 1)
             self.assertEqual(summary["mediumConfidencePixels"], 1)
+            self.assertEqual(summary["lowConfidencePixels"], 1)
 
     def test_glm_bins_respect_the_documented_52_degree_limit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

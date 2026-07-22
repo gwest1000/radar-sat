@@ -141,9 +141,14 @@ render fails. The same cycle selects the latest complete set of thirty
 20-second GLM Lightning Cluster Filter Algorithm files (`GLM-L2-LCFA`) in a
 ten-minute window. It produces these transparent PNG layers:
 
-- `smoke`: medium- and high-confidence daytime, clear-sky ADP detections. The
+- `smoke`: low-, medium- and high-confidence daytime, clear-sky ADP detections. The
   pale tint is a confidence overlay, not an estimate of concentration or proof
   that transparent pixels are smoke-free.
+- `active-fire-points`: current agency-reported Canadian wildfires from NRCan
+  CWFIF and U.S. wildfires from NIFC WFIGS/IRWIN on the North America grid.
+- `hotspot-points`: satellite thermal detections from the preceding 24 hours.
+  WestWX renders detections without a nearby confirmed active fire as smaller,
+  hollow flames.
 - `glm-lightning`: quality-controlled optical total-lightning flash centroids
   collapsed to roughly 10 km display bins. These are not ground-strike
   locations, and useful GOES-18 GLM coverage is limited to about 52°N.

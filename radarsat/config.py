@@ -236,6 +236,17 @@ LAYERS: dict[str, Layer] = {
         max_age_minutes=30,
         point_schema=("x", "y", "ageMinutes", "frp", "count"),
     ),
+    "active-fire-points": Layer(
+        id="active-fire-points",
+        title="Agency-reported active wildfire locations",
+        source_layer=None,
+        image_format="application/json",
+        extension="json",
+        role="points",
+        source="NRCan CWFIS + NIFC WFIGS",
+        max_age_minutes=360,
+        point_schema=("x", "y", "statusAgeMinutes", "sizeHectares", "sourceCode"),
+    ),
     "westwx-visir": Layer(
         id="westwx-visir",
         title="GOES-18 ten-minute true-colour / neutral infrared",
@@ -361,7 +372,7 @@ def _overlay_product(
         "notes": [
             "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
             "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
-            "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+            "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
             "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
             "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters.",
         ],
@@ -450,11 +461,11 @@ def _broad_product(
             ),
             "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
             *(
-                ["NRCan wildfire flames cover the BC portion of the North America map and are satellite thermal detections, not confirmed fire perimeters."]
+                ["WestWX combines agency-reported Canadian and U.S. active wildfire locations with CWFIS satellite thermal detections; confirmed fires and satellite-only detections remain visually distinct."]
                 if rapid_north_america
                 else []
             ),
-            "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+            "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         ],
     }
 

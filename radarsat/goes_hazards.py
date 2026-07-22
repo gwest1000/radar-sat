@@ -44,8 +44,8 @@ class GLMWindow:
 
 @dataclass(frozen=True)
 class SmokeProduct:
-    # 255 means unavailable, 0 means no medium/high-confidence detection,
-    # 1 means medium confidence and 2 means high confidence.
+    # 255 means unavailable, 0 means no smoke detection, 1 means medium,
+    # 2 means high and 3 means low confidence.
     classes: np.ndarray
     transform: Affine
     crs: CRS
@@ -193,10 +193,11 @@ def classify_smoke(
     if smoke_values.shape != quality.shape:
         raise ValueError("Smoke and DQF arrays do not share a grid")
     confidence = quality & 0x0C
-    # The Enterprise ADP confidence field uses 0 for high and 4 for medium.
-    # Low (8) and bad/unavailable (12) pixels must stay unavailable rather
-    # than being presented as a confident "no smoke" observation.
-    valid = (confidence == 0x00) | (confidence == 0x04)
+    # The Enterprise ADP confidence field uses 0 for high, 4 for medium and 8
+    # for low confidence. WestWX deliberately includes all three retrieval
+    # levels so high-latitude smoke remains visible. Bad/unavailable (12)
+    # pixels stay unavailable rather than being presented as clear.
+    valid = (confidence == 0x00) | (confidence == 0x04) | (confidence == 0x08)
     if cloud is not None:
         cloud_values = np.asarray(cloud)
         if cloud_values.shape != smoke_values.shape:
@@ -214,6 +215,7 @@ def classify_smoke(
     detected = valid & (smoke_values == 1)
     classes[detected & (confidence == 0x04)] = 1
     classes[detected & (confidence == 0x00)] = 2
+    classes[detected & (confidence == 0x08)] = 3
     return classes
 
 
@@ -302,11 +304,17 @@ def render_smoke_overlay(product: SmokeProduct, domain: Domain, destination: Pat
     rgba = np.zeros((domain.height, domain.width, 4), dtype=np.uint8)
     medium = target == 1
     high = target == 2
+    low = target == 3
     # Pale neutral smoke tint: enough to reveal a plume while leaving the
     # underlying true-colour texture visible. Confidence changes opacity, not
     # implied aerosol concentration.
     rgba[medium] = np.array((188, 204, 205, 92), dtype=np.uint8)
     rgba[high] = np.array((244, 220, 174, 166), dtype=np.uint8)
+    # For this WestWX experiment, low-confidence detections use the same
+    # enhancement as medium-confidence detections. Confidence remains exposed
+    # in metadata so the styling can be separated again without changing the
+    # source ingest.
+    rgba[low] = np.array((188, 204, 205, 92), dtype=np.uint8)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:
@@ -320,6 +328,7 @@ def render_smoke_overlay(product: SmokeProduct, domain: Domain, destination: Pat
         "validPixelCount": valid_pixels,
         "mediumConfidencePixels": int(np.count_nonzero(medium)),
         "highConfidencePixels": int(np.count_nonzero(high)),
+        "lowConfidencePixels": int(np.count_nonzero(low)),
     }
 
 
