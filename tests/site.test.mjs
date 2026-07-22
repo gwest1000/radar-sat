@@ -27,6 +27,10 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.5, 0\.75, 1, 1\.5, 2, 3, 4, 5\]/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
+  assert.match(viewer, /AUTO_REFRESH_MS = 5 \* 60_000/);
+  assert.match(viewer, /document\.visibilityState !== "visible"/);
+  assert.match(viewer, /window\.location\.reload\(\)/);
+  assert.match(viewer, /VIEWER_PREFERENCES_KEY/);
 });
 
 test("renders weather-app lightning bolts and wildfire flames from point frames", async () => {
@@ -43,6 +47,10 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /nextPointReferences\.forEach\(\(reference\) => preloadPointFrame/);
   assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
   assert.match(viewer, /active-fire-marker/);
+  assert.match(viewer, /BCWS Wildfire of Note/);
+  assert.match(viewer, /U\.S\. current ICS-209 large incident/);
+  assert.match(viewer, /highlight === 0/);
+  assert.doesNotMatch(viewer, /sizeHectares < 5_000|sizeHectares >= 5_000/);
   assert.match(viewer, /hotspot-fire-marker/);
   assert.match(viewer, /<FlameIcon filled=\{marker\.kind === "active"\} \/>/);
   assert.match(viewer, /Low-confidence detection/);

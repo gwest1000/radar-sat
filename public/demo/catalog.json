@@ -1654,7 +1654,7 @@
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
-        "Filled coral flames are agency-reported active wildfires; larger flames identify fires of note at or above 5,000 ha. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
+        "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ]
     },
     {
@@ -1784,7 +1784,7 @@
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
-        "Filled coral flames are agency-reported active wildfires; larger flames identify fires of note at or above 5,000 ha. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
+        "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
         "left": 0.2133,
@@ -1920,7 +1920,7 @@
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
-        "Filled coral flames are agency-reported active wildfires; larger flames identify fires of note at or above 5,000 ha. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
+        "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
         "left": 0.3531,
@@ -2056,7 +2056,7 @@
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
-        "Filled coral flames are agency-reported active wildfires; larger flames identify fires of note at or above 5,000 ha. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
+        "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
         "left": 0.5518,
@@ -2192,7 +2192,7 @@
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
-        "Filled coral flames are agency-reported active wildfires; larger flames identify fires of note at or above 5,000 ha. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
+        "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
         "left": 0.4196,
@@ -2559,7 +2559,8 @@
     "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
     "ECCC Datamart": "https://dd.weather.gc.ca/",
     "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf",
-    "NRCan CWFIS + NIFC WFIGS": "https://www.arcgis.com/home/item.html?id=4181a117dc9e43db8598533e29972015",
+    "BC Wildfire Service": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0",
+    "NIFC WFIGS": "https://www.arcgis.com/home/item.html?id=4181a117dc9e43db8598533e29972015",
     "NOAA Open Data": "https://www.ncei.noaa.gov/products/ncei-data-noaa-open-dissemination-program",
     "NOAA GOES-18": "https://www.ncei.noaa.gov/products/satellite/goes-r-series"
   }

@@ -30,9 +30,15 @@ Every map shows the real source timestamps. Old data is never silently relabelle
 as current, and hatched grey means no current radar coverage rather than no echo.
 Lightning density cells are rendered as white-ringed flash markers that fade
 with age rather than opaque grid squares.
-Wildfire hotspots are archived ten-minute snapshots of NRCan CWFIS satellite
-thermal detections, shown as age-coloured diamonds; they are not fire
-perimeters or confirmation of an active wildfire.
+Filled coral flames are agency-reported active fires, with larger symbols only
+for official BCWS Wildfires of Note and current U.S. ICS-209 large incidents.
+Hollow, age-fading coral flames are archived ten-minute snapshots of NRCan
+CWFIS satellite thermal detections; they are not fire perimeters or confirmation
+of an active wildfire.
+
+The browser refreshes its catalog every minute and performs a visibility-aware
+page reload every five minutes. The reload preserves the selected product,
+layers, range and playback speed, then resumes at the newest frame.
 
 ## Architecture
 

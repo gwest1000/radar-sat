@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
 
@@ -42,7 +42,15 @@ type FireMarker = {
   age: 0 | 1 | 2;
   kind: "active" | "hotspot";
   notable: boolean;
+  highlight: 0 | 1 | 2;
   signal: number;
+};
+
+type ViewerPreferences = {
+  productId: string;
+  speedIndex: number;
+  rangeHours: number;
+  optionalLayers: Record<string, boolean>;
 };
 
 type DynamicLayer = {
@@ -113,6 +121,8 @@ type SiteConfig = {
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
+const AUTO_REFRESH_MS = 5 * 60_000;
+const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
 const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
@@ -283,10 +293,13 @@ async function buildFireMarkers(
   ]);
   const overview = targetDomain === "north-america";
   const activeMarkers = (activePayload?.points ?? []).flatMap((point, index): FireMarker[] => {
-    const [x, y, , sizeValue] = point;
+    const [x, y, , sizeValue, , highlightValue] = point;
     const sizeHectares = Number.isFinite(sizeValue) ? sizeValue : 0;
+    const highlight: FireMarker["highlight"] = highlightValue === 1 || highlightValue === 2
+      ? highlightValue
+      : 0;
     if (![x, y].every(Number.isFinite) || x < 0 || x > 1 || y < 0 || y > 1) return [];
-    if (overview && sizeHectares < 5_000) return [];
+    if (overview && highlight === 0) return [];
     const mapped = remapFirePoint(x, y, activePayload?.domain ?? "north-america", targetDomain);
     if (!mapped) return [];
     return [{
@@ -295,7 +308,8 @@ async function buildFireMarkers(
       y: mapped[1] * 100,
       age: 0,
       kind: "active",
-      notable: sizeHectares >= 5_000,
+      notable: highlight > 0,
+      highlight,
       signal: sizeHectares,
     }];
   });
@@ -320,6 +334,7 @@ async function buildFireMarkers(
       age: totalAge <= 6 * 60 ? 0 : totalAge <= 12 * 60 ? 1 : 2,
       kind: "hotspot",
       notable: false,
+      highlight: 0,
       signal: frp,
     }];
   });
@@ -647,7 +662,15 @@ function SmokeLegend({ frame }: { frame?: Frame }) {
   );
 }
 
-function FireLegend({ hotspotFrame, activeFrame }: { hotspotFrame?: Frame; activeFrame?: Frame }) {
+function FireLegend({
+  hotspotFrame,
+  activeFrame,
+  showUsLarge,
+}: {
+  hotspotFrame?: Frame;
+  activeFrame?: Frame;
+  showUsLarge: boolean;
+}) {
   const hotspotRows = [
     ["0–6 h", "age-0"],
     ["6–12 h", "age-1"],
@@ -657,8 +680,14 @@ function FireLegend({ hotspotFrame, activeFrame }: { hotspotFrame?: Frame; activ
     <div className="hotspot-legend" aria-label="Active wildfire and thermal hotspot legend">
       <div className="hotspot-key-row">
         <span className="fire-marker active-fire-marker fire-notable legend-marker"><FlameIcon /></span>
-        <span>Wildfire of note (≥5,000 ha)</span>
+        <span>BCWS Wildfire of Note</span>
       </div>
+      {showUsLarge && (
+        <div className="hotspot-key-row">
+          <span className="fire-marker active-fire-marker fire-notable legend-marker"><FlameIcon /></span>
+          <span>U.S. current ICS-209 large incident</span>
+        </div>
+      )}
       <div className="hotspot-key-row">
         <span className="fire-marker active-fire-marker legend-marker"><FlameIcon /></span>
         <span>Other active wildfire</span>
@@ -718,6 +747,12 @@ export function RadarViewer() {
   const [lightningMarkers, setLightningMarkers] = useState<LightningMarker[]>([]);
   const [ecccFallbackLightningMarkers, setEcccFallbackLightningMarkers] = useState<LightningMarker[]>([]);
   const [fireMarkers, setFireMarkers] = useState<FireMarker[]>([]);
+  const preferencesRef = useRef<ViewerPreferences>({
+    productId: "bc-large-overlay",
+    speedIndex: 2,
+    rangeHours: 3,
+    optionalLayers: {},
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -748,14 +783,42 @@ export function RadarViewer() {
             if (!cancelled) {
               setCatalog(nextCatalog);
               setCatalogBase(resolved);
-              const preferred = availableProducts.find((item) => item.id === "bc-large-overlay") ?? availableProducts[0];
-              setProductId((current) => availableProducts.some((item) => item.id === current) ? current : preferred.id);
+              let stored: Partial<ViewerPreferences> = {};
+              if (!initialized) {
+                try {
+                  stored = JSON.parse(window.sessionStorage.getItem(VIEWER_PREFERENCES_KEY) ?? "{}") as Partial<ViewerPreferences>;
+                } catch {
+                  stored = {};
+                }
+              }
+              const preferred = availableProducts.find((item) => item.id === stored.productId)
+                ?? availableProducts.find((item) => item.id === "bc-large-overlay")
+                ?? availableProducts[0];
               setError("");
               if (!initialized) {
-                setRangeHours(preferred.defaultHours);
+                setProductId(preferred.id);
+                setRangeHours(
+                  typeof stored.rangeHours === "number" && RANGE_OPTIONS.includes(stored.rangeHours)
+                    ? stored.rangeHours
+                    : preferred.defaultHours,
+                );
+                setSpeedIndex(
+                  typeof stored.speedIndex === "number"
+                    && stored.speedIndex >= 0
+                    && stored.speedIndex < PLAYBACK_SPEEDS.length
+                    ? stored.speedIndex
+                    : 2,
+                );
+                if (stored.optionalLayers && typeof stored.optionalLayers === "object") {
+                  setOptionalLayers(stored.optionalLayers);
+                }
                 setFrameIndex(NEWEST_FRAME);
                 setPlaying(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
                 initialized = true;
+              } else {
+                setProductId((current) => (
+                  availableProducts.some((item) => item.id === current) ? current : preferred.id
+                ));
               }
             }
             return;
@@ -777,6 +840,32 @@ export function RadarViewer() {
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    preferencesRef.current = { productId, speedIndex, rangeHours, optionalLayers };
+  }, [optionalLayers, productId, rangeHours, speedIndex]);
+
+  useEffect(() => {
+    const refreshDueAt = Date.now() + AUTO_REFRESH_MS;
+    const reloadIfDue = () => {
+      if (Date.now() < refreshDueAt || document.visibilityState !== "visible") return;
+      try {
+        window.sessionStorage.setItem(
+          VIEWER_PREFERENCES_KEY,
+          JSON.stringify(preferencesRef.current),
+        );
+      } catch {
+        // Storage can be disabled; refreshing remains safe without restoration.
+      }
+      window.location.reload();
+    };
+    const interval = window.setInterval(reloadIfDue, 30_000);
+    document.addEventListener("visibilitychange", reloadIfDue);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", reloadIfDue);
     };
   }, []);
 
@@ -1361,6 +1450,13 @@ export function RadarViewer() {
                     className={`fire-marker ${marker.kind === "active" ? "active-fire-marker" : "hotspot-fire-marker"}${marker.notable ? " fire-notable" : ""} age-${marker.age}`}
                     key={marker.id}
                     style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
+                    title={marker.highlight === 1
+                      ? "BCWS Wildfire of Note"
+                      : marker.highlight === 2
+                        ? "U.S. current ICS-209 large incident"
+                        : marker.kind === "active"
+                          ? "Agency-reported active wildfire"
+                          : "Satellite thermal hotspot"}
                   >
                     <FlameIcon filled={marker.kind === "active"} />
                   </span>
@@ -1395,7 +1491,14 @@ export function RadarViewer() {
             if (legend.kind === "hotspots") {
               const hotspotFrame = firePointReferences[0]?.frame
                 ?? composedLayers.find((layer) => layer.id === "hotspots")?.frame;
-              return <FireLegend hotspotFrame={hotspotFrame} activeFrame={activeFirePointReferences[0]?.frame} key={legendId} />;
+              return (
+                <FireLegend
+                  hotspotFrame={hotspotFrame}
+                  activeFrame={activeFirePointReferences[0]?.frame}
+                  showUsLarge={product.domain === "north-america"}
+                  key={legendId}
+                />
+              );
             }
             if (legend.kind === "raw-ir") return <InfraredLegend key={legendId} />;
             if (legend.kind === "watersheds") return <WatershedLegend key={legendId} />;

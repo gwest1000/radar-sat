@@ -243,9 +243,16 @@ LAYERS: dict[str, Layer] = {
         image_format="application/json",
         extension="json",
         role="points",
-        source="NRCan CWFIS + NIFC WFIGS",
+        source="NRCan CWFIS + BCWS + NIFC WFIGS",
         max_age_minutes=360,
-        point_schema=("x", "y", "statusAgeMinutes", "sizeHectares", "sourceCode"),
+        point_schema=(
+            "x",
+            "y",
+            "statusAgeMinutes",
+            "sizeHectares",
+            "sourceCode",
+            "highlightCode",
+        ),
     ),
     "westwx-visir": Layer(
         id="westwx-visir",
@@ -374,7 +381,7 @@ def _overlay_product(
             "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
             "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
             "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
-            "Filled coral flames are agency-reported active wildfires; larger flames identify fires of note at or above 5,000 ha. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters.",
+            "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters.",
         ],
     }
     if viewport is not None:

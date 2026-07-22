@@ -13,8 +13,10 @@ from typing import Iterable
 from PIL import Image
 
 from .active_fires import (
+    BCWS_ACTIVE_FIRE_URL,
     CWFIF_ACTIVE_FIRE_LAYER,
     NIFC_ACTIVE_FIRE_URL,
+    fetch_bc_active_fires,
     fetch_canadian_active_fires,
     fetch_us_active_fires,
     project_active_fires,
@@ -48,7 +50,7 @@ LIGHTNING_TRAIL_RENDER_VERSION = 2
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 3
 HOTSPOT_POINT_RENDER_VERSION = 1
-ACTIVE_FIRE_POINT_RENDER_VERSION = 1
+ACTIVE_FIRE_POINT_RENDER_VERSION = 2
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 2
@@ -311,6 +313,7 @@ def ingest_active_fire_snapshot(
         return {"status": "unchanged", "validTime": format_utc(valid_time)}
 
     canadian: list[dict[str, object]] = []
+    british_columbia: list[dict[str, object]] = []
     united_states: list[dict[str, object]] = []
     source_errors: list[str] = []
     try:
@@ -318,13 +321,23 @@ def ingest_active_fire_snapshot(
     except Exception as error:
         source_errors.append(f"CWFIF: {type(error).__name__}: {error}")
     try:
+        british_columbia = fetch_bc_active_fires()
+    except Exception as error:
+        source_errors.append(f"BCWS: {type(error).__name__}: {error}")
+    try:
         united_states = fetch_us_active_fires()
     except Exception as error:
         source_errors.append(f"NIFC WFIGS: {type(error).__name__}: {error}")
-    if len(source_errors) == 2:
+    if len(source_errors) == 3:
         raise RuntimeError("; ".join(source_errors))
 
-    projected = project_active_fires(canadian, united_states, domain, current)
+    projected = project_active_fires(
+        canadian,
+        united_states,
+        domain,
+        current,
+        bc_features=british_columbia,
+    )
     points: list[list[float | int | None]] = []
     for point in projected:
         x, y = normalized_pixel(point.x, point.y, domain)
@@ -335,6 +348,7 @@ def ingest_active_fire_snapshot(
                 round(point.status_age_minutes, 3) if point.status_age_minutes is not None else None,
                 round(point.size_hectares, 3),
                 point.source_code,
+                point.highlight_code,
             ]
         )
 
@@ -368,12 +382,19 @@ def ingest_active_fire_snapshot(
         layer,
         valid_time,
         destination,
-        {"CWFIF active fires": current, "NIFC WFIGS active fires": current},
-        source="NRCan CWFIS + NIFC WFIGS",
-        source_layer=f"{CWFIF_ACTIVE_FIRE_LAYER} + {NIFC_ACTIVE_FIRE_URL}",
+        {
+            "CWFIF active fires": current,
+            "BCWS active fires": current,
+            "NIFC WFIGS active fires": current,
+        },
+        source="NRCan CWFIS + BCWS + NIFC WFIGS",
+        source_layer=(
+            f"{CWFIF_ACTIVE_FIRE_LAYER} + {BCWS_ACTIVE_FIRE_URL} + {NIFC_ACTIVE_FIRE_URL}"
+        ),
         extra={
             **details,
             "canadianFeatureCount": len(canadian),
+            "bcwsFeatureCount": len(british_columbia),
             "usFeatureCount": len(united_states),
             "sourceErrors": source_errors,
         },
@@ -383,6 +404,7 @@ def ingest_active_fire_snapshot(
         "validTime": format_utc(valid_time),
         "pointCount": len(points),
         "canadianFeatureCount": len(canadian),
+        "bcwsFeatureCount": len(british_columbia),
         "usFeatureCount": len(united_states),
         "warnings": source_errors,
     }

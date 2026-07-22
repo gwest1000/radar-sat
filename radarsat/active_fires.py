@@ -19,8 +19,15 @@ NIFC_ACTIVE_FIRE_URL = (
     "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/"
     "WFIGS_Incident_Locations_Current/FeatureServer/0/query"
 )
+BCWS_ACTIVE_FIRE_URL = (
+    "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/"
+    "BCWS_ActiveFires_PublicView/FeatureServer/0/query"
+)
 CANADA_SOURCE_CODE = 1
 UNITED_STATES_SOURCE_CODE = 2
+STANDARD_FIRE_CODE = 0
+CANADA_WILDFIRE_OF_NOTE_CODE = 1
+US_LARGE_INCIDENT_CODE = 2
 
 
 @dataclass(frozen=True)
@@ -30,6 +37,7 @@ class ActiveFirePoint:
     status_age_minutes: float | None
     size_hectares: float
     source_code: int
+    highlight_code: int
 
 
 def _feature_collection(response: Any, label: str) -> list[dict[str, Any]]:
@@ -75,6 +83,31 @@ def fetch_canadian_active_fires(
     return _feature_collection(response, "CWFIF")
 
 
+def fetch_bc_active_fires(
+    *,
+    request_get: Callable[..., Any] = requests.get,
+    timeout: int = 60,
+) -> list[dict[str, Any]]:
+    """Fetch current BCWS fires, including the official Fire of Note flag."""
+    response = request_get(
+        BCWS_ACTIVE_FIRE_URL,
+        params={
+            "where": "FIRE_STATUS <> 'Out'",
+            "outFields": (
+                "FIRE_NUMBER,FIRE_STATUS,CURRENT_SIZE,FIRE_OF_NOTE_IND,"
+                "LATITUDE,LONGITUDE"
+            ),
+            "returnGeometry": "true",
+            "outSR": "4326",
+            "resultRecordCount": "1000",
+            "f": "geojson",
+        },
+        headers={"User-Agent": "Radar-Sat/0.1 (+https://github.com/gwest1000/radar-sat)"},
+        timeout=timeout,
+    )
+    return _feature_collection(response, "BC Wildfire Service")
+
+
 def fetch_us_active_fires(
     *,
     request_get: Callable[..., Any] = requests.get,
@@ -84,9 +117,10 @@ def fetch_us_active_fires(
     response = request_get(
         NIFC_ACTIVE_FIRE_URL,
         params={
-            "where": "IncidentTypeCategory='WF'",
+            "where": "IncidentTypeCategory='WF' AND ActiveFireCandidate=1",
             "outFields": (
-                "IncidentSize,ModifiedOnDateTime_dt,InitialLatitude,InitialLongitude"
+                "IncidentSize,ModifiedOnDateTime_dt,InitialLatitude,InitialLongitude,"
+                "ICS209ReportDateTime,ICS209ReportStatus"
             ),
             # WestWX initially covers western North America. The spatial filter
             # and attribute-only response sharply reduce load on this heavily
@@ -135,6 +169,7 @@ def _coordinates(feature: dict[str, Any], properties: dict[str, Any]) -> tuple[f
     for lon_key, lat_key in (
         ("longitude", "latitude"),
         ("InitialLongitude", "InitialLatitude"),
+        ("LONGITUDE", "LATITUDE"),
     ):
         try:
             return float(properties[lon_key]), float(properties[lat_key])
@@ -148,6 +183,8 @@ def project_active_fires(
     us_features: list[dict[str, Any]],
     domain: Domain,
     snapshot_time: dt.datetime,
+    *,
+    bc_features: list[dict[str, Any]] | None = None,
 ) -> list[ActiveFirePoint]:
     """Project confirmed active wildfires onto a shared display grid."""
     snapshot = snapshot_time.astimezone(UTC)
@@ -155,15 +192,28 @@ def project_active_fires(
     xmin, ymin, xmax, ymax = projected_bbox(domain)
     points: dict[tuple[int, int, int], ActiveFirePoint] = {}
 
-    for source_code, features in (
-        (CANADA_SOURCE_CODE, canadian_features),
-        (UNITED_STATES_SOURCE_CODE, us_features),
+    # BCWS is the authoritative source for the provincial Fire of Note flag.
+    # When it is available, replace CWFIF's BC subset to avoid duplicate points.
+    bcws_features = bc_features or []
+    cwfif_features = canadian_features
+    if bcws_features:
+        cwfif_features = [
+            feature
+            for feature in canadian_features
+            if str((feature.get("properties") or {}).get("agency_code", "")).upper() != "BC"
+        ]
+
+    for source_code, feature_source, features in (
+        (CANADA_SOURCE_CODE, "cwfif", cwfif_features),
+        (CANADA_SOURCE_CODE, "bcws", bcws_features),
+        (UNITED_STATES_SOURCE_CODE, "nifc", us_features),
     ):
         for feature in features:
             properties = feature.get("properties")
             if not isinstance(properties, dict):
                 continue
-            if source_code == CANADA_SOURCE_CODE:
+            highlight_code = STANDARD_FIRE_CODE
+            if feature_source == "cwfif":
                 prescribed = properties.get("fire_was_prescribed")
                 if prescribed not in (None, 0, False, "0", "false", "False"):
                     continue
@@ -172,11 +222,22 @@ def project_active_fires(
                 )
                 size_value = properties.get("fire_size")
                 size_multiplier = 1.0
+            elif feature_source == "bcws":
+                updated = None
+                size_value = properties.get("CURRENT_SIZE")
+                size_multiplier = 1.0
+                if str(properties.get("FIRE_OF_NOTE_IND", "")).upper() == "Y":
+                    highlight_code = CANADA_WILDFIRE_OF_NOTE_CODE
             else:
                 updated = _parse_time(properties.get("ModifiedOnDateTime_dt"))
                 size_value = properties.get("IncidentSize")
                 # IRWIN incident size is reported in acres.
                 size_multiplier = 0.40468564224
+                # NIFC's closest operational equivalent to a Canadian Fire of
+                # Note is a large incident with a current initial/update ICS-209.
+                # A final report (F) is deliberately not highlighted.
+                if str(properties.get("ICS209ReportStatus", "")).upper() in {"I", "U"}:
+                    highlight_code = US_LARGE_INCIDENT_CODE
 
             coordinate = _coordinates(feature, properties)
             if coordinate is None:
@@ -196,10 +257,23 @@ def project_active_fires(
             status_age = None
             if updated is not None:
                 status_age = max(0.0, (snapshot - updated).total_seconds() / 60.0)
-            candidate = ActiveFirePoint(px, py, status_age, size_hectares, source_code)
+            candidate = ActiveFirePoint(
+                px,
+                py,
+                status_age,
+                size_hectares,
+                source_code,
+                highlight_code,
+            )
             key = (px, py, source_code)
             previous = points.get(key)
-            if previous is None or candidate.size_hectares > previous.size_hectares:
+            if previous is None or (
+                candidate.highlight_code,
+                candidate.size_hectares,
+            ) > (
+                previous.highlight_code,
+                previous.size_hectares,
+            ):
                 points[key] = candidate
 
     return [points[key] for key in sorted(points)]

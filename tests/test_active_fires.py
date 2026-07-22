@@ -8,8 +8,12 @@ from pathlib import Path
 from unittest import mock
 
 from radarsat.active_fires import (
+    CANADA_WILDFIRE_OF_NOTE_CODE,
     CANADA_SOURCE_CODE,
+    STANDARD_FIRE_CODE,
+    US_LARGE_INCIDENT_CODE,
     UNITED_STATES_SOURCE_CODE,
+    fetch_bc_active_fires,
     fetch_canadian_active_fires,
     project_active_fires,
 )
@@ -43,6 +47,18 @@ class ActiveFireTests(unittest.TestCase):
         params = request.call_args.kwargs["params"]
         self.assertEqual(params["typeName"], "public:cwfif_national_activefires")
         self.assertIn("record_end > '2026-07-22T19:17:00Z'", params["CQL_FILTER"])
+
+    def test_bcws_query_selects_active_fires_and_official_note_flag(self) -> None:
+        request = mock.Mock(
+            return_value=JsonResponse({"type": "FeatureCollection", "features": []})
+        )
+
+        self.assertEqual(fetch_bc_active_fires(request_get=request), [])
+
+        params = request.call_args.kwargs["params"]
+        self.assertEqual(params["where"], "FIRE_STATUS <> 'Out'")
+        self.assertIn("FIRE_OF_NOTE_IND", params["outFields"])
+        self.assertEqual(params["outSR"], "4326")
 
     def test_projection_filters_prescribed_fires_and_converts_us_acres(self) -> None:
         domain = DOMAINS["north-america"]
@@ -81,14 +97,86 @@ class ActiveFireTests(unittest.TestCase):
         )
         self.assertEqual(canada.size_hectares, 25.0)
         self.assertEqual(canada.status_age_minutes, 60.0)
+        self.assertEqual(canada.highlight_code, STANDARD_FIRE_CODE)
         self.assertAlmostEqual(united_states_point.size_hectares, 40.468564224)
         self.assertEqual(united_states_point.status_age_minutes, 30.0)
+        self.assertEqual(united_states_point.highlight_code, STANDARD_FIRE_CODE)
+
+    def test_projection_uses_authority_flags_instead_of_size_threshold(self) -> None:
+        domain = DOMAINS["north-america"]
+        canadian = [
+            {
+                "geometry": {"type": "Point", "coordinates": [-121.0, 50.0]},
+                "properties": {
+                    "agency_code": "BC",
+                    "fire_size": 99_000.0,
+                    "status_date": "2026-07-22T18:17:00Z",
+                },
+            }
+        ]
+        bcws = [
+            {
+                "geometry": {"type": "Point", "coordinates": [-121.1, 50.1]},
+                "properties": {
+                    "CURRENT_SIZE": 250.0,
+                    "FIRE_OF_NOTE_IND": "Y",
+                },
+            },
+            {
+                "geometry": {"type": "Point", "coordinates": [-122.1, 51.1]},
+                "properties": {
+                    "CURRENT_SIZE": 13_000.0,
+                    "FIRE_OF_NOTE_IND": "N",
+                },
+            },
+        ]
+        united_states = [
+            {
+                "geometry": {"type": "Point", "coordinates": [-119.0, 40.0]},
+                "properties": {
+                    "IncidentSize": 100.0,
+                    "ICS209ReportStatus": "U",
+                },
+            },
+            {
+                "geometry": {"type": "Point", "coordinates": [-118.0, 39.0]},
+                "properties": {
+                    "IncidentSize": 100_000.0,
+                    "ICS209ReportStatus": "F",
+                },
+            },
+        ]
+
+        points = project_active_fires(
+            canadian,
+            united_states,
+            domain,
+            VALID,
+            bc_features=bcws,
+        )
+
+        self.assertEqual(len(points), 4)
+        canada_codes = {
+            point.highlight_code
+            for point in points
+            if point.source_code == CANADA_SOURCE_CODE
+        }
+        us_codes = {
+            point.highlight_code
+            for point in points
+            if point.source_code == UNITED_STATES_SOURCE_CODE
+        }
+        self.assertEqual(canada_codes, {STANDARD_FIRE_CODE, CANADA_WILDFIRE_OF_NOTE_CODE})
+        self.assertEqual(us_codes, {STANDARD_FIRE_CODE, US_LARGE_INCIDENT_CODE})
+        self.assertNotIn(99_000.0, {point.size_hectares for point in points})
 
     @mock.patch("radarsat.pipeline.fetch_us_active_fires")
+    @mock.patch("radarsat.pipeline.fetch_bc_active_fires")
     @mock.patch("radarsat.pipeline.fetch_canadian_active_fires")
     def test_snapshot_writes_combined_point_frame(
         self,
         fetch_canadian: mock.Mock,
+        fetch_bc: mock.Mock,
         fetch_us: mock.Mock,
     ) -> None:
         fetch_canadian.return_value = [
@@ -101,6 +189,7 @@ class ActiveFireTests(unittest.TestCase):
                 },
             }
         ]
+        fetch_bc.return_value = []
         fetch_us.return_value = [
             {
                 "geometry": {"type": "Point", "coordinates": [-119.0, 40.0]},
@@ -130,10 +219,12 @@ class ActiveFireTests(unittest.TestCase):
                 "statusAgeMinutes",
                 "sizeHectares",
                 "sourceCode",
+                "highlightCode",
             ])
             self.assertEqual({point[4] for point in payload["points"]}, {1, 2})
-            self.assertEqual(metadata["renderVersion"], 1)
-            self.assertEqual(metadata["source"], "NRCan CWFIS + NIFC WFIGS")
+            self.assertEqual({point[5] for point in payload["points"]}, {0})
+            self.assertEqual(metadata["renderVersion"], 2)
+            self.assertEqual(metadata["source"], "NRCan CWFIS + BCWS + NIFC WFIGS")
 
 
 if __name__ == "__main__":

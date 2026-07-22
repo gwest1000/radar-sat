@@ -145,7 +145,12 @@ ten-minute window. It produces these transparent PNG layers:
   pale tint is a confidence overlay, not an estimate of concentration or proof
   that transparent pixels are smoke-free.
 - `active-fire-points`: current agency-reported Canadian wildfires from NRCan
-  CWFIF and U.S. wildfires from NIFC WFIGS/IRWIN on the North America grid.
+  CWFIF, active B.C. fires and the official `FIRE_OF_NOTE_IND` designation from
+  BC Wildfire Service, and U.S. wildfires from NIFC WFIGS/IRWIN on the North
+  America grid. A current initial/update ICS-209 identifies the closest U.S.
+  operational analogue, a NIFC large incident. The display never infers either
+  authority designation from acreage alone. BCWS publishes its point layer on
+  an approximately 15-minute update cycle; each source can fail independently.
 - `hotspot-points`: satellite thermal detections from the preceding 24 hours.
   WestWX renders detections without a nearby confirmed active fire as smaller,
   hollow flames.
