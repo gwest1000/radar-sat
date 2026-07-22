@@ -38,7 +38,7 @@ perimeters or confirmation of an active wildfire.
 ```text
 ECCC Datamart AMQPS ── GOES / lightning / site radar ┐
 ECCC GeoMet WMS ────── composite / ptype / coverage ├─ local render + retention
-NOAA public S3 ──────── GOES-18/19 + Himawari-9 ────┤
+NOAA public S3 ──────── GOES/AHI + GLM/ADP hazards ─┤
                                                      └─ R2 layers + catalog.json
                                                                   │
 GitHub Pages static viewer ◀──────────────────────────────────────┘
@@ -47,9 +47,17 @@ GitHub Pages static viewer ◀────────────────�
 - BC grid: EPSG:3005, 1920×1472, approximately 145–108°W and 45–63°N.
 - BC retention: all observations for 24 hours, then `:00`/`:30` through day 7
   (432 ten-minute or 528 six-minute times per layer).
-- Broad-domain target: 30 minutes for 24 hours, then hourly through day 7.
+- Broad satellite target: 30 minutes for 24 hours, then hourly through day 7;
+  GOES-18 smoke and total lightning are processed on a separate 10-minute clock.
+- `raw-visir` is a server-rendered true-colour day / neutral 10.3–10.4 µm IR
+  night image. A solar-elevation smoothstep removes the false-colour terminator
+  fringe, low-sun chroma is faded separately, and a bounded overlap correction
+  softens the GOES-18/19 colour seam.
+- Geostationary scan-edge pixels missing from both visible and infrared are
+  transparent; the renderer does not synthesize weather into those gaps.
 - Raw NOAA source files are handled sequentially under a 900 MB hard cache
-  cap and deleted after compact display rasters are written.
+  cap for multiband imagery or a 100 MB per-object hazard cap, then deleted
+  after compact display rasters are written.
 - R2 publication is transactional: assets first, `catalog.json` last.
 - The publisher warns at 4 GB and refuses storage growth above 5 GB.
 - The R2 `frames/` lifecycle expires at 9 days as a failure backstop.
@@ -101,6 +109,8 @@ scripts/ops/store_r2_credentials.zsh
 PYTHONPATH=. .venv/bin/python scripts/run_ingest.py \
   --output-root data/output --domain bc --domain north-america \
   --domain north-pacific --hours 3
+PYTHONPATH=. .venv/bin/python scripts/derive_raw_visir.py \
+  --output-root data/output --domain north-america
 PYTHONPATH=. .venv/bin/python scripts/publish_r2.py \
   --root data/output --dry-run
 PYTHONPATH=. .venv/bin/python scripts/publish_r2.py --root data/output
@@ -118,6 +128,13 @@ The scheduled cycle searches the full recent window on every run, which closes
 ordinary network gaps while the three-hour GeoMet radar archive still exists.
 Raw Datamart files stay local and are pruned after rendering; only compressed,
 display-ready layers are sent to R2.
+
+The optional `derive_raw_visir.py` command backfills every matching archived
+`raw-visible`/`raw-ir` timestamp without re-downloading ABI/AHI source data. It
+inverts the known legacy IR enhancement into an approximate monotonic neutral
+temperature ramp, writes only the new `raw-visir` frame and metadata, and never
+alters the source pair. Normal ingest also performs this local derivation for
+the latest timestamp before deciding whether a raw NOAA download is necessary.
 
 ## Data sources
 

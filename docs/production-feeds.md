@@ -1,6 +1,6 @@
 # ECCC real-time production feeds
 
-Radar-Sat uses ECCC's AMQPS notification service for systematic real-time acquisition. Sarracenia receives a notification as each product is published, downloads the announced file over HTTPS, and atomically renames it into a local raw spool. A separate half-hourly path reads NOAA's public S3 inventories for calibrated GOES-18/19 ABI and Himawari-9 AHI source data.
+Radar-Sat uses ECCC's AMQPS notification service for systematic real-time acquisition. Sarracenia receives a notification as each product is published, downloads the announced file over HTTPS, and atomically renames it into a local raw spool. Separate NOAA public-S3 paths read half-hourly calibrated GOES-18/19 ABI and Himawari-9 AHI imagery plus ten-minute GOES-18 smoke and total-lightning products.
 
 The rendered BC composites and precipitation-type layers still come from GeoMet WMS because no equivalent gridded Datamart file is published. The raw feeds here supply the satellite, lightning, and four site-radar diagnostic loops.
 
@@ -110,7 +110,47 @@ become explicit trail anchors rather than being left as unused source frames.
 
 The ECCC native-spool path is limited to the BC grid. Each GOES RGB GeoTIFF is read in its declared geostationary CRS, bilinearly reprojected and cropped to the 1920×1472 EPSG:3005 grid, then encoded as quality-88 WebP. The one-band lightning density GeoTIFF is nearest-neighbour reprojected so isolated positive cells are not diluted; positive density bins are rendered opaque for the downstream categorical age-trail glyphs, while zero and nodata are transparent.
 
-The parallel NOAA path reads calibrated Level-2 GOES multiband files and the northern Himawari full-disk segments with Satpy. GOES-18/19 are blended for North America; Himawari-9/GOES-18 are blended on the Pacific-centred EPSG:3832 grid. Raw true colour and a configured 10.3 µm brightness-temperature enhancement are offered separately. Downloads are processed one satellite at a time, may not exceed `RADARSAT_RAW_SAT_MAX_BYTES` (900 MB by default), and are deleted in a `finally` block. Only WebP display rasters persist. If a secondary satellite fails, the primary satellite is retained for that cycle and the degraded blend is recorded as an ingest warning.
+The parallel NOAA path reads calibrated Level-2 GOES multiband files and the northern Himawari full-disk segments with Satpy. GOES-18/19 are blended for North America; Himawari-9/GOES-18 are blended on the Pacific-centred EPSG:3832 grid. Raw true colour and a configured 10.3 µm brightness-temperature enhancement are offered separately. The additional `raw-visir` layer uses true colour above +8° solar elevation, neutral grayscale 10.3/10.4 µm IR below −6°, and a smoothstep blend through twilight. It never mixes the false-colour IR enhancement through the terminator, and it separately suppresses low-sun chroma from +1° to +12° so the source RGB cannot leave a red/yellow rim. A conservative RGB-distribution match is feathered only through the GOES-18/19 overlap to reduce the chromatic seam while leaving uncontested imagery unchanged. Downloads are processed one satellite at a time, may not exceed `RADARSAT_RAW_SAT_MAX_BYTES` (900 MB by default), and are deleted in a `finally` block. Only WebP display rasters persist. If a secondary satellite fails, the primary satellite is retained for that cycle and the degraded blend is recorded as an ingest warning.
+
+Existing archives can be populated without another ABI/AHI download:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/derive_raw_visir.py \
+  --output-root data/output --domain north-america
+```
+
+The backfill pairs frames by their unchanged validity timestamp, reconstructs
+an approximate monotonic neutral IR ramp from the known legacy enhancement,
+and writes only `raw-visir` WebP/metadata files. It does not modify the existing
+`raw-visible` or `raw-ir` bytes or metadata. The normal ingest path performs
+the same local check for the newest timestamp before considering a new raw
+download. `raw-visir` follows the same tier-based retention policy as its pair.
+Small dashed arcs along the far-northern geostationary scan edge are inherited
+no-data gaps, not meteorological features. `raw-visir` falls back to neutral IR
+where only visible is missing and uses transparency where both channels are
+unavailable, allowing the map beneath to show through without invented pixels.
+
+The lightweight GOES-18 hazard path runs independently of that half-hourly
+imagery clock. For each cycle it selects the latest ABI Aerosol Detection
+Product (`ABI-L2-ADPF`) and the latest complete set of thirty 20-second GLM
+Lightning Cluster Filter Algorithm files (`GLM-L2-LCFA`) in a ten-minute
+window. It produces these transparent PNG layers:
+
+- `smoke`: medium- and high-confidence daytime, clear-sky ADP detections. The
+  pale tint is a confidence overlay, not an estimate of concentration or proof
+  that transparent pixels are smoke-free.
+- `glm-lightning`: quality-controlled optical total-lightning flash centroids
+  collapsed to roughly 10 km display bins. These are not ground-strike
+  locations, and useful GOES-18 GLM coverage is limited to about 52°N.
+- `glm-lightning-trail`: bolt glyphs derived from the current, 10-minute-old,
+  and 20-minute-old bins, with older flashes fading in colour.
+
+Every downloaded ADPF or GLM source object is capped independently by
+`RADARSAT_GOES_HAZARD_MAX_BYTES` (100 MB by default), decoded, and deleted
+immediately. Only the processed PNG and JSON metadata archive persists. Set
+`RADARSAT_GOES_HAZARDS_ENABLED=0` to disable this path. The separate ECCC CLDN
+density layer remains the northern-coverage source on the BC grid; a single
+masked GLM/CLDN hybrid layer for broad domains is not yet generated.
 
 At the first production sample, the compressed display pairs averaged 0.32 MB
 for BC, 0.56 MB for North America and 0.63 MB for the North Pacific. The

@@ -68,7 +68,8 @@ def build_catalog(root: Path) -> dict[str, Any]:
             "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
             "ECCC Datamart": "https://dd.weather.gc.ca/",
             "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf",
-            "NOAA Open Data": "https://registry.opendata.aws/collab/noaa/",
+            "NOAA Open Data": "https://www.ncei.noaa.gov/products/ncei-data-noaa-open-dissemination-program",
+            "NOAA GOES-18": "https://www.ncei.noaa.gov/products/satellite/goes-r-series",
         },
     }
 

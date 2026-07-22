@@ -11,6 +11,10 @@ type Frame = {
   sourceTimes?: Record<string, string>;
   detectionCount?: number;
   newestDetectionTime?: string | null;
+  availability?: string;
+  mediumConfidencePixels?: number;
+  highConfidencePixels?: number;
+  mappedFlashCount?: number;
 };
 
 type DynamicLayer = {
@@ -151,7 +155,7 @@ function composeLayers(
     // Trail rasters are regenerated on the radar clock, but their actual
     // observations are ten-minute lightning intervals. Select them by that
     // source interval so VALID and the 0–10/10–20/20–30 minute bins agree.
-    const frame = recipe.id === "lightning-trail"
+    const frame = recipe.id.endsWith("lightning-trail")
       ? atOrBeforeSourceTime(recipe.id, frames, anchor.validTime, dynamicLayer?.maxAgeMinutes)
       : atOrBefore(frames, anchor.validTime, dynamicLayer?.maxAgeMinutes);
     if (!frame) return [];
@@ -165,7 +169,7 @@ function composeLayers(
 }
 
 function actualSourceTime(layerId: string, frame: Frame): string {
-  if (layerId === "lightning-trail" && frame.sourceTimes) {
+  if (layerId.endsWith("lightning-trail") && frame.sourceTimes) {
     const values = Object.values(frame.sourceTimes)
       .filter((value) => Number.isFinite(Date.parse(value)))
       .sort((left, right) => Date.parse(right) - Date.parse(left));
@@ -284,7 +288,8 @@ function ageLabel(minutes: number): string {
 
 function layerLabel(layerId: string): string {
   if (layerId.startsWith("radar")) return "RADAR";
-  if (layerId.startsWith("lightning")) return "LTG";
+  if (layerId.includes("lightning")) return "LTG";
+  if (layerId === "smoke") return "SMOKE";
   if (layerId === "ptype") return "PTYPE";
   if (layerId === "site-radar") return "RADAR";
   if (layerId === "hotspots") return "FIRE";
@@ -295,7 +300,7 @@ function layerLabel(layerId: string): string {
 function sourceLabel(layerId: string): string | null {
   if (layerId.includes("coverage")) return null;
   const label = layerLabel(layerId);
-  return ["SAT", "RADAR", "PTYPE", "LTG", "FIRE"].includes(label) ? label : null;
+  return ["SAT", "RADAR", "PTYPE", "LTG", "FIRE", "SMOKE"].includes(label) ? label : null;
 }
 
 function layerControlLabel(layerId: string): string {
@@ -312,12 +317,17 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "ptype") return "Precip type";
   if (layerId === "lightning-trail") return "Lightning";
   if (layerId === "lightning") return "Flash density";
+  if (layerId === "glm-lightning-trail") return "GLM Total Lightning";
+  if (layerId === "glm-lightning") return "GLM flash bins";
+  if (layerId === "smoke") return "Satellite Smoke Detection";
   if (layerId === "hotspots") return "Wildfire Hotspots (24 h)";
   return layerLabel(layerId);
 }
 
 function legendLayerId(legendId: string): string {
   if (legendId === "lightning-age") return "lightning-trail";
+  if (legendId === "glm-lightning-age") return "glm-lightning-trail";
+  if (legendId === "smoke-confidence") return "smoke";
   if (legendId === "lightning-density") return "lightning";
   return legendId;
 }
@@ -325,7 +335,8 @@ function legendLayerId(legendId: string): string {
 function freshnessThresholds(layerId: string): [number, number] {
   if (layerId.startsWith("radar") || layerId === "site-radar") return [15, 30];
   if (layerId === "ptype") return [20, 35];
-  if (layerId.startsWith("lightning")) return [25, 45];
+  if (layerId.includes("lightning")) return [25, 45];
+  if (layerId === "smoke") return [30, 60];
   if (layerId === "hotspots") return [30, 90];
   if (layerId === "raw-visible" || layerId === "raw-ir") return [90, 150];
   // The source valid time typically trails receipt by roughly 20–40 minutes;
@@ -357,6 +368,26 @@ function WatershedLegend() {
     <div className="watershed-legend" aria-label="BC Hydro watershed boundary legend">
       <span className="watershed-symbol" aria-hidden="true" />
       <span>BC Hydro watershed</span>
+    </div>
+  );
+}
+
+function SmokeLegend({ frame }: { frame?: Frame }) {
+  return (
+    <div className="hotspot-legend" aria-label="Satellite smoke detection confidence legend">
+      <div className="hotspot-key-row">
+        <span className="hotspot-symbol" style={{ background: "rgba(244, 220, 174, .88)" }} />
+        <span>High-confidence detection</span>
+      </div>
+      <div className="hotspot-key-row">
+        <span className="hotspot-symbol" style={{ background: "rgba(188, 204, 205, .72)" }} />
+        <span>Medium-confidence detection</span>
+      </div>
+      <p>
+        {frame?.availability === "unavailable"
+          ? "Unavailable for this scene"
+          : "Daylight, sufficiently clear sky only; absence is not proof of clear air"}
+      </p>
     </div>
   );
 }
@@ -835,6 +866,10 @@ export function RadarViewer() {
             const legend = catalog.legends[legendId];
             if (!legend) return null;
             if (legend.kind === "lightning-age") return <LightningLegend key={legendId} />;
+            if (legend.kind === "smoke-confidence") {
+              const smokeFrame = composedLayers.find((layer) => layer.id === "smoke")?.frame;
+              return <SmokeLegend frame={smokeFrame} key={legendId} />;
+            }
             if (legend.kind === "hotspots") {
               const hotspotFrame = composedLayers.find((layer) => layer.id === "hotspots")?.frame;
               return <HotspotLegend frame={hotspotFrame} key={legendId} />;

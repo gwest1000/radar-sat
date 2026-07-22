@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import tempfile
 from typing import Iterable
 
 from PIL import Image
@@ -31,6 +32,10 @@ UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 2
 HOTSPOT_RENDER_VERSION = 3
 RAW_SATELLITE_RENDER_VERSION = 1
+RAW_VISIR_RENDER_VERSION = 4
+SMOKE_RENDER_VERSION = 1
+GLM_LIGHTNING_RENDER_VERSION = 1
+GLM_LIGHTNING_TRAIL_RENDER_VERSION = 1
 COVERAGE_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
@@ -428,7 +433,262 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             )
 
 
-def _raw_pair_ready(root: Path, domain: Domain, valid_time: dt.datetime) -> bool:
+def _rendered_frame_ready(
+    root: Path,
+    domain: Domain,
+    layer: Layer,
+    valid_time: dt.datetime,
+    render_version: int,
+) -> bool:
+    image = frame_path(root, domain, layer, valid_time)
+    metadata = metadata_path(root, domain, layer, valid_time)
+    if not image.is_file() or not metadata.is_file():
+        return False
+    try:
+        return json.loads(metadata.read_text()).get("renderVersion") == render_version
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def _archived_layer_times(root: Path, domain: Domain, layer: Layer) -> list[dt.datetime]:
+    metadata_root = root / "metadata" / domain.id / layer.id
+    values: list[dt.datetime] = []
+    if not metadata_root.exists():
+        return values
+    for path in metadata_root.rglob("*.json"):
+        try:
+            payload = json.loads(path.read_text())
+            values.append(dt.datetime.fromisoformat(payload["validTime"].replace("Z", "+00:00")))
+        except (OSError, KeyError, ValueError, json.JSONDecodeError):
+            continue
+    return sorted(set(values))
+
+
+def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0) -> None:
+    """Turn exact ten-minute GLM bins into the common fading bolt symbols."""
+    source_layer = LAYERS["glm-lightning"]
+    output_layer = LAYERS["glm-lightning-trail"]
+    source_times = _archived_layer_times(root, domain, source_layer)
+    if not source_times:
+        return
+    cutoff = max(source_times) - dt.timedelta(hours=hours)
+    anchors = [value for value in source_times if value >= cutoff]
+    source_set = set(source_times)
+    for anchor in anchors:
+        selected = [
+            value if value in source_set else None
+            for value in (anchor, anchor - dt.timedelta(minutes=10), anchor - dt.timedelta(minutes=20))
+        ]
+        paths = [
+            frame_path(root, domain, source_layer, value) if value is not None else None
+            for value in selected
+        ]
+        existing = [path if path is not None and path.is_file() else None for path in paths]
+        if not any(existing):
+            continue
+        destination = frame_path(root, domain, output_layer, anchor)
+        metadata = metadata_path(root, domain, output_layer, anchor)
+        expected_sources = {
+            f"age{index * 10}": format_utc(value)
+            for index, value in enumerate(selected)
+            if value is not None
+        }
+        current_sources: dict[str, str] = {}
+        current_version: int | None = None
+        if metadata.is_file():
+            try:
+                payload = json.loads(metadata.read_text())
+                current_sources = payload.get("sourceTimes", {})
+                current_version = payload.get("renderVersion")
+            except (OSError, json.JSONDecodeError):
+                pass
+        if (
+            destination.is_file()
+            and current_sources == expected_sources
+            and current_version == GLM_LIGHTNING_TRAIL_RENDER_VERSION
+        ):
+            continue
+        lightning_trail(existing, destination)
+        write_metadata(
+            root,
+            domain,
+            output_layer,
+            anchor,
+            destination,
+            {
+                f"age{index * 10}": value
+                for index, value in enumerate(selected)
+                if value is not None
+            },
+            source="NOAA GOES-18",
+            source_layer="GLM-L2-LCFA 30-minute age trail",
+            extra={"renderVersion": GLM_LIGHTNING_TRAIL_RENDER_VERSION},
+        )
+
+
+def ingest_goes_hazards(
+    root: Path,
+    domain_ids: Iterable[str],
+    now: dt.datetime | None = None,
+    *,
+    client: object | None = None,
+) -> dict[str, object]:
+    """Ingest one current ADP scan and one complete ten-minute GLM window.
+
+    NOAA NetCDF inputs exist only inside a temporary directory and each GLM
+    object is removed immediately after its flash centroids are decoded.
+    """
+    from .goes_hazards import (
+        GoesHazardClient,
+        combine_glm_flashes,
+        decode_smoke_product,
+        read_glm_flashes,
+        render_glm_bins,
+        render_smoke_overlay,
+        ten_minute_clock,
+    )
+    from .raw_satellite import clear_downloads
+
+    selected = [DOMAINS[domain_id] for domain_id in domain_ids if domain_id in DOMAINS]
+    if not selected:
+        return {"status": "disabled", "domains": []}
+    current = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    max_bytes = int(os.environ.get("RADARSAT_GOES_HAZARD_MAX_BYTES", "100000000"))
+    warnings: list[str] = []
+    rendered: dict[str, list[str]] = {"smoke": [], "glm-lightning": []}
+    downloaded_bytes = 0
+    owned_client = client is None
+    hazard_client = client or GoesHazardClient()
+    adp = None
+    glm_window = None
+    try:
+        try:
+            adp = hazard_client.latest_adp(current)  # type: ignore[attr-defined]
+        except Exception as error:
+            warnings.append(f"GOES-18 ADP discovery unavailable: {type(error).__name__}: {error}")
+        try:
+            glm_window = hazard_client.latest_complete_glm_window(current)  # type: ignore[attr-defined]
+        except Exception as error:
+            warnings.append(f"GOES-18 GLM discovery unavailable: {type(error).__name__}: {error}")
+
+        with tempfile.TemporaryDirectory(prefix="radarsat-goes-hazards-") as temporary:
+            cache_root = Path(temporary)
+            if adp is not None:
+                valid_time = ten_minute_clock(adp.valid_time)
+                smoke_layer = LAYERS["smoke"]
+                needed = [
+                    domain
+                    for domain in selected
+                    if not _rendered_frame_ready(
+                        root, domain, smoke_layer, valid_time, SMOKE_RENDER_VERSION
+                    )
+                ]
+                if needed:
+                    source_path: Path | None = None
+                    try:
+                        source_path = hazard_client.download(adp, cache_root, max_bytes)  # type: ignore[attr-defined]
+                        downloaded_bytes += adp.size
+                        product = decode_smoke_product(source_path)
+                        source_path.unlink(missing_ok=True)
+                        source_path = None
+                        for domain in needed:
+                            destination = frame_path(root, domain, smoke_layer, valid_time)
+                            summary = render_smoke_overlay(product, domain, destination)
+                            write_metadata(
+                                root,
+                                domain,
+                                smoke_layer,
+                                valid_time,
+                                destination,
+                                {"GOES-18 ADP": product.start_time},
+                                source="NOAA GOES-18",
+                                source_layer="ABI-L2-ADPF",
+                                extra={
+                                    **summary,
+                                    "scanEnd": format_utc(product.end_time),
+                                    "sourceFile": Path(adp.key).name,
+                                    "renderVersion": SMOKE_RENDER_VERSION,
+                                },
+                            )
+                            rendered["smoke"].append(domain.id)
+                    except Exception as error:
+                        warnings.append(f"GOES-18 ADP ingest unavailable: {type(error).__name__}: {error}")
+                    finally:
+                        if source_path is not None:
+                            source_path.unlink(missing_ok=True)
+                        clear_downloads(cache_root)
+
+            if glm_window is not None:
+                lightning_layer = LAYERS["glm-lightning"]
+                needed = [
+                    domain
+                    for domain in selected
+                    if not _rendered_frame_ready(
+                        root,
+                        domain,
+                        lightning_layer,
+                        glm_window.start_time,
+                        GLM_LIGHTNING_RENDER_VERSION,
+                    )
+                ]
+                if needed:
+                    source_path: Path | None = None
+                    decoded = []
+                    try:
+                        for item in glm_window.objects:
+                            source_path = hazard_client.download(item, cache_root, max_bytes)  # type: ignore[attr-defined]
+                            downloaded_bytes += item.size
+                            decoded.append(read_glm_flashes(source_path))
+                            source_path.unlink(missing_ok=True)
+                            source_path = None
+                        flashes = combine_glm_flashes(decoded)
+                        for domain in needed:
+                            destination = frame_path(
+                                root, domain, lightning_layer, glm_window.start_time
+                            )
+                            summary = render_glm_bins(flashes, domain, destination)
+                            write_metadata(
+                                root,
+                                domain,
+                                lightning_layer,
+                                glm_window.start_time,
+                                destination,
+                                {"GOES-18 GLM": glm_window.start_time},
+                                source="NOAA GOES-18",
+                                source_layer="GLM-L2-LCFA",
+                                extra={
+                                    **summary,
+                                    "windowEnd": format_utc(glm_window.end_time),
+                                    "sourceFileCount": len(glm_window.objects),
+                                    "firstSourceFile": Path(glm_window.objects[0].key).name,
+                                    "lastSourceFile": Path(glm_window.objects[-1].key).name,
+                                    "renderVersion": GLM_LIGHTNING_RENDER_VERSION,
+                                },
+                            )
+                            rendered["glm-lightning"].append(domain.id)
+                    except Exception as error:
+                        warnings.append(f"GOES-18 GLM ingest unavailable: {type(error).__name__}: {error}")
+                    finally:
+                        if source_path is not None:
+                            source_path.unlink(missing_ok=True)
+                        clear_downloads(cache_root)
+    finally:
+        if owned_client:
+            hazard_client.close()  # type: ignore[attr-defined]
+
+    for domain in selected:
+        derive_glm_lightning_trails(root, domain)
+    rendered_any = any(rendered.values())
+    return {
+        "status": "warning" if warnings else "rendered" if rendered_any else "unchanged",
+        "domains": rendered,
+        "downloadBytes": downloaded_bytes,
+        "cacheCapBytes": max_bytes,
+        "warnings": warnings,
+    }
+
+
+def _raw_products_ready(root: Path, domain: Domain, valid_time: dt.datetime) -> bool:
     for layer_id in ("raw-visible", "raw-ir"):
         layer = LAYERS[layer_id]
         image = frame_path(root, domain, layer, valid_time)
@@ -443,16 +703,27 @@ def _raw_pair_ready(root: Path, domain: Domain, valid_time: dt.datetime) -> bool
                 return False
         except (OSError, json.JSONDecodeError):
             return False
+    visir = LAYERS["raw-visir"]
+    visir_image = frame_path(root, domain, visir, valid_time)
+    visir_metadata = metadata_path(root, domain, visir, valid_time)
+    if not visir_image.is_file() or not visir_metadata.is_file():
+        return False
+    try:
+        if json.loads(visir_metadata.read_text()).get("renderVersion") != RAW_VISIR_RENDER_VERSION:
+            return False
+    except (OSError, json.JSONDecodeError):
+        return False
     return True
 
 
-def _write_raw_pair_metadata(
+def _write_raw_metadata(
     root: Path,
     domain: Domain,
     valid_time: dt.datetime,
     source: str,
     source_layer: str,
     source_times: dict[str, dt.datetime],
+    visir_details: dict[str, object],
 ) -> None:
     for layer_id in ("raw-visible", "raw-ir"):
         layer = LAYERS[layer_id]
@@ -467,6 +738,135 @@ def _write_raw_pair_metadata(
             source_layer=source_layer,
             extra={"renderVersion": RAW_SATELLITE_RENDER_VERSION},
         )
+    visir = LAYERS["raw-visir"]
+    write_metadata(
+        root,
+        domain,
+        visir,
+        valid_time,
+        frame_path(root, domain, visir, valid_time),
+        source_times,
+        source=source,
+        source_layer=f"{source_layer} solar visible/IR blend",
+        extra={**visir_details, "renderVersion": RAW_VISIR_RENDER_VERSION},
+    )
+
+
+def _parse_source_times(payload: dict[str, object], fallback: dt.datetime) -> dict[str, dt.datetime]:
+    parsed: dict[str, dt.datetime] = {}
+    values = payload.get("sourceTimes")
+    if isinstance(values, dict):
+        for key, value in values.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            try:
+                parsed[key] = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+    return parsed or {"archived visible/IR": fallback}
+
+
+def derive_raw_visir_archive(
+    root: Path,
+    domain_ids: Iterable[str],
+    *,
+    valid_times: set[dt.datetime] | None = None,
+    overwrite: bool = False,
+) -> dict[str, object]:
+    """Derive ``raw-visir`` from existing raw frame pairs without downloading.
+
+    Existing ``raw-visible`` and ``raw-ir`` frames and metadata remain byte-for-
+    byte untouched. The archived false-colour IR is inverted through its known
+    palette into an approximate neutral temperature image before solar blending.
+    """
+    from .raw_satellite import compose_visible_infrared, neutralize_archived_infrared
+
+    requested = {
+        value.astimezone(UTC) if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        for value in valid_times or set()
+    }
+    rendered: dict[str, int] = {}
+    skipped: dict[str, int] = {}
+    with tempfile.TemporaryDirectory(prefix="radarsat-raw-visir-") as temporary:
+        temporary_root = Path(temporary)
+        for domain_id in domain_ids:
+            domain = DOMAINS.get(domain_id)
+            if domain is None:
+                continue
+            visible_metadata_root = root / "metadata" / domain.id / "raw-visible"
+            infrared_metadata_root = root / "metadata" / domain.id / "raw-ir"
+            if not visible_metadata_root.exists() or not infrared_metadata_root.exists():
+                continue
+            infrared_by_stamp = {path.stem: path for path in infrared_metadata_root.rglob("*.json")}
+            rendered_count = 0
+            skipped_count = 0
+            for visible_metadata_path in sorted(visible_metadata_root.rglob("*.json")):
+                infrared_metadata_path = infrared_by_stamp.get(visible_metadata_path.stem)
+                if infrared_metadata_path is None:
+                    continue
+                try:
+                    visible_payload = json.loads(visible_metadata_path.read_text())
+                    infrared_payload = json.loads(infrared_metadata_path.read_text())
+                    valid_time = dt.datetime.fromisoformat(
+                        str(visible_payload["validTime"]).replace("Z", "+00:00")
+                    ).astimezone(UTC)
+                    if requested and valid_time not in requested:
+                        continue
+                    if str(infrared_payload.get("validTime")) != str(visible_payload.get("validTime")):
+                        continue
+                    visible_path = safe_archive_path(root, str(visible_payload["path"]))
+                    infrared_path = safe_archive_path(root, str(infrared_payload["path"]))
+                except (OSError, KeyError, ValueError, json.JSONDecodeError):
+                    continue
+                if not visible_path.is_file() or not infrared_path.is_file():
+                    continue
+                visir_layer = LAYERS["raw-visir"]
+                destination = frame_path(root, domain, visir_layer, valid_time)
+                destination_metadata = metadata_path(root, domain, visir_layer, valid_time)
+                if not overwrite and destination.is_file() and destination_metadata.is_file():
+                    try:
+                        current = json.loads(destination_metadata.read_text())
+                        if current.get("renderVersion") == RAW_VISIR_RENDER_VERSION:
+                            skipped_count += 1
+                            continue
+                    except (OSError, json.JSONDecodeError):
+                        pass
+                neutral_path = temporary_root / f"{domain.id}-{frame_stamp(valid_time)}-neutral-ir.png"
+                neutralize_archived_infrared(infrared_path, neutral_path)
+                details = compose_visible_infrared(
+                    visible_path,
+                    neutral_path,
+                    domain,
+                    valid_time,
+                    destination,
+                )
+                neutral_path.unlink(missing_ok=True)
+                source_times = _parse_source_times(visible_payload, valid_time)
+                write_metadata(
+                    root,
+                    domain,
+                    visir_layer,
+                    valid_time,
+                    destination,
+                    source_times,
+                    source=str(visible_payload.get("source") or "NOAA Open Data"),
+                    source_layer=f"{visible_payload.get('sourceLayer') or 'raw-visible/raw-ir'} archive blend",
+                    extra={
+                        **details,
+                        "derivedFromArchivedFrames": True,
+                        "renderVersion": RAW_VISIR_RENDER_VERSION,
+                    },
+                )
+                rendered_count += 1
+            if rendered_count:
+                rendered[domain.id] = rendered_count
+            if skipped_count:
+                skipped[domain.id] = skipped_count
+    return {
+        "status": "rendered" if rendered else "unchanged",
+        "rendered": rendered,
+        "skipped": skipped,
+    }
 
 
 def ingest_raw_satellite(
@@ -484,6 +884,7 @@ def ingest_raw_satellite(
         PublicSatelliteClient,
         blend_satellites,
         clear_downloads,
+        compose_visible_infrared,
         install_render,
         normalized_frame_time,
         render_satpy_domain_isolated,
@@ -508,7 +909,14 @@ def ingest_raw_satellite(
     with PublicSatelliteClient() as client:
         goes18 = client.latest_goes("G18", current)
         valid_time = normalized_frame_time(goes18.valid_time)
-        needed = [domain for domain in selected if not _raw_pair_ready(root, domain, valid_time)]
+        # If the raw source pair for this timestamp predates raw-visir support,
+        # derive it locally first. This avoids another ~800 MB source download.
+        derive_raw_visir_archive(
+            root,
+            (domain.id for domain in selected),
+            valid_times={valid_time},
+        )
+        needed = [domain for domain in selected if not _raw_products_ready(root, domain, valid_time)]
         if not needed:
             return {
                 "status": "unchanged",
@@ -532,13 +940,28 @@ def ingest_raw_satellite(
 
             bc = next((domain for domain in needed if domain.id == "bc"), None)
             if bc is not None:
+                gray_destination = render_root / f"combined-{bc.id}-{frame_stamp(valid_time)}-ir-gray.webp"
                 install_render(
                     rendered18[bc.id],
                     frame_path(root, bc, LAYERS["raw-visible"], valid_time),
                     frame_path(root, bc, LAYERS["raw-ir"], valid_time),
+                    gray_destination,
                 )
-                _write_raw_pair_metadata(
-                    root, bc, valid_time, "NOAA GOES-18", "ABI-L2-MCMIPF", {"GOES-18": goes18.valid_time}
+                visir_details = compose_visible_infrared(
+                    frame_path(root, bc, LAYERS["raw-visible"], valid_time),
+                    gray_destination,
+                    bc,
+                    valid_time,
+                    frame_path(root, bc, LAYERS["raw-visir"], valid_time),
+                )
+                _write_raw_metadata(
+                    root,
+                    bc,
+                    valid_time,
+                    "NOAA GOES-18",
+                    "ABI-L2-MCMIPF",
+                    {"GOES-18": goes18.valid_time},
+                    visir_details,
                 )
                 rendered_domains.append(bc.id)
 
@@ -546,6 +969,9 @@ def ingest_raw_satellite(
             if north_america is not None:
                 source = "NOAA GOES-18"
                 source_times = {"GOES-18": goes18.valid_time}
+                gray_destination = (
+                    render_root / f"combined-{north_america.id}-{frame_stamp(valid_time)}-ir-gray.webp"
+                )
                 try:
                     goes19 = client.latest_goes("G19", current)
                     goes19_path = client.download(goes19, cache_root, max_bytes)
@@ -560,6 +986,7 @@ def ingest_raw_satellite(
                         (-112.0, -96.0),
                         frame_path(root, north_america, LAYERS["raw-visible"], valid_time),
                         frame_path(root, north_america, LAYERS["raw-ir"], valid_time),
+                        gray_destination,
                     )
                     source = "NOAA GOES-18 + GOES-19"
                     source_times["GOES-19"] = goes19.valid_time
@@ -569,11 +996,25 @@ def ingest_raw_satellite(
                         rendered18[north_america.id],
                         frame_path(root, north_america, LAYERS["raw-visible"], valid_time),
                         frame_path(root, north_america, LAYERS["raw-ir"], valid_time),
+                        gray_destination,
                     )
                 finally:
                     clear_downloads(cache_root)
-                _write_raw_pair_metadata(
-                    root, north_america, valid_time, source, "ABI-L2-MCMIPF", source_times
+                visir_details = compose_visible_infrared(
+                    frame_path(root, north_america, LAYERS["raw-visible"], valid_time),
+                    gray_destination,
+                    north_america,
+                    valid_time,
+                    frame_path(root, north_america, LAYERS["raw-visir"], valid_time),
+                )
+                _write_raw_metadata(
+                    root,
+                    north_america,
+                    valid_time,
+                    source,
+                    "ABI-L2-MCMIPF",
+                    source_times,
+                    visir_details,
                 )
                 rendered_domains.append(north_america.id)
 
@@ -582,6 +1023,9 @@ def ingest_raw_satellite(
                 source = "NOAA GOES-18"
                 source_layer = "ABI-L2-MCMIPF"
                 source_times = {"GOES-18": goes18.valid_time}
+                gray_destination = (
+                    render_root / f"combined-{north_pacific.id}-{frame_stamp(valid_time)}-ir-gray.webp"
+                )
                 try:
                     himawari = client.latest_himawari(current)
                     himawari_paths = [client.download(item, cache_root, max_bytes) for item in himawari]
@@ -601,6 +1045,7 @@ def ingest_raw_satellite(
                         (185.0, 205.0),
                         frame_path(root, north_pacific, LAYERS["raw-visible"], valid_time),
                         frame_path(root, north_pacific, LAYERS["raw-ir"], valid_time),
+                        gray_destination,
                         unwrap_longitudes=True,
                     )
                     source = "NOAA Himawari-9 + GOES-18"
@@ -612,11 +1057,25 @@ def ingest_raw_satellite(
                         rendered18[north_pacific.id],
                         frame_path(root, north_pacific, LAYERS["raw-visible"], valid_time),
                         frame_path(root, north_pacific, LAYERS["raw-ir"], valid_time),
+                        gray_destination,
                     )
                 finally:
                     clear_downloads(cache_root)
-                _write_raw_pair_metadata(
-                    root, north_pacific, valid_time, source, source_layer, source_times
+                visir_details = compose_visible_infrared(
+                    frame_path(root, north_pacific, LAYERS["raw-visible"], valid_time),
+                    gray_destination,
+                    north_pacific,
+                    valid_time,
+                    frame_path(root, north_pacific, LAYERS["raw-visir"], valid_time),
+                )
+                _write_raw_metadata(
+                    root,
+                    north_pacific,
+                    valid_time,
+                    source,
+                    source_layer,
+                    source_times,
+                    visir_details,
                 )
                 rendered_domains.append(north_pacific.id)
         finally:
@@ -682,6 +1141,7 @@ def run(
     auxiliary_warnings: list[str] = []
     hotspot_status: dict[str, object] = {}
     raw_satellite_status: dict[str, object] = {}
+    goes_hazard_status: dict[str, object] = {}
     with GeoMetClient() as client:
         for domain_id in domain_ids:
             domain = DOMAINS[domain_id]
@@ -733,6 +1193,20 @@ def run(
                     "status": "warning",
                     "error": f"{type(error).__name__}: {error}",
                 }
+        if os.environ.get("RADARSAT_GOES_HAZARDS_ENABLED", "1").lower() not in {"0", "false", "no"}:
+            try:
+                goes_hazard_status = ingest_goes_hazards(output_root, domain_ids)
+                auxiliary_warnings.extend(
+                    str(value) for value in goes_hazard_status.get("warnings", [])
+                )
+            except Exception as error:
+                auxiliary_warnings.append(
+                    f"GOES-18 smoke/lightning ingest unavailable: {type(error).__name__}: {error}"
+                )
+                goes_hazard_status = {
+                    "status": "warning",
+                    "error": f"{type(error).__name__}: {error}",
+                }
     prune(output_root, dt.datetime.now(UTC))
     catalog = write_catalog(output_root)
     has_native_rejections = any(
@@ -755,6 +1229,7 @@ def run(
             },
             "hotspots": hotspot_status,
             "rawSatellite": raw_satellite_status,
+            "goesHazards": goes_hazard_status,
             "warnings": auxiliary_warnings,
         },
     )

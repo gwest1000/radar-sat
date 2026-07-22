@@ -49,6 +49,7 @@ class PublicObject:
 class RenderedSatellite:
     visible: Path
     infrared: Path
+    infrared_gray: Path
     valid_mask: Path
 
 
@@ -215,6 +216,23 @@ def _infrared_image(values: np.ndarray) -> Image.Image:
     return Image.fromarray(rgb)
 
 
+def _infrared_gray_image(values: np.ndarray) -> Image.Image:
+    """Render 10.3/10.4 µm brightness temperature without false colour.
+
+    The combined visible/IR product intentionally uses a neutral night image.
+    Keeping this separate from ``_infrared_image`` prevents the enhanced IR
+    colour table from creating a rainbow fringe along the moving terminator.
+    """
+    temperatures = np.asarray(values, dtype=np.float32) - 273.15
+    finite = np.isfinite(temperatures)
+    stops = np.array([-100, -90, -80, -70, -60, -50, -40, -25, -10, 5, 20, 40], dtype=np.float32)
+    levels = np.array([255, 252, 245, 232, 216, 198, 178, 151, 124, 94, 62, 30], dtype=np.float32)
+    safe = np.where(finite, temperatures, stops[-1])
+    gray = np.interp(safe, stops, levels).astype(np.uint8)
+    gray[~finite] = 0
+    return Image.fromarray(gray).convert("RGB")
+
+
 def _ahi_visible_image(red: np.ndarray, green: np.ndarray, blue: np.ndarray) -> Image.Image:
     """Create a bounded calibrated AHI RGB after target-grid resampling."""
     channels = [np.asarray(value, dtype=np.float32) / 100 for value in (red, green, blue)]
@@ -249,6 +267,7 @@ def render_satpy_domain(
     visible_png = render_root / f"{stem}-{domain.id}-visible.png"
     visible = render_root / f"{stem}-{domain.id}-visible.webp"
     infrared = render_root / f"{stem}-{domain.id}-ir.webp"
+    infrared_gray = render_root / f"{stem}-{domain.id}-ir-gray.webp"
     valid_mask = render_root / f"{stem}-{domain.id}-mask.png"
 
     scene = Scene(filenames=[str(path) for path in source_paths], reader=reader)
@@ -273,9 +292,13 @@ def render_satpy_domain(
         Image.open(visible_png).convert("RGB").save(visible, "WEBP", quality=88, method=6)
     values = np.asarray(local[infrared_dataset].values)
     _infrared_image(values).save(infrared, "WEBP", quality=88, method=6)
-    Image.fromarray((np.isfinite(values) * 255).astype(np.uint8)).save(valid_mask, "PNG", optimize=True)
+    validity = (np.isfinite(values) * 255).astype(np.uint8)
+    neutral_ir = _infrared_gray_image(values).convert("RGBA")
+    neutral_ir.putalpha(Image.fromarray(validity))
+    neutral_ir.save(infrared_gray, "WEBP", quality=88, method=6, exact=True)
+    Image.fromarray(validity).save(valid_mask, "PNG", optimize=True)
     visible_png.unlink(missing_ok=True)
-    rendered = RenderedSatellite(visible, infrared, valid_mask)
+    rendered = RenderedSatellite(visible, infrared, infrared_gray, valid_mask)
     del values, local, scene
     gc.collect()
     return rendered
@@ -319,6 +342,7 @@ def render_satpy_domain_isolated(
     rendered = RenderedSatellite(
         render_root / f"{stem}-{domain.id}-visible.webp",
         render_root / f"{stem}-{domain.id}-ir.webp",
+        render_root / f"{stem}-{domain.id}-ir-gray.webp",
         render_root / f"{stem}-{domain.id}-mask.png",
     )
     if not all(path.is_file() and path.stat().st_size > 0 for path in rendered.__dict__.values()):
@@ -341,10 +365,16 @@ def blend_satellites(
     transition: tuple[float, float],
     visible_destination: Path,
     infrared_destination: Path,
+    infrared_gray_destination: Path | None = None,
     *,
     unwrap_longitudes: bool = False,
 ) -> None:
-    """Blend west/east satellites and always prefer the one with valid data."""
+    """Blend west/east satellites and always prefer the one with valid data.
+
+    A bounded colour-distribution match is feathered into only the visible
+    overlap. It reduces the GOES-18/19 chromatic join without recolouring the
+    uncontested imagery on either side of the seam.
+    """
     longitudes = _longitude_axis(domain)
     if unwrap_longitudes:
         longitudes = np.where(longitudes < 0, longitudes + 360, longitudes)
@@ -356,29 +386,269 @@ def blend_satellites(
     weights[~first_mask & second_mask] = 1
     weights[~first_mask & ~second_mask] = 0
 
-    for left_path, right_path, destination in (
-        (first.visible, second.visible, visible_destination),
-        (first.infrared, second.infrared, infrared_destination),
-    ):
+    products: list[tuple[Path, Path, Path, bool, bool]] = [
+        (first.visible, second.visible, visible_destination, True, False),
+        (first.infrared, second.infrared, infrared_destination, False, False),
+    ]
+    if infrared_gray_destination is not None:
+        products.append(
+            (first.infrared_gray, second.infrared_gray, infrared_gray_destination, False, True)
+        )
+
+    for left_path, right_path, destination, harmonize_visible, transparent_missing in products:
         left = np.asarray(Image.open(left_path).convert("RGB"), dtype=np.float32)
         right = np.asarray(Image.open(right_path).convert("RGB"), dtype=np.float32)
+        if harmonize_visible:
+            right = _harmonize_visible_overlap(left, right, first_mask, second_mask, weights)
         output = (left * (1 - weights[..., None]) + right * weights[..., None]).astype(np.uint8)
         output[~first_mask & ~second_mask] = 0
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(destination.suffix + ".tmp")
         try:
-            Image.fromarray(output).save(temporary, "WEBP", quality=88, method=6)
+            image = Image.fromarray(output)
+            if transparent_missing:
+                image = image.convert("RGBA")
+                image.putalpha(Image.fromarray(((first_mask | second_mask) * 255).astype(np.uint8)))
+            image.save(temporary, "WEBP", quality=88, method=6, exact=transparent_missing)
             temporary.replace(destination)
         finally:
             temporary.unlink(missing_ok=True)
 
 
-def install_render(rendered: RenderedSatellite, visible_destination: Path, infrared_destination: Path) -> None:
-    for source, destination in ((rendered.visible, visible_destination), (rendered.infrared, infrared_destination)):
+def _harmonize_visible_overlap(
+    left: np.ndarray,
+    right: np.ndarray,
+    left_mask: np.ndarray,
+    right_mask: np.ndarray,
+    weights: np.ndarray,
+) -> np.ndarray:
+    """Gently match RGB distributions where two true-colour disks overlap."""
+    luminance_left = np.mean(left, axis=-1)
+    luminance_right = np.mean(right, axis=-1)
+    sample = (
+        left_mask
+        & right_mask
+        & (weights > 0.05)
+        & (weights < 0.95)
+        & (luminance_left > 18)
+        & (luminance_right > 18)
+        & (luminance_left < 245)
+        & (luminance_right < 245)
+    )
+    if np.count_nonzero(sample) < 500:
+        return right
+
+    left_values = left[sample]
+    right_values = right[sample]
+    left_low, left_mid, left_high = np.percentile(left_values, (20, 50, 80), axis=0)
+    right_low, right_mid, right_high = np.percentile(right_values, (20, 50, 80), axis=0)
+    spread = np.maximum(right_high - right_low, 8)
+    scale = np.clip((left_high - left_low) / spread, 0.90, 1.10)
+    offset = np.clip(left_mid - right_mid * scale, -12, 12)
+    corrected = np.clip(right * scale + offset, 0, 255)
+    # Correction is strongest near the left side of the overlap, where right
+    # pixels first enter the blend, and reaches exactly zero in pure-right data.
+    correction_weight = np.clip(1 - weights, 0, 1)[..., None]
+    return right + (corrected - right) * correction_weight
+
+
+def _projected_lon_lat_grid(domain: Domain) -> tuple[np.ndarray, np.ndarray]:
+    xmin, ymin, xmax, ymax = projected_bbox(domain)
+    xs = xmin + (np.arange(domain.width, dtype=np.float64) + 0.5) * (xmax - xmin) / domain.width
+    ys = ymax - (np.arange(domain.height, dtype=np.float64) + 0.5) * (ymax - ymin) / domain.height
+    xx, yy = np.meshgrid(xs, ys)
+    transformer = Transformer.from_crs(domain.crs, "EPSG:4326", always_xy=True)
+    longitude, latitude = transformer.transform(xx, yy)
+    return np.asarray(longitude, dtype=np.float32), np.asarray(latitude, dtype=np.float32)
+
+
+def solar_daylight_weight(
+    latitude: np.ndarray,
+    longitude: np.ndarray,
+    valid_time: dt.datetime,
+    *,
+    full_night_elevation: float = -6.0,
+    full_day_elevation: float = 8.0,
+) -> np.ndarray:
+    """Return a smooth 0=IR, 1=true-colour solar-elevation blend weight."""
+    if full_day_elevation <= full_night_elevation:
+        raise ValueError("full-day elevation must exceed full-night elevation")
+    current = valid_time.replace(tzinfo=UTC) if valid_time.tzinfo is None else valid_time.astimezone(UTC)
+    fractional_hour = current.hour + current.minute / 60 + current.second / 3600
+    days_in_year = 366 if current.year % 4 == 0 and (current.year % 100 != 0 or current.year % 400 == 0) else 365
+    gamma = 2 * np.pi / days_in_year * (current.timetuple().tm_yday - 1 + (fractional_hour - 12) / 24)
+    equation_of_time = 229.18 * (
+        0.000075
+        + 0.001868 * np.cos(gamma)
+        - 0.032077 * np.sin(gamma)
+        - 0.014615 * np.cos(2 * gamma)
+        - 0.040849 * np.sin(2 * gamma)
+    )
+    declination = (
+        0.006918
+        - 0.399912 * np.cos(gamma)
+        + 0.070257 * np.sin(gamma)
+        - 0.006758 * np.cos(2 * gamma)
+        + 0.000907 * np.sin(2 * gamma)
+        - 0.002697 * np.cos(3 * gamma)
+        + 0.00148 * np.sin(3 * gamma)
+    )
+    solar_minutes = (fractional_hour * 60 + equation_of_time + 4 * longitude) % 1440
+    hour_angle = np.deg2rad(solar_minutes / 4 - 180)
+    latitude_radians = np.deg2rad(latitude)
+    cosine_zenith = (
+        np.sin(latitude_radians) * np.sin(declination)
+        + np.cos(latitude_radians) * np.cos(declination) * np.cos(hour_angle)
+    )
+    elevation = 90 - np.rad2deg(np.arccos(np.clip(cosine_zenith, -1, 1)))
+    linear = np.clip(
+        (elevation - full_night_elevation) / (full_day_elevation - full_night_elevation),
+        0,
+        1,
+    )
+    smooth = linear * linear * (3 - 2 * linear)
+    smooth[~np.isfinite(elevation)] = 0
+    return np.asarray(smooth, dtype=np.float32)
+
+
+def compose_visible_infrared(
+    visible_path: Path,
+    infrared_gray_path: Path,
+    domain: Domain,
+    valid_time: dt.datetime,
+    destination: Path,
+) -> dict[str, object]:
+    """Write a true-colour day / neutral-IR night WebP on the domain grid."""
+    visible = np.asarray(Image.open(visible_path).convert("RGB"), dtype=np.float32)
+    infrared_image = Image.open(infrared_gray_path).convert("RGBA")
+    infrared = np.asarray(infrared_image, dtype=np.float32)[..., :3]
+    infrared_alpha = np.asarray(infrared_image.getchannel("A"))
+    if visible.shape != infrared.shape or visible.shape[:2] != (domain.height, domain.width):
+        raise ValueError("visible and infrared rasters must match the configured domain grid")
+    longitude, latitude = _projected_lon_lat_grid(domain)
+    weight = solar_daylight_weight(latitude, longitude, valid_time)
+    # Low-angle true-colour composites can develop an artificial red/yellow
+    # fringe even when the IR side is neutral. Fade chroma separately before
+    # fading luminance, so twilight retains texture without the coloured rim.
+    chroma_weight = solar_daylight_weight(
+        latitude,
+        longitude,
+        valid_time,
+        full_night_elevation=1.0,
+        full_day_elevation=12.0,
+    )
+    visible_luminance = (
+        visible[..., 0] * 0.2126
+        + visible[..., 1] * 0.7152
+        + visible[..., 2] * 0.0722
+    )[..., None]
+    safe_visible = visible_luminance + (visible - visible_luminance) * chroma_weight[..., None]
+    visible_peak = np.max(visible, axis=-1)
+    rows = np.arange(domain.height)[:, None]
+    far_northern_edge = rows < max(2, round(domain.height * 0.18))
+    visible_valid = (visible_peak > 2) & ~(far_northern_edge & (visible_peak <= 32))
+    infrared_valid = (infrared_alpha > 0) & (np.max(infrared, axis=-1) > 2)
+    # At the geostationary scan edge, one source can contain tiny missing-data
+    # arcs. Fall back to neutral IR where visible is absent and make pixels
+    # transparent only when neither observation exists; never interpolate
+    # invented cloud or surface detail into those gaps.
+    available_day_weight = weight * visible_valid
+    output = np.clip(
+        safe_visible * available_day_weight[..., None]
+        + infrared * (1 - available_day_weight[..., None]),
+        0,
+        255,
+    ).astype(np.uint8)
+    alpha = np.where(visible_valid | infrared_valid, 255, 0).astype(np.uint8)
+    output = np.dstack((output, alpha))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    try:
+        Image.fromarray(output).save(temporary, "WEBP", quality=88, method=6, exact=True)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {
+        "blendMethod": "solar-elevation smoothstep",
+        "fullNightSunElevationDegrees": -6.0,
+        "fullDaySunElevationDegrees": 8.0,
+        "fullColourSunElevationDegrees": 12.0,
+        "zeroColourSunElevationDegrees": 1.0,
+        "nightInfrared": "10.3/10.4 µm brightness temperature, neutral grayscale",
+        "missingData": "transparent where visible and infrared are both unavailable",
+    }
+
+
+def neutralize_archived_infrared(source: Path, destination: Path) -> None:
+    """Recover a monotonic neutral IR image from the archived colour table.
+
+    Existing ``raw-ir`` WebPs predate the neutral render. Rather than fetching
+    hundreds of megabytes of ABI/AHI source data again, quantize each pixel to
+    the known enhancement ramp, infer its approximate temperature, and apply
+    the new grayscale ramp. The original archive frame is never modified.
+    """
+    temperatures = np.linspace(-100, 45, 256, dtype=np.float32)
+    stops = np.array([-100, -90, -80, -70, -60, -50, -40, -30, -20, 0, 20, 45], dtype=np.float32)
+    colours = np.array(
+        [
+            (255, 255, 255), (255, 247, 170), (255, 200, 20), (255, 83, 35),
+            (220, 44, 116), (126, 66, 190), (52, 136, 235), (141, 220, 249),
+            (245, 245, 245), (160, 160, 160), (72, 72, 72), (20, 20, 20),
+        ],
+        dtype=np.float32,
+    )
+    palette_rgb = np.stack(
+        [np.interp(temperatures, stops, colours[:, channel]) for channel in range(3)],
+        axis=-1,
+    ).astype(np.uint8)
+    palette = Image.new("P", (1, 1))
+    palette.putpalette(palette_rgb.reshape(-1).tolist())
+    original = Image.open(source).convert("RGB")
+    indices = np.asarray(
+        original.quantize(palette=palette, dither=Image.Dither.NONE),
+        dtype=np.uint8,
+    )
+    inferred_kelvin = temperatures[indices] + 273.15
+    neutral = np.asarray(_infrared_gray_image(inferred_kelvin).convert("RGB")).copy()
+    # Preserve genuinely missing/outside-disk pixels rather than interpreting
+    # their black fill as a very warm surface temperature.
+    original_values = np.asarray(original)
+    source_peak = np.max(original_values, axis=-1)
+    rows = np.arange(original.height)[:, None]
+    far_northern_edge = rows < max(2, round(original.height * 0.18))
+    missing = (source_peak <= 2) | (far_northern_edge & (source_peak <= 32))
+    neutral[missing] = 0
+    alpha = np.where(missing, 0, 255).astype(np.uint8)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    neutral_image = Image.fromarray(neutral).convert("RGBA")
+    neutral_image.putalpha(Image.fromarray(alpha))
+    neutral_image.save(destination, "PNG", optimize=True)
+
+
+def install_render(
+    rendered: RenderedSatellite,
+    visible_destination: Path,
+    infrared_destination: Path,
+    infrared_gray_destination: Path | None = None,
+) -> None:
+    products = [
+        (rendered.visible, visible_destination, False),
+        (rendered.infrared, infrared_destination, False),
+    ]
+    if infrared_gray_destination is not None:
+        products.append((rendered.infrared_gray, infrared_gray_destination, True))
+    for source, destination, preserve_alpha in products:
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(destination.suffix + ".tmp")
         try:
-            Image.open(source).convert("RGB").save(temporary, "WEBP", quality=88, method=6)
+            mode = "RGBA" if preserve_alpha else "RGB"
+            Image.open(source).convert(mode).save(
+                temporary,
+                "WEBP",
+                quality=88,
+                method=6,
+                exact=preserve_alpha,
+            )
             temporary.replace(destination)
         finally:
             temporary.unlink(missing_ok=True)

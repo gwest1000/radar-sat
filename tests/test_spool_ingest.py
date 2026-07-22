@@ -466,6 +466,10 @@ class PipelineIntegrationTests(unittest.TestCase):
                 mock.patch("radarsat.pipeline.ingest_geomet", return_value={}),
                 mock.patch("radarsat.pipeline.derive_lightning_trails"),
                 mock.patch("radarsat.pipeline.ingest_raw_satellite", return_value={"status": "unchanged"}),
+                mock.patch(
+                    "radarsat.pipeline.ingest_goes_hazards",
+                    return_value={"status": "unchanged"},
+                ) as hazard_ingest,
                 mock.patch("radarsat.pipeline.prune"),
                 mock.patch("radarsat.pipeline.write_catalog", return_value=catalog),
                 mock.patch("radarsat.spool.ingest_spool", return_value=native_result),
@@ -473,6 +477,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                 client_class.return_value.__enter__.return_value = object()
                 run(output, ["bc"], 3, False, Path(temporary) / "spool", "auto")
 
+            hazard_ingest.assert_called_once_with(output, ["bc"])
             status = json.loads((output / "status" / "ingest.json").read_text())
             self.assertEqual(status["status"], "warning")
             self.assertEqual(
@@ -491,6 +496,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                 mock.patch("radarsat.pipeline.ingest_geomet", return_value={}) as geomet,
                 mock.patch("radarsat.pipeline.derive_lightning_trails"),
                 mock.patch("radarsat.pipeline.ingest_raw_satellite", return_value={"status": "unchanged"}),
+                mock.patch("radarsat.pipeline.ingest_goes_hazards", return_value={"status": "unchanged"}),
                 mock.patch("radarsat.pipeline.prune"),
                 mock.patch("radarsat.pipeline.write_catalog", return_value=catalog),
                 mock.patch(

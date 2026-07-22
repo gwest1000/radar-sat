@@ -173,6 +173,28 @@ LAYERS: dict[str, Layer] = {
         # tight so an age-coloured trail is not reused on much newer imagery.
         max_age_minutes=6,
     ),
+    "glm-lightning": Layer(
+        id="glm-lightning",
+        title="GOES-18 GLM 10-minute total-lightning flashes",
+        source_layer=None,
+        source="NOAA GOES-18",
+        max_age_minutes=20,
+    ),
+    "glm-lightning-trail": Layer(
+        id="glm-lightning-trail",
+        title="GOES-18 GLM 30-minute total-lightning age trail",
+        source_layer=None,
+        source="NOAA GOES-18",
+        max_age_minutes=10,
+    ),
+    "smoke": Layer(
+        id="smoke",
+        title="GOES-18 ABI smoke detection",
+        source_layer=None,
+        source="NOAA GOES-18",
+        max_age_minutes=40,
+        daylight_only=True,
+    ),
     "hotspots": Layer(
         id="hotspots",
         title="Satellite-detected wildfire hotspots",
@@ -190,6 +212,16 @@ LAYERS: dict[str, Layer] = {
         source="NOAA Open Data",
         max_age_minutes=90,
         daylight_only=True,
+    ),
+    "raw-visir": Layer(
+        id="raw-visir",
+        title="True-colour visible / neutral infrared satellite imagery",
+        source_layer=None,
+        image_format="image/jpeg",
+        extension="webp",
+        role="background",
+        source="NOAA Open Data",
+        max_age_minutes=90,
     ),
     "raw-ir": Layer(
         id="raw-ir",
@@ -247,8 +279,10 @@ def _overlay_product(
             {"id": "ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "daynight", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
             {"id": "convective", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "raw-visir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "raw-visible", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
@@ -258,10 +292,11 @@ def _overlay_product(
             {"id": "watersheds", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
         ],
-        "legends": ["radar-rain", "ptype", "lightning-age", "hotspots", "watersheds"],
+        "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds"],
         "notes": [
             "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/visible, 2 km infrared and 2.5 km lightning without invented detail.",
             "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
+            "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
             "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
             "Wildfire hotspots are timestamped satellite thermal detections from the public NRCan CWFIS feed, not confirmed fire perimeters.",
         ],
@@ -316,14 +351,22 @@ def _broad_product(
         "description": description,
         "layers": [
             {"id": "base-dark", "opacity": 1.0},
+            {"id": "raw-visir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
             {"id": "raw-visible", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
-            {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
+            {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True},
+            {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "boundaries", "opacity": 1.0},
         ],
-        "legends": ["raw-ir", "radar-rain"],
-        "notes": notes,
+        "legends": ["raw-ir", "radar-rain", "glm-lightning-age", "smoke-confidence"],
+        "notes": notes
+        + [
+            "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 µm infrared at night; no false-colour IR is mixed across the terminator.",
+            "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; useful GOES-18 coverage ends near 52°N.",
+            "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+        ],
     }
 
 
@@ -378,6 +421,14 @@ LEGENDS: dict[str, dict[str, str]] = {
     "lightning-age": {
         "title": "Lightning age",
         "kind": "lightning-age",
+    },
+    "glm-lightning-age": {
+        "title": "GLM total-lightning age",
+        "kind": "lightning-age",
+    },
+    "smoke-confidence": {
+        "title": "Satellite smoke detection confidence",
+        "kind": "smoke-confidence",
     },
     "lightning-density": {
         "title": "Lightning flash density",
