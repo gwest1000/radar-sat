@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("exports the operational viewer", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
-  assert.match(html, /BC Satellite\/Radar\/Lightning/);
+  assert.match(html, /BC Satellite\/Radar\/Lightning\/Fires/);
   assert.match(html, /href="\/radar-sat\/_next\//);
   assert.match(html, /href="\/radar-sat\/favicon\.svg"/);
   assert.match(html, /https:\/\/gwest1000\.github\.io\/radar-sat\/og-radar-sat\.png/);
@@ -46,7 +46,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /"active-fire-points"/);
   assert.match(viewer, /pointFrameReferences\([\s\S]*6 \* 60/);
   assert.match(viewer, /<ZapIcon \/>/);
-  assert.match(viewer, /<FlameIcon \/>/);
+  assert.match(viewer, /<FlameIcon highlighted \/>/);
   assert.match(viewer, /nextPointReferences\.forEach\(\(reference\) => preloadPointFrame/);
   assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
   assert.match(viewer, /active-fire-marker/);
@@ -57,7 +57,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /highlight === 0/);
   assert.doesNotMatch(viewer, /sizeHectares < 5_000|sizeHectares >= 5_000/);
   assert.match(viewer, /hotspot-fire-marker/);
-  assert.match(viewer, /<FlameIcon filled=\{marker\.kind === "active"\} \/>/);
+  assert.match(viewer, /<FlameIcon filled=\{marker\.kind === "active"\} highlighted=\{marker\.notable\} \/>/);
   assert.match(viewer, /Low-confidence detection/);
   assert.match(viewer, /ecccFallbackPointReferences/);
   assert.match(viewer, /layerId === "westwx-visir"\) return "NOAA VIS\/IR"/);
@@ -79,8 +79,10 @@ test("keeps the desktop controls and map at the full available width", async () 
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(styles, /\.app-shell\s*\{[\s\S]*?width: 100%/);
   assert.match(styles, /\.viewer-grid\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 190px/);
-  assert.doesNotMatch(styles, /--map-cap-width/);
-  assert.doesNotMatch(viewer, /--map-cap-width/);
+  assert.match(styles, /width: min\(100%, var\(--map-max-width/);
+  assert.match(viewer, /"--map-max-width": `calc\(\$\{mapAspect \* 100\}vh/);
+  assert.match(styles, /\.sidebar-layer-controls/);
+  assert.match(viewer, /className="product-switcher"/);
 });
 
 test("ships a runtime data configuration", async () => {
@@ -91,17 +93,18 @@ test("ships a runtime data configuration", async () => {
   const demo = JSON.parse(await readFile(new URL("../public/demo/catalog.json", import.meta.url), "utf8"));
   const overlay = demo.products.find((product) => product.id === "bc-large-overlay");
   const small = demo.products.find((product) => product.id === "bc-small-overlay");
-  assert.equal(overlay.shortTitle, "BC Large");
-  assert.equal(small.shortTitle, "BC Small");
-  assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, true);
+  assert.equal(overlay.shortTitle, "BC XL");
+  assert.equal(small.shortTitle, "BC");
+  assert.equal(overlay.anchorLayer, "raw-visir");
+  assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, true);
+  assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, false);
   assert.equal(overlay.layers.find((layer) => layer.id === "convective").optional, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").optional, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
-  assert.equal(overlay.layers.find((layer) => layer.id === "raw-visible").choiceGroup, "satellite");
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-ir").choiceGroup, "satellite");
   assert.deepEqual(
     overlay.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
-    ["raw-visible", "raw-visir", "raw-ir", "natural", "daynight", "ir", "convective"],
+    ["raw-visir", "raw-ir", "daynight", "ir", "convective"],
   );
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");
@@ -109,12 +112,13 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.some((product) => product.id === "bc-lightning"), false);
   assert.equal(demo.products.some((product) => product.id === "north-america-overlay"), true);
   assert.equal(demo.products.some((product) => product.id === "north-pacific-overlay"), true);
+  assert.equal(demo.products.find((product) => product.id === "pacific-wna-overlay").shortTitle, "Pacific/WNA");
   const northAmerica = demo.products.find((product) => product.id === "north-america-overlay");
   const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
   assert.equal(northAmerica.anchorLayer, "westwx-ir");
   assert.deepEqual(
     northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
-    ["westwx-visir", "westwx-visible", "westwx-ir"],
+    ["westwx-visir", "westwx-ir"],
   );
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);

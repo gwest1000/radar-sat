@@ -104,6 +104,22 @@ if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
   fi
 fi
 
+# A daylight-only higher-resolution BC composite is isolated from the primary
+# ten-minute feed. Each ~0.61 GB source set is deleted after one compact WebP is
+# installed, and the final layer has a strict 24-hour retention policy.
+if [[ "${RADARSAT_NATIVE_BC_SATELLITE_ENABLED:-${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}}" == "1" ]]; then
+  if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_native_bc_satellite.py" \
+    --output-root "${OUTPUT_ROOT}" \
+    --cache-root "${RADARSAT_NATIVE_BC_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/native-bc-satellite}" \
+    --hours "${RADARSAT_NATIVE_BC_SATELLITE_HOURS:-3}" \
+    --max-frames "${RADARSAT_NATIVE_BC_SATELLITE_MAX_FRAMES:-1}" \
+    --max-download-gb "${RADARSAT_NATIVE_BC_SATELLITE_MAX_DOWNLOAD_GB:-0.7}" \
+    --max-source-mb "${RADARSAT_NATIVE_BC_SATELLITE_MAX_SOURCE_MB:-700}" \
+    --apply; then
+    print -u2 "Warning: isolated native-resolution BC satellite catch-up failed; continuing normal cycle."
+  fi
+fi
+
 # Raw staging objects may be discarded only when the primary renderer has
 # successfully consumed and classified them. A failed ingest keeps the entire
 # recovery window intact for the next cycle.

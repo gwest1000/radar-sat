@@ -61,7 +61,6 @@ COVERAGE_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
     "ir",
-    "natural",
     "convective",
     "snowfog",
     "radar-rain",
@@ -1217,7 +1216,7 @@ def ingest_goes_hazards(
 
 
 def _raw_products_ready(root: Path, domain: Domain, valid_time: dt.datetime) -> bool:
-    for layer_id in ("raw-visible", "raw-ir"):
+    for layer_id in ("raw-ir",):
         layer = LAYERS[layer_id]
         image = frame_path(root, domain, layer, valid_time)
         metadata = metadata_path(root, domain, layer, valid_time)
@@ -1253,7 +1252,7 @@ def _write_raw_metadata(
     source_times: dict[str, dt.datetime],
     visir_details: dict[str, object],
 ) -> None:
-    for layer_id in ("raw-visible", "raw-ir"):
+    for layer_id in ("raw-ir",):
         layer = LAYERS[layer_id]
         write_metadata(
             root,
@@ -1444,13 +1443,6 @@ def ingest_raw_satellite(
     with PublicSatelliteClient() as client:
         goes18 = client.latest_goes("G18", current)
         valid_time = normalized_frame_time(goes18.valid_time)
-        # If the raw source pair for this timestamp predates raw-visir support,
-        # derive it locally first. This avoids another ~800 MB source download.
-        derive_raw_visir_archive(
-            root,
-            (domain.id for domain in selected),
-            valid_times={valid_time},
-        )
         needed = [domain for domain in selected if not _raw_products_ready(root, domain, valid_time)]
         if not needed:
             return {
@@ -1476,14 +1468,15 @@ def ingest_raw_satellite(
             bc = next((domain for domain in needed if domain.id == "bc"), None)
             if bc is not None:
                 gray_destination = render_root / f"combined-{bc.id}-{frame_stamp(valid_time)}-ir-gray.webp"
+                visible_destination = render_root / f"combined-{bc.id}-{frame_stamp(valid_time)}-visible.webp"
                 install_render(
                     rendered18[bc.id],
-                    frame_path(root, bc, LAYERS["raw-visible"], valid_time),
+                    visible_destination,
                     frame_path(root, bc, LAYERS["raw-ir"], valid_time),
                     gray_destination,
                 )
                 visir_details = compose_visible_infrared(
-                    frame_path(root, bc, LAYERS["raw-visible"], valid_time),
+                    visible_destination,
                     gray_destination,
                     bc,
                     valid_time,
@@ -1507,6 +1500,9 @@ def ingest_raw_satellite(
                 gray_destination = (
                     render_root / f"combined-{north_america.id}-{frame_stamp(valid_time)}-ir-gray.webp"
                 )
+                visible_destination = (
+                    render_root / f"combined-{north_america.id}-{frame_stamp(valid_time)}-visible.webp"
+                )
                 try:
                     goes19 = client.latest_goes("G19", current)
                     goes19_path = client.download(goes19, cache_root, max_bytes)
@@ -1519,7 +1515,7 @@ def ingest_raw_satellite(
                         rendered19,
                         north_america,
                         (-112.0, -96.0),
-                        frame_path(root, north_america, LAYERS["raw-visible"], valid_time),
+                        visible_destination,
                         frame_path(root, north_america, LAYERS["raw-ir"], valid_time),
                         gray_destination,
                     )
@@ -1529,14 +1525,14 @@ def ingest_raw_satellite(
                     warnings.append(f"GOES-19 blend unavailable; using GOES-18: {type(error).__name__}: {error}")
                     install_render(
                         rendered18[north_america.id],
-                        frame_path(root, north_america, LAYERS["raw-visible"], valid_time),
+                        visible_destination,
                         frame_path(root, north_america, LAYERS["raw-ir"], valid_time),
                         gray_destination,
                     )
                 finally:
                     clear_downloads(cache_root)
                 visir_details = compose_visible_infrared(
-                    frame_path(root, north_america, LAYERS["raw-visible"], valid_time),
+                    visible_destination,
                     gray_destination,
                     north_america,
                     valid_time,
@@ -1561,6 +1557,9 @@ def ingest_raw_satellite(
                 gray_destination = (
                     render_root / f"combined-{north_pacific.id}-{frame_stamp(valid_time)}-ir-gray.webp"
                 )
+                visible_destination = (
+                    render_root / f"combined-{north_pacific.id}-{frame_stamp(valid_time)}-visible.webp"
+                )
                 try:
                     himawari = client.latest_himawari(current)
                     himawari_paths = [client.download(item, cache_root, max_bytes) for item in himawari]
@@ -1578,7 +1577,7 @@ def ingest_raw_satellite(
                         rendered18[north_pacific.id],
                         north_pacific,
                         (185.0, 205.0),
-                        frame_path(root, north_pacific, LAYERS["raw-visible"], valid_time),
+                        visible_destination,
                         frame_path(root, north_pacific, LAYERS["raw-ir"], valid_time),
                         gray_destination,
                         unwrap_longitudes=True,
@@ -1590,14 +1589,14 @@ def ingest_raw_satellite(
                     warnings.append(f"Himawari-9 blend unavailable; using GOES-18: {type(error).__name__}: {error}")
                     install_render(
                         rendered18[north_pacific.id],
-                        frame_path(root, north_pacific, LAYERS["raw-visible"], valid_time),
+                        visible_destination,
                         frame_path(root, north_pacific, LAYERS["raw-ir"], valid_time),
                         gray_destination,
                     )
                 finally:
                     clear_downloads(cache_root)
                 visir_details = compose_visible_infrared(
-                    frame_path(root, north_pacific, LAYERS["raw-visible"], valid_time),
+                    visible_destination,
                     gray_destination,
                     north_pacific,
                     valid_time,
@@ -1642,6 +1641,16 @@ def prune(root: Path, now: dt.datetime) -> int:
             except (OSError, KeyError, ValueError, json.JSONDecodeError):
                 continue
             layer_id = meta_path.relative_to(metadata_root).parts[0]
+            if layer_id in {"natural", "raw-visible", "westwx-visible"}:
+                image_path.unlink(missing_ok=True)
+                meta_path.unlink(missing_ok=True)
+                removed += 1
+                continue
+            if layer_id == "raw-visir-native" and now - valid_time > dt.timedelta(hours=24):
+                image_path.unlink(missing_ok=True)
+                meta_path.unlink(missing_ok=True)
+                removed += 1
+                continue
             if layer_id.endswith("coverage") and payload.get("renderVersion") != COVERAGE_RENDER_VERSION:
                 image_path.unlink(missing_ok=True)
                 meta_path.unlink(missing_ok=True)

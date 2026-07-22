@@ -5,12 +5,16 @@ from the lower-rate multi-satellite products. It reads genuine NOAA GOES-18 ABI
 Level-2 full-disk scans at their nominal ten-minute cadence, keeps the scan-start
 seconds from the NOAA filename, downloads each scan once, and writes:
 
-- `westwx-visible`: calibrated true colour for daylight use;
 - `westwx-visir`: calibrated true colour in daylight blended into neutral IR
   through twilight; and
 - `westwx-ir`: the existing enhanced C13 brightness-temperature rendering;
-- `raw-visible`, `raw-visir`, and `raw-ir`: the matching higher-resolution BC
+- `raw-visir` and `raw-ir`: the matching BC
   renderings from the same source download.
+
+A second, daylight-only BC path reads the separate native C01/C02/C03/C13
+files, renders one 3000×2300 composite, and retains it for 24 hours. Its source
+set is deleted after each render; the standard 2 km blend remains the night and
+failure fallback.
 
 Radar-Sat and WestWX share the compact North America renderings. When this path
 is enabled, the legacy raw ingest no longer writes duplicate half-hour BC frames;

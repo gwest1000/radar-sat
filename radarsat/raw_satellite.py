@@ -353,6 +353,10 @@ def render_satpy_domain_isolated(
         infrared_dataset,
         "--domain",
         domain.id,
+        "--width",
+        str(domain.width),
+        "--height",
+        str(domain.height),
         "--work-root",
         str(work_root.resolve()),
         "--stem",
@@ -694,15 +698,26 @@ def _main(argv: list[str] | None = None) -> int:
     render.add_argument("--reader", required=True)
     render.add_argument("--infrared-dataset", required=True)
     render.add_argument("--domain", choices=sorted(DOMAINS), required=True)
+    render.add_argument("--width", type=int)
+    render.add_argument("--height", type=int)
     render.add_argument("--work-root", type=Path, required=True)
     render.add_argument("--stem", required=True)
     args = parser.parse_args(argv)
     if args.command == "render":
+        from dataclasses import replace
+
+        domain = DOMAINS[args.domain]
+        if args.width is not None or args.height is not None:
+            domain = replace(
+                domain,
+                width=args.width or domain.width,
+                height=args.height or domain.height,
+            )
         render_satpy_domain(
             args.source,
             args.reader,
             args.infrared_dataset,
-            DOMAINS[args.domain],
+            domain,
             args.work_root,
             args.stem,
         )

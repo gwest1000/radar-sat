@@ -40,7 +40,7 @@ WESTWX_DOMAIN_IDS = (WESTWX_DOMAIN_ID, "bc")
 WESTWX_PRODUCT = "ABI-L2-MCMIPF"
 WESTWX_SOURCE = "NOAA GOES-18"
 WESTWX_SOURCE_LAYER = "ABI-L2-MCMIPF"
-WESTWX_RENDER_VERSION = 2
+WESTWX_RENDER_VERSION = 3
 DEFAULT_MAX_SOURCE_BYTES = 400_000_000
 
 
@@ -204,10 +204,10 @@ def westwx_scan_ready(
     return all(_domain_scan_ready(root, scan, selected) for selected in selected_domains)
 
 
-def _layer_ids(domain: Domain) -> tuple[str, str, str]:
+def _layer_ids(domain: Domain) -> tuple[str, str]:
     if domain.id == "bc":
-        return "raw-visible", "raw-visir", "raw-ir"
-    return "westwx-visible", "westwx-visir", "westwx-ir"
+        return "raw-visir", "raw-ir"
+    return "westwx-visir", "westwx-ir"
 
 
 def _domain_scan_ready(root: Path, scan: PublicObject, domain: Domain) -> bool:
@@ -344,7 +344,6 @@ def render_westwx_scan(
             )
             staging = cache_root / "westwx-staging" / selected_domain.id
             staging.mkdir(parents=True, exist_ok=True)
-            staged_visible = staging / f"{stem}-visible.webp"
             staged_visir = staging / f"{stem}-visir.webp"
             staged_ir = staging / f"{stem}-ir.webp"
             compose_details = compose_visible_infrared(
@@ -354,21 +353,15 @@ def render_westwx_scan(
                 scan.valid_time,
                 staged_visir,
             )
-            _stage_rgb(rendered.visible, staged_visible)
             _stage_rgb(rendered.infrared, staged_ir)
 
-            visible_id, visir_id, ir_id = _layer_ids(selected_domain)
-            visible_layer = LAYERS[visible_id]
+            visir_id, ir_id = _layer_ids(selected_domain)
             visir_layer = LAYERS[visir_id]
             ir_layer = LAYERS[ir_id]
-            visible_destination = frame_path(
-                root, selected_domain, visible_layer, scan.valid_time
-            )
             visir_destination = frame_path(
                 root, selected_domain, visir_layer, scan.valid_time
             )
             ir_destination = frame_path(root, selected_domain, ir_layer, scan.valid_time)
-            _install_staged(staged_visible, visible_destination)
             _install_staged(staged_visir, visir_destination)
             _install_staged(staged_ir, ir_destination)
             common_extra: dict[str, object] = {
@@ -381,17 +374,6 @@ def render_westwx_scan(
                 "rapidDomain": selected_domain.id,
             }
             source_times = {"GOES-18 ABI scan start": scan.valid_time}
-            write_metadata(
-                root,
-                selected_domain,
-                visible_layer,
-                scan.valid_time,
-                visible_destination,
-                source_times,
-                source=WESTWX_SOURCE,
-                source_layer=f"{WESTWX_SOURCE_LAYER} true colour",
-                extra=common_extra,
-            )
             write_metadata(
                 root,
                 selected_domain,

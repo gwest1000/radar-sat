@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T23:01:46.277599Z",
+  "generatedAt": "2026-07-22T23:43:58.453620Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -1529,11 +1529,11 @@
   "products": [
     {
       "id": "bc-large-overlay",
-      "title": "BC Large",
-      "shortTitle": "BC Large",
+      "title": "BC XL",
+      "shortTitle": "BC XL",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "daynight",
+      "anchorLayer": "raw-visir",
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -1542,17 +1542,10 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visible",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "raw-visir",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false,
+          "defaultEnabled": true,
           "choiceGroup": "satellite"
         },
         {
@@ -1563,17 +1556,10 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -1650,7 +1636,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
+        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1659,11 +1645,11 @@
     },
     {
       "id": "bc-small-overlay",
-      "title": "BC Small",
-      "shortTitle": "BC Small",
+      "title": "BC",
+      "shortTitle": "BC",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "daynight",
+      "anchorLayer": "raw-visir",
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -1672,17 +1658,10 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visible",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "raw-visir",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false,
+          "defaultEnabled": true,
           "choiceGroup": "satellite"
         },
         {
@@ -1693,17 +1672,10 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -1780,7 +1752,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
+        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1795,11 +1767,11 @@
     },
     {
       "id": "bc-southwest-overlay",
-      "title": "BC Southwest Overlay",
-      "shortTitle": "BC Southwest Overlay",
+      "title": "BC Southwest",
+      "shortTitle": "BC SW",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "daynight",
+      "anchorLayer": "raw-visir",
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -1808,17 +1780,10 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visible",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "raw-visir",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false,
+          "defaultEnabled": true,
           "choiceGroup": "satellite"
         },
         {
@@ -1829,17 +1794,10 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -1916,7 +1874,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
+        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1931,11 +1889,11 @@
     },
     {
       "id": "bc-southeast-overlay",
-      "title": "BC Southeast Overlay",
-      "shortTitle": "BC Southeast Overlay",
+      "title": "BC Southeast",
+      "shortTitle": "BC SE",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "daynight",
+      "anchorLayer": "raw-visir",
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -1944,17 +1902,10 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visible",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "raw-visir",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false,
+          "defaultEnabled": true,
           "choiceGroup": "satellite"
         },
         {
@@ -1965,17 +1916,10 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -2052,7 +1996,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
+        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -2067,11 +2011,11 @@
     },
     {
       "id": "bc-northeast-overlay",
-      "title": "BC Northeast Overlay",
-      "shortTitle": "BC Northeast Overlay",
+      "title": "BC Northeast",
+      "shortTitle": "BC NE",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "daynight",
+      "anchorLayer": "raw-visir",
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -2080,17 +2024,10 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visible",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "raw-visir",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": false,
+          "defaultEnabled": true,
           "choiceGroup": "satellite"
         },
         {
@@ -2101,17 +2038,10 @@
           "choiceGroup": "satellite"
         },
         {
-          "id": "natural",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite"
-        },
-        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -2188,7 +2118,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views magnify the shared aligned grid; source ceilings remain 1 km radar/ECCC visible, 2 km NOAA multiband satellite and ECCC infrared, and 2.5 km lightning without invented detail.",
+        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -2346,6 +2276,82 @@
       ]
     },
     {
+      "id": "pacific-wna-overlay",
+      "title": "Eastern Pacific / Western North America",
+      "shortTitle": "Pacific/WNA",
+      "group": "Broad",
+      "domain": "north-pacific",
+      "anchorLayer": "raw-ir",
+      "defaultHours": 24,
+      "description": "A focused Eastern Pacific and Western North America satellite view with real West Coast radar coverage.",
+      "layers": [
+        {
+          "id": "base-dark",
+          "opacity": 1.0
+        },
+        {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "smoke",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "radar-coverage",
+          "opacity": 1.0,
+          "enabledWith": "radar-rain"
+        },
+        {
+          "id": "radar-rain",
+          "opacity": 0.84,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "glm-lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        }
+      ],
+      "legends": [
+        "raw-ir",
+        "radar-rain",
+        "glm-lightning-age",
+        "smoke-confidence"
+      ],
+      "notes": [
+        "The Pacific-centred crop covers roughly 155\u00b0E\u201395\u00b0W and 15\u201370\u00b0N without a dateline seam.",
+        "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
+        "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
+        "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
+        "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
+      ],
+      "viewport": {
+        "left": 0.2059,
+        "top": 0.0361,
+        "width": 0.6471,
+        "height": 0.8781
+      }
+    },
+    {
       "id": "north-america-overlay",
       "title": "North America Satellite / Radar",
       "shortTitle": "North America",
@@ -2364,13 +2370,6 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "westwx-visible",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {
@@ -2450,13 +2449,6 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
-        },
-        {
-          "id": "raw-visible",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
           "choiceGroup": "satellite"
         },
         {

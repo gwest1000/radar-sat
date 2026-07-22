@@ -72,15 +72,6 @@ FEEDS: dict[str, FeedSpec] = {
             r"SnowFog-NightMicrophysics_1km\.tif$"
         ),
     ),
-    "goes-natural": FeedSpec(
-        directory="satellite",
-        suffix=".tif",
-        max_age_minutes=45,
-        pattern=re.compile(
-            r"^(?P<time>\d{8}T\d{4}Z)_MSC_GOES-West_NaturalColor_1km\.tif$"
-        ),
-        required=False,
-    ),
     "lightning": FeedSpec(
         directory="lightning",
         suffix=".tif",

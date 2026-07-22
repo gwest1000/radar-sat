@@ -19,13 +19,12 @@ from .geomet import UTC, format_utc, parse_utc, projected_bbox
 
 NATIVE_SOURCE = "ECCC Datamart"
 NATIVE_LAYER_IDS = frozenset(
-    {"daynight", "ir", "natural", "convective", "snowfog", "lightning"}
+    {"daynight", "ir", "convective", "snowfog", "lightning"}
 )
 
 SATELLITE_PRODUCTS = {
     "DayVis-NightIR": ("daynight", "1km"),
     "NightIR": ("ir", "2km"),
-    "NaturalColor": ("natural", "1km"),
     "VisibleIRSandwich-NightMicrophysicsIR": ("convective", "1km"),
     "SnowFog-NightMicrophysics": ("snowfog", "1km"),
 }

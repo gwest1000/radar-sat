@@ -8,7 +8,7 @@ The rendered BC composites and precipitation-type layers still come from GeoMet 
 
 | Config | Broker-side bindings | Client-side files retained | Expected cadence |
 |---|---|---|---|
-| `radarsat_goes_west` | `*.WXO-DD.satellite.goes.west.#` | DayVis/NightIR, standalone 2-km NightIR, convective sandwich/night microphysics IR, snow-fog/night microphysics, natural colour | nominally 10 min; natural colour has a normal overnight gap |
+| `radarsat_goes_west` | `*.WXO-DD.satellite.goes.west.#` | DayVis/NightIR, standalone 2-km NightIR, convective sandwich/night microphysics IR, snow-fog/night microphysics | nominally 10 min |
 | `radarsat_lightning` | `*.WXO-DD.lightning.#` | `*_MSC_Lightning_2.5km.tif` | 10 min |
 | `radarsat_bc_site_radar` | DPQPE and CAPPI bindings for `CASAG`, `CASHP`, `CASSS`, `CASPG` only | rain/snow DPQPE, contingency DPQPE, standard rain/snow CAPPI | 6 min |
 
@@ -240,7 +240,7 @@ The pruner only considers non-dot `.tif`/`.gif` files below the three exact feed
 
 1. Run `scripts/manage_eccc_feeds.sh status`. A stopped/missing process is local; run `sanity` or restart it.
 2. Run `scripts/check_eccc_feeds.py --require-data`. If one family is stale while the others are fresh, inspect its Sarracenia log and the corresponding ECCC directory.
-3. Confirm that the absence is not expected: natural colour is daylight-only, and a single radar station may be in maintenance while ECCC publishes a `-Contingency` image.
+3. Confirm that the absence is not expected: a single radar station may be in maintenance while ECCC publishes a `-Contingency` image.
 4. If all three feeds stop together, check broker reachability and ECCC service notices before changing configuration.
 5. If a queue was idle longer than its expiry, restart and use the Datamart's dated HTTPS tree for a bounded one-time backfill. Do not poll the real-time tree continuously.
 
