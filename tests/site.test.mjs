@@ -26,6 +26,7 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /sourceCount > selectedSourceCount/);
   assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.25, 0\.5, 0\.75, 1, 1\.25, 1\.5, 1\.75, 2\]/);
   assert.match(viewer, /useState\(3\)/);
+  assert.match(viewer, /\? stored\.speedIndex\s*: 3/);
   assert.match(viewer, /finalFrame \? 300 \/ speed : 75 \/ speed/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);

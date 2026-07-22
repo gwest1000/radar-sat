@@ -847,7 +847,7 @@ export function RadarViewer() {
                     && stored.speedIndex >= 0
                     && stored.speedIndex < PLAYBACK_SPEEDS.length
                     ? stored.speedIndex
-                    : 2,
+                    : 3,
                 );
                 if (stored.optionalLayers && typeof stored.optionalLayers === "object") {
                   setOptionalLayers(stored.optionalLayers);
