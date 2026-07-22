@@ -49,6 +49,12 @@ GitHub Pages static viewer ◀────────────────�
   (432 ten-minute or 528 six-minute times per layer).
 - Broad satellite target: 30 minutes for 24 hours, then hourly through day 7;
   GOES-18 smoke and total lightning are processed on a separate 10-minute clock.
+- Dynamic clients can use `glm-lightning-points` and `hotspot-points` instead
+  of the legacy symbol PNGs. Each compact JSON frame uses normalized top-left
+  coordinates and tuple schemas `[x,y,ageMinutes,count]` for GLM or
+  `[x,y,ageMinutes,frp,count]` for CWFIS. Fresh GLM ages are referenced to the
+  ten-minute window end (20-second precision); fresh hotspot ages use the exact
+  CWFIS detection timestamp.
 - `raw-visir` is a server-rendered true-colour day / neutral 10.3–10.4 µm IR
   night image. A solar-elevation smoothstep removes the false-colour terminator
   fringe, low-sun chroma is faded separately, and a bounded overlap correction
@@ -111,6 +117,10 @@ PYTHONPATH=. .venv/bin/python scripts/run_ingest.py \
   --domain north-pacific --hours 3
 PYTHONPATH=. .venv/bin/python scripts/derive_raw_visir.py \
   --output-root data/output --domain north-america
+PYTHONPATH=. .venv/bin/python scripts/derive_hazard_points.py \
+  --output-root data/output --dry-run
+PYTHONPATH=. .venv/bin/python scripts/derive_hazard_points.py \
+  --output-root data/output
 PYTHONPATH=. .venv/bin/python scripts/publish_r2.py \
   --root data/output --dry-run
 PYTHONPATH=. .venv/bin/python scripts/publish_r2.py --root data/output

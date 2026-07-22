@@ -33,6 +33,7 @@ class Layer:
     source: str = "ECCC GeoMet"
     max_age_minutes: int = 30
     daylight_only: bool = False
+    point_schema: tuple[str, ...] = ()
 
 
 DOMAINS: dict[str, Domain] = {
@@ -187,6 +188,17 @@ LAYERS: dict[str, Layer] = {
         source="NOAA GOES-18",
         max_age_minutes=10,
     ),
+    "glm-lightning-points": Layer(
+        id="glm-lightning-points",
+        title="GOES-18 GLM 10-minute total-lightning display points",
+        source_layer=None,
+        image_format="application/json",
+        extension="json",
+        role="points",
+        source="NOAA GOES-18",
+        max_age_minutes=20,
+        point_schema=("x", "y", "ageMinutes", "count"),
+    ),
     "smoke": Layer(
         id="smoke",
         title="GOES-18 ABI smoke detection",
@@ -201,6 +213,17 @@ LAYERS: dict[str, Layer] = {
         source_layer=None,
         source="NRCan CWFIS",
         max_age_minutes=30,
+    ),
+    "hotspot-points": Layer(
+        id="hotspot-points",
+        title="Satellite-detected wildfire hotspot display points",
+        source_layer=None,
+        image_format="application/json",
+        extension="json",
+        role="points",
+        source="NRCan CWFIS",
+        max_age_minutes=30,
+        point_schema=("x", "y", "ageMinutes", "frp", "count"),
     ),
     "raw-visible": Layer(
         id="raw-visible",

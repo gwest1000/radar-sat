@@ -56,6 +56,7 @@ class GLMFlashes:
     longitudes: np.ndarray
     observed_count: int
     good_count: int
+    observation_epochs: np.ndarray | None = None
 
 
 class GoesHazardClient(PublicSatelliteClient):
@@ -256,7 +257,10 @@ def render_smoke_overlay(product: SmokeProduct, domain: Domain, destination: Pat
     }
 
 
-def read_glm_flashes(path: Path) -> GLMFlashes:
+def read_glm_flashes(
+    path: Path,
+    observation_time: dt.datetime | None = None,
+) -> GLMFlashes:
     with h5netcdf.File(path, "r") as dataset:
         required = {"flash_lat", "flash_lon", "flash_quality_flag"}
         missing = required.difference(dataset.variables)
@@ -265,11 +269,30 @@ def read_glm_flashes(path: Path) -> GLMFlashes:
         latitudes = np.asarray(dataset.variables["flash_lat"][:], dtype=np.float64)
         longitudes = np.asarray(dataset.variables["flash_lon"][:], dtype=np.float64)
         quality = np.asarray(dataset.variables["flash_quality_flag"][:])
+        if observation_time is None:
+            start_value = dataset.attrs.get("time_coverage_start")
+            end_value = dataset.attrs.get("time_coverage_end")
+            if start_value is not None and end_value is not None:
+                start = _parse_iso_time(start_value)
+                end = _parse_iso_time(end_value)
+                observation_time = start + (end - start) / 2
     if latitudes.shape != longitudes.shape or latitudes.shape != quality.shape:
         raise ValueError("GLM flash coordinates and quality flags do not share a shape")
     observed_count = int(latitudes.size)
     good = (quality == 0) & np.isfinite(latitudes) & np.isfinite(longitudes)
-    return GLMFlashes(latitudes[good], longitudes[good], observed_count, int(np.count_nonzero(good)))
+    good_count = int(np.count_nonzero(good))
+    observation_epochs = (
+        np.full(good_count, observation_time.astimezone(UTC).timestamp(), dtype=np.float64)
+        if observation_time is not None
+        else None
+    )
+    return GLMFlashes(
+        latitudes[good],
+        longitudes[good],
+        observed_count,
+        good_count,
+        observation_epochs,
+    )
 
 
 def combine_glm_flashes(values: Iterable[GLMFlashes]) -> GLMFlashes:
@@ -278,11 +301,17 @@ def combine_glm_flashes(values: Iterable[GLMFlashes]) -> GLMFlashes:
         return GLMFlashes(np.empty(0), np.empty(0), 0, 0)
     latitudes = np.concatenate([item.latitudes for item in items])
     longitudes = np.concatenate([item.longitudes for item in items])
+    epochs = (
+        np.concatenate([item.observation_epochs for item in items if item.observation_epochs is not None])
+        if all(item.observation_epochs is not None for item in items)
+        else None
+    )
     return GLMFlashes(
         latitudes,
         longitudes,
         sum(item.observed_count for item in items),
         sum(item.good_count for item in items),
+        epochs,
     )
 
 

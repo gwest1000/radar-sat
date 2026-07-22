@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import dataclass
 import math
 from pathlib import Path
 from typing import Any, Callable
@@ -16,6 +17,16 @@ from .geomet import projected_bbox
 UTC = dt.timezone.utc
 CWFIS_WFS_URL = "https://cwfis.cfs.nrcan.gc.ca/geoserver/public/ows"
 CWFIS_HOTSPOT_LAYER = "public:hotspots_24h"
+
+
+@dataclass(frozen=True)
+class HotspotPoint:
+    x: int
+    y: int
+    detected: dt.datetime
+    age_minutes: float
+    frp: float
+    count: int
 
 
 def fetch_hotspots(
@@ -63,13 +74,12 @@ def parse_detection_time(value: object) -> dt.datetime | None:
     return parsed.astimezone(UTC)
 
 
-def render_hotspots(
+def project_hotspots(
     features: list[dict[str, Any]],
     domain: Domain,
-    destination: Path,
     snapshot_time: dt.datetime,
-) -> dict[str, object]:
-    """Render a 24-hour, age-coloured hotspot snapshot on the aligned map grid."""
+) -> list[HotspotPoint]:
+    """Project and collapse CWFIS detections onto the aligned display grid."""
     snapshot = snapshot_time.astimezone(UTC)
     transformer = Transformer.from_crs("EPSG:4326", domain.crs, always_xy=True)
     xmin, ymin, xmax, ymax = projected_bbox(domain)
@@ -99,9 +109,37 @@ def render_hotspots(
         key = (px, py)
         current = clusters.get(key)
         if current is None or detected > current["detected"]:
-            clusters[key] = {"detected": detected, "age": age_hours, "frp": frp}
+            clusters[key] = {
+                "detected": detected,
+                "age": age_hours,
+                "frp": frp,
+                "count": int(current["count"]) + 1 if current is not None else 1,
+            }
         else:
             current["frp"] = max(float(current["frp"]), frp)
+            current["count"] = int(current["count"]) + 1
+
+    return [
+        HotspotPoint(
+            x=x,
+            y=y,
+            detected=item["detected"],
+            age_minutes=float(item["age"]) * 60.0,
+            frp=float(item["frp"]),
+            count=int(item["count"]),
+        )
+        for (x, y), item in sorted(clusters.items(), key=lambda item: item[1]["detected"])
+    ]
+
+
+def render_hotspots(
+    features: list[dict[str, Any]],
+    domain: Domain,
+    destination: Path,
+    snapshot_time: dt.datetime,
+) -> dict[str, object]:
+    """Render a 24-hour, age-coloured hotspot snapshot on the aligned map grid."""
+    points = project_hotspots(features, domain, snapshot_time)
 
     image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
@@ -110,11 +148,12 @@ def render_hotspots(
     def diamond(x: int, y: int, radius: int) -> list[tuple[int, int]]:
         return [(x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)]
 
-    ordered = sorted(clusters.items(), key=lambda item: item[1]["detected"])
-    for (x, y), item in ordered:
-        detected = item["detected"]
-        age = float(item["age"])
-        frp = float(item["frp"])
+    for point in points:
+        x = point.x
+        y = point.y
+        detected = point.detected
+        age = point.age_minutes / 60.0
+        frp = point.frp
         newest = detected if newest is None or detected > newest else newest
         # These are point detections rather than fire perimeters. Use a larger
         # high-contrast symbol so isolated detections remain legible on the BC
@@ -139,7 +178,7 @@ def render_hotspots(
         temporary.unlink(missing_ok=True)
 
     return {
-        "detectionCount": len(clusters),
+        "detectionCount": len(points),
         "newestDetectionTime": newest.isoformat().replace("+00:00", "Z") if newest else None,
         "windowHours": 24,
     }

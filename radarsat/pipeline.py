@@ -15,7 +15,7 @@ from PIL import Image
 from .catalog import write_catalog
 from .config import DOMAINS, LAYERS, Domain, Layer
 from .geomet import GeoMetClient, at_or_before, format_utc, frame_stamp
-from .hotspots import CWFIS_HOTSPOT_LAYER, fetch_hotspots, render_hotspots
+from .hotspots import CWFIS_HOTSPOT_LAYER, fetch_hotspots, project_hotspots, render_hotspots
 from .images import (
     lightning_trail,
     reproject_overlay,
@@ -26,16 +26,25 @@ from .images import (
     save_satellite,
 )
 from .retention import keep_frame
+from .point_frames import (
+    glm_point_rows,
+    normalized_pixel,
+    point_frame_metadata,
+    radarsat_product_uses_layer,
+    write_point_frame,
+)
 
 
 UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 2
 HOTSPOT_RENDER_VERSION = 3
+HOTSPOT_POINT_RENDER_VERSION = 1
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 1
 GLM_LIGHTNING_RENDER_VERSION = 1
 GLM_LIGHTNING_TRAIL_RENDER_VERSION = 1
+GLM_LIGHTNING_POINT_RENDER_VERSION = 1
 COVERAGE_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
@@ -174,22 +183,61 @@ def ingest_hotspot_snapshot(
         microsecond=0,
     )
     layer = LAYERS["hotspots"]
+    point_layer = LAYERS["hotspot-points"]
     destination = frame_path(root, domain, layer, valid_time)
     metadata = metadata_path(root, domain, layer, valid_time)
+    legacy_ready = False
     if destination.exists() and metadata.exists():
         try:
             existing = json.loads(metadata.read_text())
             if existing.get("renderVersion") == HOTSPOT_RENDER_VERSION:
-                return {
-                    "status": "unchanged",
-                    "validTime": format_utc(valid_time),
-                    "detectionCount": existing.get("detectionCount", 0),
-                }
+                legacy_ready = True
         except (OSError, json.JSONDecodeError):
             pass
+    point_ready = _rendered_frame_ready(
+        root,
+        domain,
+        point_layer,
+        valid_time,
+        HOTSPOT_POINT_RENDER_VERSION,
+    )
+    if legacy_ready and point_ready:
+        return {
+            "status": "unchanged",
+            "validTime": format_utc(valid_time),
+            "detectionCount": existing.get("detectionCount", 0),
+        }
 
     features = fetch_hotspots(domain)
     summary = render_hotspots(features, domain, destination, current)
+    projected = project_hotspots(features, domain, current)
+    points: list[list[float | int | None]] = []
+    for point in projected:
+        x, y = normalized_pixel(point.x, point.y, domain)
+        points.append(
+            [
+                x,
+                y,
+                round(point.age_minutes, 3),
+                round(point.frp, 3),
+                point.count,
+            ]
+        )
+    window_start = current - dt.timedelta(hours=24)
+    point_destination = frame_path(root, domain, point_layer, valid_time)
+    write_point_frame(
+        point_destination,
+        layer=point_layer.id,
+        domain=domain,
+        valid_time=valid_time,
+        window_start=window_start,
+        window_end=current,
+        age_reference_time=current,
+        point_schema=point_layer.point_schema,
+        points=points,
+        age_mode="exact-detection-time",
+        age_precision_seconds=60,
+    )
     write_metadata(
         root,
         domain,
@@ -201,7 +249,33 @@ def ingest_hotspot_snapshot(
         source_layer=CWFIS_HOTSPOT_LAYER,
         extra={**summary, "renderVersion": HOTSPOT_RENDER_VERSION},
     )
-    return {"status": "rendered", "validTime": format_utc(valid_time), **summary}
+    point_details = point_frame_metadata(
+        points=points,
+        point_schema=point_layer.point_schema,
+        window_start=window_start,
+        window_end=current,
+        age_reference_time=current,
+        age_mode="exact-detection-time",
+        age_precision_seconds=60,
+        render_version=HOTSPOT_POINT_RENDER_VERSION,
+    )
+    write_metadata(
+        root,
+        domain,
+        point_layer,
+        valid_time,
+        point_destination,
+        {"hotspots": current},
+        source="NRCan CWFIS",
+        source_layer=CWFIS_HOTSPOT_LAYER,
+        extra=point_details,
+    )
+    return {
+        "status": "rendered",
+        "validTime": format_utc(valid_time),
+        "pointCount": len(points),
+        **summary,
+    }
 
 
 def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> None:
@@ -555,7 +629,11 @@ def ingest_goes_hazards(
     current = (now or dt.datetime.now(UTC)).astimezone(UTC)
     max_bytes = int(os.environ.get("RADARSAT_GOES_HAZARD_MAX_BYTES", "100000000"))
     warnings: list[str] = []
-    rendered: dict[str, list[str]] = {"smoke": [], "glm-lightning": []}
+    rendered: dict[str, list[str]] = {
+        "smoke": [],
+        "glm-lightning": [],
+        "glm-lightning-points": [],
+    }
     downloaded_bytes = 0
     owned_client = client is None
     hazard_client = client or GoesHazardClient()
@@ -620,15 +698,25 @@ def ingest_goes_hazards(
 
             if glm_window is not None:
                 lightning_layer = LAYERS["glm-lightning"]
+                point_layer = LAYERS["glm-lightning-points"]
                 needed = [
                     domain
                     for domain in selected
-                    if not _rendered_frame_ready(
-                        root,
-                        domain,
-                        lightning_layer,
-                        glm_window.start_time,
-                        GLM_LIGHTNING_RENDER_VERSION,
+                    if (
+                        not _rendered_frame_ready(
+                            root,
+                            domain,
+                            lightning_layer,
+                            glm_window.start_time,
+                            GLM_LIGHTNING_RENDER_VERSION,
+                        )
+                        or not _rendered_frame_ready(
+                            root,
+                            domain,
+                            point_layer,
+                            glm_window.end_time,
+                            GLM_LIGHTNING_POINT_RENDER_VERSION,
+                        )
                     )
                 ]
                 if needed:
@@ -638,7 +726,12 @@ def ingest_goes_hazards(
                         for item in glm_window.objects:
                             source_path = hazard_client.download(item, cache_root, max_bytes)  # type: ignore[attr-defined]
                             downloaded_bytes += item.size
-                            decoded.append(read_glm_flashes(source_path))
+                            decoded.append(
+                                read_glm_flashes(
+                                    source_path,
+                                    item.valid_time + dt.timedelta(seconds=10),
+                                )
+                            )
                             source_path.unlink(missing_ok=True)
                             source_path = None
                         flashes = combine_glm_flashes(decoded)
@@ -647,6 +740,32 @@ def ingest_goes_hazards(
                                 root, domain, lightning_layer, glm_window.start_time
                             )
                             summary = render_glm_bins(flashes, domain, destination)
+                            points, point_summary = glm_point_rows(
+                                flashes.latitudes,
+                                flashes.longitudes,
+                                flashes.observation_epochs,
+                                domain,
+                                glm_window.end_time,
+                            )
+                            point_destination = frame_path(
+                                root,
+                                domain,
+                                point_layer,
+                                glm_window.end_time,
+                            )
+                            write_point_frame(
+                                point_destination,
+                                layer=point_layer.id,
+                                domain=domain,
+                                valid_time=glm_window.end_time,
+                                window_start=glm_window.start_time,
+                                window_end=glm_window.end_time,
+                                age_reference_time=glm_window.end_time,
+                                point_schema=point_layer.point_schema,
+                                points=points,
+                                age_mode=str(point_summary["ageMode"]),
+                                age_precision_seconds=int(point_summary["agePrecisionSeconds"]),
+                            )
                             write_metadata(
                                 root,
                                 domain,
@@ -665,7 +784,38 @@ def ingest_goes_hazards(
                                     "renderVersion": GLM_LIGHTNING_RENDER_VERSION,
                                 },
                             )
+                            write_metadata(
+                                root,
+                                domain,
+                                point_layer,
+                                glm_window.end_time,
+                                point_destination,
+                                {"GOES-18 GLM": glm_window.start_time},
+                                source="NOAA GOES-18",
+                                source_layer="GLM-L2-LCFA",
+                                extra={
+                                    **point_frame_metadata(
+                                        points=points,
+                                        point_schema=point_layer.point_schema,
+                                        window_start=glm_window.start_time,
+                                        window_end=glm_window.end_time,
+                                        age_reference_time=glm_window.end_time,
+                                        age_mode=str(point_summary["ageMode"]),
+                                        age_precision_seconds=int(
+                                            point_summary["agePrecisionSeconds"]
+                                        ),
+                                        render_version=GLM_LIGHTNING_POINT_RENDER_VERSION,
+                                    ),
+                                    "observedFlashCount": flashes.observed_count,
+                                    "qualityControlledFlashCount": flashes.good_count,
+                                    "mappedFlashCount": point_summary["mappedFlashCount"],
+                                    "maximumLatitude": point_summary["maximumLatitude"],
+                                    "binSizeMetres": point_summary["binSizeMetres"],
+                                    "sourceFileCount": len(glm_window.objects),
+                                },
+                            )
                             rendered["glm-lightning"].append(domain.id)
+                            rendered["glm-lightning-points"].append(domain.id)
                     except Exception as error:
                         warnings.append(f"GOES-18 GLM ingest unavailable: {type(error).__name__}: {error}")
                     finally:
@@ -676,12 +826,16 @@ def ingest_goes_hazards(
         if owned_client:
             hazard_client.close()  # type: ignore[attr-defined]
 
+    legacy_trails: list[str] = []
     for domain in selected:
-        derive_glm_lightning_trails(root, domain)
+        if radarsat_product_uses_layer(domain.id, "glm-lightning-trail"):
+            derive_glm_lightning_trails(root, domain)
+            legacy_trails.append(domain.id)
     rendered_any = any(rendered.values())
     return {
         "status": "warning" if warnings else "rendered" if rendered_any else "unchanged",
         "domains": rendered,
+        "legacyTrailDomains": legacy_trails,
         "downloadBytes": downloaded_bytes,
         "cacheCapBytes": max_bytes,
         "warnings": warnings,

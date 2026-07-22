@@ -11,6 +11,15 @@ from .config import DOMAINS, LAYERS, LEGENDS, PRODUCTS
 UTC = dt.timezone.utc
 
 
+def retention_policy(tier: str) -> dict[str, int]:
+    """Describe the policy enforced locally and by the R2 expiry pass."""
+    return {
+        "allFramesHours": 24,
+        "archiveDays": 7,
+        "archiveCadenceMinutes": 30 if tier == "bc" else 60,
+    }
+
+
 def read_metadata(root: Path, domain_id: str, layer_id: str) -> list[dict[str, Any]]:
     directory = root / "metadata" / domain_id / layer_id
     frames: list[dict[str, Any]] = []
@@ -35,11 +44,22 @@ def build_catalog(root: Path) -> dict[str, Any]:
                 frames = read_metadata(root, domain_id, layer_directory.name)
                 if frames:
                     specification = LAYERS.get(layer_directory.name)
-                    layers[layer_directory.name] = {
+                    entry: dict[str, Any] = {
                         "title": specification.title if specification else layer_directory.name,
                         "maxAgeMinutes": specification.max_age_minutes if specification else 30,
                         "frames": frames,
                     }
+                    if specification is not None:
+                        entry["role"] = specification.role
+                        entry["format"] = specification.image_format
+                        if specification.point_schema:
+                            entry["pointFrame"] = {
+                                "schemaVersion": 1,
+                                "coordinateSpace": "normalized-top-left",
+                                "pointSchema": list(specification.point_schema),
+                                "retention": retention_policy(domain.tier),
+                            }
+                    layers[layer_directory.name] = entry
         static_layers: dict[str, Any] = {}
         for layer_id, filename in (
             ("base-dark", "base-dark.png"),
@@ -55,6 +75,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
             "width": domain.width,
             "height": domain.height,
             "projection": domain.crs,
+            "retention": retention_policy(domain.tier),
             "layers": layers,
             "staticLayers": static_layers,
         }

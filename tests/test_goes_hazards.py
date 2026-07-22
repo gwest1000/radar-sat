@@ -324,7 +324,18 @@ class HazardPipelineTests(unittest.TestCase):
             self.assertEqual(result["status"], "rendered")
             self.assertTrue(frame_path(root, domain, LAYERS["smoke"], VALID).is_file())
             self.assertTrue(frame_path(root, domain, LAYERS["glm-lightning"], VALID).is_file())
-            self.assertTrue(frame_path(root, domain, LAYERS["glm-lightning-trail"], VALID).is_file())
+            self.assertTrue(
+                frame_path(
+                    root,
+                    domain,
+                    LAYERS["glm-lightning-points"],
+                    VALID + dt.timedelta(minutes=10),
+                ).is_file()
+            )
+            self.assertFalse(
+                frame_path(root, domain, LAYERS["glm-lightning-trail"], VALID).exists()
+            )
+            self.assertEqual(result["legacyTrailDomains"], [])
             self.assertTrue(all(not path.exists() for path in client.downloaded_paths))
             smoke_metadata = json.loads(metadata_path(root, domain, LAYERS["smoke"], VALID).read_text())
             glm_metadata = json.loads(
@@ -332,6 +343,16 @@ class HazardPipelineTests(unittest.TestCase):
             )
             self.assertEqual(smoke_metadata["sourceLayer"], "ABI-L2-ADPF")
             self.assertEqual(glm_metadata["sourceLayer"], "GLM-L2-LCFA")
+            point_metadata = json.loads(
+                metadata_path(
+                    root,
+                    domain,
+                    LAYERS["glm-lightning-points"],
+                    VALID + dt.timedelta(minutes=10),
+                ).read_text()
+            )
+            self.assertEqual(point_metadata["pointFrameSchemaVersion"], 1)
+            self.assertEqual(point_metadata["pointSchema"], ["x", "y", "ageMinutes", "count"])
 
     def test_catalog_exposes_processed_hazard_frames_and_product_controls(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
