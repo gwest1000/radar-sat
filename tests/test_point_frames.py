@@ -15,7 +15,11 @@ from pyproj import Transformer
 from radarsat.catalog import build_catalog
 from radarsat.config import LAYERS, Domain
 from radarsat.pipeline import frame_path, metadata_path, write_metadata
-from radarsat.point_frames import glm_point_rows, write_point_frame
+from radarsat.point_frames import (
+    glm_point_rows,
+    points_from_lightning_density_png,
+    write_point_frame,
+)
 from radarsat.point_migration import derive_hazard_point_archive
 
 
@@ -98,6 +102,23 @@ class PointFrameTests(unittest.TestCase):
             self.assertEqual(payload["coordinateSpace"]["origin"], "top-left")
             self.assertEqual(payload["points"], [[0.25, 0.75, 1.5, 2]])
 
+    def test_eccc_density_cells_become_normalized_storm_clusters(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            domain = test_domain("bc")
+            source = Path(temporary) / "lightning.png"
+            image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+            image.putpixel((20, 30), (0, 54, 253, 255))
+            image.putpixel((21, 31), (3, 179, 250, 255))
+            image.putpixel((150, 80), (253, 51, 0, 255))
+            image.save(source, "PNG")
+
+            points = points_from_lightning_density_png(source, domain)
+
+            self.assertEqual(len(points), 2)
+            self.assertEqual(sorted(point[3] for point in points), [1, 2])
+            self.assertTrue(all(point[2] == 5.0 for point in points))
+            self.assertTrue(all(0 <= point[0] <= 1 and 0 <= point[1] <= 1 for point in points))
+
 
 class PointMigrationTests(unittest.TestCase):
     def test_migration_preserves_pngs_and_labels_estimated_ages(self) -> None:
@@ -134,9 +155,20 @@ class PointMigrationTests(unittest.TestCase):
                 hotspot_path,
                 extra={"renderVersion": 3},
             )
+            lightning_layer = LAYERS["lightning"]
+            lightning_path = frame_path(root, domain, lightning_layer, VALID)
+            lightning_path.parent.mkdir(parents=True, exist_ok=True)
+            lightning = Image.new(
+                "RGBA",
+                (domain.width, domain.height),
+                (0, 0, 0, 0),
+            )
+            lightning.putpixel((30, 40), (0, 54, 253, 255))
+            lightning.save(lightning_path, "PNG")
+            write_metadata(root, domain, lightning_layer, VALID, lightning_path)
             before = {
                 path: hashlib.sha256(path.read_bytes()).hexdigest()
-                for path in (glm_path, hotspot_path)
+                for path in (glm_path, hotspot_path, lightning_path)
             }
 
             with mock.patch.dict("radarsat.point_migration.DOMAINS", {domain.id: domain}, clear=True):
@@ -154,8 +186,15 @@ class PointMigrationTests(unittest.TestCase):
                 VALID + dt.timedelta(minutes=10),
             )
             hotspot_points_path = frame_path(root, domain, LAYERS["hotspot-points"], VALID)
+            lightning_points_path = frame_path(
+                root,
+                domain,
+                LAYERS["lightning-points"],
+                VALID,
+            )
             glm_payload = json.loads(glm_points_path.read_text())
             hotspot_payload = json.loads(hotspot_points_path.read_text())
+            lightning_payload = json.loads(lightning_points_path.read_text())
             self.assertEqual(glm_payload["ageMode"], "window-midpoint-estimate")
             self.assertEqual(glm_payload["points"][0][2], 5.0)
             self.assertEqual(
@@ -164,6 +203,8 @@ class PointMigrationTests(unittest.TestCase):
             )
             self.assertEqual(hotspot_payload["points"][0][2], 540.0)
             self.assertIsNone(hotspot_payload["points"][0][3])
+            self.assertEqual(lightning_payload["ageMode"], "window-midpoint-estimate")
+            self.assertEqual(lightning_payload["points"], [[0.150754, 0.336134, 5.0, 1]])
 
     def test_catalog_describes_point_schema_format_and_retention(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

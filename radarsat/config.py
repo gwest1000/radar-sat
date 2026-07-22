@@ -166,6 +166,17 @@ LAYERS: dict[str, Layer] = {
         style="Lightning",
         max_age_minutes=35,
     ),
+    "lightning-points": Layer(
+        id="lightning-points",
+        title="CLDN 10-minute lightning-density display points",
+        source_layer=None,
+        image_format="application/json",
+        extension="json",
+        role="points",
+        source="ECCC Datamart",
+        max_age_minutes=35,
+        point_schema=("x", "y", "ageMinutes", "count"),
+    ),
     "lightning-trail": Layer(
         id="lightning-trail",
         title="CLDN 30-minute age trail",

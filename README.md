@@ -55,6 +55,10 @@ GitHub Pages static viewer ◀────────────────�
   `[x,y,ageMinutes,frp,count]` for CWFIS. Fresh GLM ages are referenced to the
   ten-minute window end (20-second precision); fresh hotspot ages use the exact
   CWFIS detection timestamp.
+- `lightning-points` exposes the ECCC/CLDN ten-minute density fallback with the
+  same `[x,y,ageMinutes,count]` tuple. Here `count` honestly means connected
+  positive 2.5-km density cells rather than individual flashes or strokes, and
+  the five-minute age is the midpoint estimate for the source window.
 - `raw-visir` is a server-rendered true-colour day / neutral 10.3–10.4 µm IR
   night image. A solar-elevation smoothstep removes the false-colour terminator
   fringe, low-sun chroma is faded separately, and a bounded overlap correction

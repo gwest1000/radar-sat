@@ -498,7 +498,12 @@ def ingest_spool(
     """Render native BC observations without moving or deleting raw files."""
     # Import archive helpers lazily so ``pipeline`` can call this module without
     # a module-initialization cycle.
-    from .pipeline import frame_path, metadata_path, write_metadata
+    from .pipeline import (
+        derive_eccc_lightning_points,
+        frame_path,
+        metadata_path,
+        write_metadata,
+    )
 
     result = SpoolIngestResult()
     files, result.rejected = discover_spool(spool_root, now=now)
@@ -519,6 +524,8 @@ def ingest_spool(
             destination = frame_path(output_root, domain, layer, valid_time)
             metadata = metadata_path(output_root, domain, layer, valid_time)
             if destination.exists() and _metadata_source(metadata) == NATIVE_SOURCE:
+                if layer_id == "lightning":
+                    derive_eccc_lightning_points(output_root, domain, valid_time)
                 continue
             try:
                 if layer_id == "lightning":
@@ -539,6 +546,8 @@ def ingest_spool(
                         "sourceFiles": [native_file.path.name],
                     },
                 )
+                if layer_id == "lightning":
+                    derive_eccc_lightning_points(output_root, domain, valid_time)
                 result.add_rendered(layer_id)
             except Exception as error:
                 result.preserve_files.add(native_file.path.name)

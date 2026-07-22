@@ -409,6 +409,20 @@ class NativeRenderTests(unittest.TestCase):
                 rgba = np.asarray(image.convert("RGBA"))
                 self.assertGreater(int(np.count_nonzero(rgba[:, :, 3])), 0)
                 self.assertLess(int(np.count_nonzero(rgba[:, :, 3])), domain.width * domain.height // 10)
+            lightning_points = frame_path(
+                output,
+                domain,
+                LAYERS["lightning-points"],
+                VALID,
+            )
+            point_payload = json.loads(lightning_points.read_text())
+            self.assertEqual(point_payload["pointSchema"], ["x", "y", "ageMinutes", "count"])
+            self.assertEqual(point_payload["ageReferenceTime"], "2026-07-21T00:12:00Z")
+            self.assertGreater(len(point_payload["points"]), 0)
+            point_metadata = json.loads(
+                metadata_path(output, domain, LAYERS["lightning-points"], VALID).read_text()
+            )
+            self.assertIn("not strokes", point_metadata["countMeaning"])
 
     def test_site_montage_requires_an_exact_four_station_timestamp(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

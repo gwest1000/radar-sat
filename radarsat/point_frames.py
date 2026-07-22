@@ -186,11 +186,18 @@ def glm_point_rows(
     }
 
 
-def _connected_centres(mask: np.ndarray) -> list[tuple[float, float]]:
-    """Return centroids for four-connected True components without SciPy."""
+def _connected_components(
+    mask: np.ndarray,
+    *,
+    diagonal: bool = False,
+) -> list[tuple[float, float, int]]:
+    """Return centroid/area summaries for connected components without SciPy."""
     height, width = mask.shape
     visited = np.zeros(mask.shape, dtype=bool)
-    centres: list[tuple[float, float]] = []
+    components: list[tuple[float, float, int]] = []
+    neighbours = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    if diagonal:
+        neighbours.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
     for start_y, start_x in np.argwhere(mask):
         if visited[start_y, start_x]:
             continue
@@ -204,7 +211,9 @@ def _connected_centres(mask: np.ndarray) -> list[tuple[float, float]]:
             sum_x += x
             sum_y += y
             count += 1
-            for neighbour_y, neighbour_x in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+            for offset_y, offset_x in neighbours:
+                neighbour_y = y + offset_y
+                neighbour_x = x + offset_x
                 if (
                     0 <= neighbour_y < height
                     and 0 <= neighbour_x < width
@@ -213,8 +222,29 @@ def _connected_centres(mask: np.ndarray) -> list[tuple[float, float]]:
                 ):
                     visited[neighbour_y, neighbour_x] = True
                     stack.append((neighbour_y, neighbour_x))
-        centres.append((sum_x / count, sum_y / count))
-    return centres
+        components.append((sum_x / count, sum_y / count, count))
+    return components
+
+
+def points_from_lightning_density_png(
+    path: Path,
+    domain: Domain,
+) -> list[list[float | int]]:
+    """Collapse ECCC positive-density cells into app-renderable storm clusters.
+
+    ``count`` is the number of connected positive 2.5-km density cells, not a
+    count of cloud-to-ground strokes. The source provides only a ten-minute
+    aggregate, so five minutes is an explicitly approximate midpoint age.
+    """
+    rgba = np.asarray(Image.open(path).convert("RGBA"))
+    if rgba.shape[:2] != (domain.height, domain.width):
+        raise ValueError(f"ECCC lightning raster dimensions do not match {domain.id}")
+    points: list[list[float | int]] = []
+    for x, y, area in _connected_components(rgba[:, :, 3] > 20, diagonal=True):
+        normalized_x, normalized_y = normalized_pixel(x, y, domain)
+        points.append([normalized_x, normalized_y, 5.0, area])
+    points.sort(key=lambda point: (float(point[1]), float(point[0])))
+    return points
 
 
 def points_from_glm_png(path: Path, domain: Domain) -> list[list[float | int]]:
@@ -244,7 +274,7 @@ def points_from_hotspot_png(path: Path, domain: Domain) -> list[list[float | int
     points: list[list[float | int | None]] = []
     for colour, age_minutes in HOTSPOT_AGE_COLOURS:
         mask = np.all(rgba[:, :, :3] == colour, axis=2) & (rgba[:, :, 3] > 0)
-        for x, y in _connected_centres(mask):
+        for x, y, _area in _connected_components(mask):
             normalized_x, normalized_y = normalized_pixel(x, y, domain)
             points.append([normalized_x, normalized_y, age_minutes, None, 1])
     points.sort(key=lambda point: (float(point[1]), float(point[0])))

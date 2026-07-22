@@ -10,6 +10,7 @@ from .geomet import format_utc
 from .pipeline import (
     GLM_LIGHTNING_POINT_RENDER_VERSION,
     HOTSPOT_POINT_RENDER_VERSION,
+    LIGHTNING_POINT_RENDER_VERSION,
     frame_path,
     metadata_path,
     safe_archive_path,
@@ -19,6 +20,7 @@ from .point_frames import (
     point_frame_metadata,
     points_from_glm_png,
     points_from_hotspot_png,
+    points_from_lightning_density_png,
     write_point_frame,
 )
 
@@ -82,6 +84,11 @@ def derive_hazard_point_archive(
             GLM_LIGHTNING_POINT_RENDER_VERSION,
         ),
         (
+            LAYERS["lightning"],
+            LAYERS["lightning-points"],
+            LIGHTNING_POINT_RENDER_VERSION,
+        ),
+        (
             LAYERS["hotspots"],
             LAYERS["hotspot-points"],
             HOTSPOT_POINT_RENDER_VERSION,
@@ -140,6 +147,21 @@ def derive_hazard_point_archive(
                         age_mode = "window-midpoint-estimate"
                         age_precision_seconds = 600
                         migration_method = "nontransparent GLM marker pixels"
+                        point_details: dict[str, object] = {}
+                    elif source_layer.id == "lightning":
+                        age_reference = source_valid_time
+                        window_end = source_valid_time
+                        window_start = window_end - dt.timedelta(minutes=10)
+                        points = points_from_lightning_density_png(source_path, domain)
+                        age_mode = "window-midpoint-estimate"
+                        age_precision_seconds = 600
+                        migration_method = "connected positive ECCC density cells"
+                        point_details = {
+                            "countMeaning": (
+                                "connected positive 2.5-km density cells; not strokes"
+                            ),
+                            "densityWindowMinutes": 10,
+                        }
                     else:
                         age_reference = _parse_time(
                             source_metadata.get("fetchedAt", source_metadata["validTime"])
@@ -150,6 +172,7 @@ def derive_hazard_point_archive(
                         age_mode = "render-colour-bucket-midpoint-estimate"
                         age_precision_seconds = 43_200
                         migration_method = "hotspot fill-colour connected components"
+                        point_details = {}
 
                     if not dry_run:
                         write_point_frame(
@@ -191,7 +214,9 @@ def derive_hazard_point_archive(
                                     migration_source_path=source_path.relative_to(root).as_posix(),
                                 ),
                                 "migrationMethod": migration_method,
-                                "sourceTimingRecovered": False,
+                                "sourceTimingRecovered": source_layer.id == "lightning",
+                                "eventTimingRecovered": False,
+                                **point_details,
                             },
                         )
                     counts["derived"] += 1

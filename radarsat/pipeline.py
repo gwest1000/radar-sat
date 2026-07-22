@@ -30,6 +30,7 @@ from .point_frames import (
     glm_point_rows,
     normalized_pixel,
     point_frame_metadata,
+    points_from_lightning_density_png,
     radarsat_product_uses_layer,
     write_point_frame,
 )
@@ -37,6 +38,7 @@ from .point_frames import (
 
 UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 2
+LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 3
 HOTSPOT_POINT_RENDER_VERSION = 1
 RAW_SATELLITE_RENDER_VERSION = 1
@@ -302,6 +304,82 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
         image.save(destination, "PNG", optimize=True)
 
 
+def derive_eccc_lightning_points(
+    root: Path,
+    domain: Domain,
+    valid_time: dt.datetime,
+) -> dict[str, object]:
+    """Derive app-native clusters from an archived ECCC density raster.
+
+    The ECCC product is a ten-minute density aggregate, not strike-level data.
+    Each point therefore uses the window midpoint age and ``count`` means the
+    number of connected positive-density display cells in that cluster.
+    """
+    source_layer = LAYERS["lightning"]
+    point_layer = LAYERS["lightning-points"]
+    source = frame_path(root, domain, source_layer, valid_time)
+    source_metadata_path = metadata_path(root, domain, source_layer, valid_time)
+    if not source.is_file() or not source_metadata_path.is_file():
+        raise FileNotFoundError(f"ECCC lightning source frame is incomplete at {format_utc(valid_time)}")
+    destination = frame_path(root, domain, point_layer, valid_time)
+    destination_metadata = metadata_path(root, domain, point_layer, valid_time)
+    if _rendered_frame_ready(
+        root,
+        domain,
+        point_layer,
+        valid_time,
+        LIGHTNING_POINT_RENDER_VERSION,
+    ):
+        existing = json.loads(destination_metadata.read_text())
+        return {"status": "unchanged", "pointCount": existing.get("pointCount", 0)}
+
+    source_metadata = json.loads(source_metadata_path.read_text())
+    points = points_from_lightning_density_png(source, domain)
+    window_start = valid_time - dt.timedelta(minutes=10)
+    write_point_frame(
+        destination,
+        layer=point_layer.id,
+        domain=domain,
+        valid_time=valid_time,
+        window_start=window_start,
+        window_end=valid_time,
+        age_reference_time=valid_time,
+        point_schema=point_layer.point_schema,
+        points=points,
+        age_mode="window-midpoint-estimate",
+        age_precision_seconds=600,
+    )
+    write_metadata(
+        root,
+        domain,
+        point_layer,
+        valid_time,
+        destination,
+        {"ECCC lightning density": valid_time},
+        source=str(source_metadata.get("source") or point_layer.source),
+        source_layer=str(
+            source_metadata.get("sourceLayer")
+            or source_layer.source_layer
+            or "Lightning_2.5km_Density"
+        ),
+        extra={
+            **point_frame_metadata(
+                points=points,
+                point_schema=point_layer.point_schema,
+                window_start=window_start,
+                window_end=valid_time,
+                age_reference_time=valid_time,
+                age_mode="window-midpoint-estimate",
+                age_precision_seconds=600,
+                render_version=LIGHTNING_POINT_RENDER_VERSION,
+            ),
+            "countMeaning": "connected positive 2.5-km density cells; not strokes",
+            "densityWindowMinutes": 10,
+        },
+    )
+    return {"status": "rendered", "pointCount": len(points)}
+
+
 def ingest_geomet(
     client: GeoMetClient,
     root: Path,
@@ -344,6 +422,8 @@ def ingest_geomet(
             meta = metadata_path(root, domain, layer, valid_time)
             if destination.exists() and meta.exists():
                 if not layer_id.endswith("coverage"):
+                    if layer_id == "lightning":
+                        derive_eccc_lightning_points(root, domain, valid_time)
                     continue
                 try:
                     if json.loads(meta.read_text()).get("renderVersion") == COVERAGE_RENDER_VERSION:
@@ -391,6 +471,8 @@ def ingest_geomet(
                 destination,
                 extra={"renderVersion": COVERAGE_RENDER_VERSION} if layer_id.endswith("coverage") else None,
             )
+            if layer_id == "lightning":
+                derive_eccc_lightning_points(root, domain, valid_time)
     return timelines
 
 
