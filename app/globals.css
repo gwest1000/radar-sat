@@ -296,7 +296,7 @@ input:focus-visible {
 .flame-highlight {
   fill: none;
   stroke: #ffe45b;
-  stroke-width: 5;
+  stroke-width: 3;
 }
 
 .fire-count {
