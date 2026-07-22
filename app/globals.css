@@ -191,6 +191,75 @@ input:focus-visible {
   user-select: none;
 }
 
+.point-symbol-layer {
+  position: absolute;
+  z-index: 12;
+  pointer-events: none;
+  user-select: none;
+}
+
+.eccc-north-fallback {
+  /* GLM supplies the south; ECCC density fills northern BC as in WestWX. */
+  clip-path: inset(0 0 39% 0);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 88%, transparent 100%);
+}
+
+.lightning-marker,
+.fire-marker {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.72));
+}
+
+.lightning-marker svg {
+  width: clamp(8px, 1.15vw, 15px);
+  height: clamp(8px, 1.15vw, 15px);
+}
+
+.lightning-marker.age-0 {
+  color: #fff7c7;
+  filter: drop-shadow(0 0 4px #fff) drop-shadow(0 0 12px #cfb7ff);
+  animation: lightning-arrival 380ms ease-out both;
+}
+
+.lightning-marker.age-1 { color: #ffd866; opacity: 0.86; }
+.lightning-marker.age-2 { color: #ffa44d; opacity: 0.62; }
+.lightning-marker.age-3 { color: #e9793f; opacity: 0.34; }
+
+.fire-marker { color: #ff815c; }
+.fire-marker.age-1 { color: #ffad61; opacity: 0.86; }
+.fire-marker.age-2 { color: #ffcf86; opacity: 0.64; }
+
+.fire-marker svg {
+  width: clamp(9px, 1.35vw, 17px);
+  height: clamp(9px, 1.35vw, 17px);
+}
+
+.legend-marker {
+  position: relative;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  opacity: 1;
+  transform: none;
+  animation: none !important;
+}
+
+.legend-marker.lightning-marker svg,
+.legend-marker.fire-marker svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes lightning-arrival {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.35); }
+  34% { opacity: 1; transform: translate(-50%, -50%) scale(2.15); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
 .map-loading {
   position: absolute;
   inset: 0;
@@ -438,14 +507,6 @@ input:focus-visible {
   gap: 7px;
   color: var(--muted);
   font-size: 0.72rem;
-}
-
-.lightning-symbol {
-  width: 11px;
-  height: 11px;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px #02070b;
 }
 
 .watershed-legend {
@@ -701,5 +762,9 @@ input:focus-visible {
   *::after {
     scroll-behavior: auto !important;
     transition: none !important;
+  }
+
+  .lightning-marker.age-0 {
+    animation: none !important;
   }
 }

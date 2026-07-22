@@ -426,9 +426,20 @@ def _broad_product(
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            *(
+                [{"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True}]
+                if rapid_north_america
+                else []
+            ),
             {"id": "boundaries", "opacity": 1.0},
         ],
-        "legends": [anchor_layer, "radar-rain", "glm-lightning-age", "smoke-confidence"],
+        "legends": [
+            anchor_layer,
+            "radar-rain",
+            "glm-lightning-age",
+            "smoke-confidence",
+            *(["hotspots"] if rapid_north_america else []),
+        ],
         "notes": notes
         + [
             "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 µm infrared at night; no false-colour IR is mixed across the terminator.",
@@ -437,7 +448,12 @@ def _broad_product(
                 if rapid_north_america
                 else []
             ),
-            "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; useful GOES-18 coverage ends near 52°N.",
+            "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
+            *(
+                ["NRCan wildfire flames cover the BC portion of the North America map and are satellite thermal detections, not confirmed fire perimeters."]
+                if rapid_north_america
+                else []
+            ),
             "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         ],
     }

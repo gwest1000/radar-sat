@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T15:43:59.029672Z",
+  "generatedAt": "2026-07-22T17:35:28.101519Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -2404,6 +2404,12 @@
           "defaultEnabled": true
         },
         {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -2412,14 +2418,16 @@
         "westwx-ir",
         "radar-rain",
         "glm-lightning-age",
-        "smoke-confidence"
+        "smoke-confidence",
+        "hotspots"
       ],
       "notes": [
         "GOES-18 supplies genuine ten-minute scan times on the common 2 km display grid; the far eastern edge has weaker viewing geometry than the legacy GOES-18/19 blend.",
         "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder.",
         "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
         "North America satellite backgrounds use genuine GOES-18 scan times at a nominal ten-minute cadence; the far eastern edge is outside the best GOES-West viewing geometry.",
-        "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; useful GOES-18 coverage ends near 52\u00b0N.",
+        "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
+        "NRCan wildfire flames cover the BC portion of the North America map and are satellite thermal detections, not confirmed fire perimeters.",
         "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ]
     },
@@ -2496,7 +2504,7 @@
         "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
         "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
         "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
-        "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; useful GOES-18 coverage ends near 52\u00b0N.",
+        "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
         "The smoke tint marks NOAA ADP medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ]
     }

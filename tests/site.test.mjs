@@ -29,6 +29,28 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /activeAnchorLayer/);
 });
 
+test("renders weather-app lightning bolts and wildfire flames from point frames", async () => {
+  const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
+  const pointData = await readFile(new URL("../app/point-data.ts", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(viewer, /"lightning-trail"\) return "lightning-points"/);
+  assert.match(viewer, /"glm-lightning-trail"\) return "glm-lightning-points"/);
+  assert.match(viewer, /"hotspots"\) return "hotspot-points"/);
+  assert.match(viewer, /pointFrameReferences\([\s\S]*6 \* 60/);
+  assert.match(viewer, /<ZapIcon \/>/);
+  assert.match(viewer, /<FlameIcon \/>/);
+  assert.match(viewer, /nextPointReferences\.forEach\(\(reference\) => preloadPointFrame/);
+  assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
+  assert.match(viewer, /ecccFallbackPointReferences/);
+  assert.match(viewer, /layerId === "westwx-visir"\) return "VisIR Blend"/);
+  assert.match(viewer, /layerId\.startsWith\("westwx-"\)/);
+  assert.match(pointData, /coordinateSpace\.origin === "top-left"/);
+  assert.match(styles, /\.lightning-marker\.age-0/);
+  assert.match(styles, /\.fire-marker\.age-2/);
+  assert.match(styles, /\.eccc-north-fallback/);
+  assert.match(styles, /@keyframes lightning-arrival/);
+});
+
 test("ships a runtime data configuration", async () => {
   const config = JSON.parse(await readFile(new URL("../public/config.json", import.meta.url), "utf8"));
   assert.equal(typeof config.catalogUrl, "string");
@@ -58,6 +80,8 @@ test("ships a runtime data configuration", async () => {
     northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
     ["westwx-visir", "westwx-visible", "westwx-ir"],
   );
+  assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
+  assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-ir");
 });
 
