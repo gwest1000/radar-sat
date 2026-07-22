@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from PIL import Image
 
@@ -51,6 +52,21 @@ def tiny_domain() -> Domain:
         width=8,
         height=4,
         tier="broad",
+    )
+
+
+def tiny_bc_domain() -> Domain:
+    return Domain(
+        id="bc",
+        title="Tiny BC rapid test",
+        west=-130,
+        south=48,
+        east=-114,
+        north=60,
+        crs="EPSG:4326",
+        width=6,
+        height=5,
+        tier="bc",
     )
 
 
@@ -220,6 +236,72 @@ class WestWxRenderTests(unittest.TestCase):
             self.assertTrue(all(not path.exists() for path in client.downloaded))
             self.assertFalse((cache / "renders").exists())
             self.assertFalse((cache / "westwx-staging").exists())
+
+    def test_production_render_reuses_one_download_for_north_america_and_bc(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            cache = base / "cache"
+            north_america = tiny_domain()
+            bc = tiny_bc_domain()
+            value = dt.datetime(2026, 7, 21, 20, 20, 21, tzinfo=UTC)
+            source = scan(value, 32)
+            client = DownloadClient()
+
+            def fake_render(
+                source_paths: object,
+                _reader: str,
+                _infrared_dataset: str,
+                target: Domain,
+                work_root: Path,
+                stem: str,
+            ) -> RenderedSatellite:
+                self.assertTrue(list(source_paths)[0].is_file())  # type: ignore[arg-type]
+                render_root = work_root / "renders"
+                render_root.mkdir(parents=True, exist_ok=True)
+                visible = render_root / f"{stem}-visible.webp"
+                infrared = render_root / f"{stem}-ir.webp"
+                infrared_gray = render_root / f"{stem}-ir-gray.webp"
+                mask = render_root / f"{stem}-mask.png"
+                Image.new("RGB", (target.width, target.height), (30, 150, 80)).save(
+                    visible, "WEBP", lossless=True
+                )
+                Image.new("RGB", (target.width, target.height), (220, 30, 120)).save(
+                    infrared, "WEBP", lossless=True
+                )
+                Image.new("RGBA", (target.width, target.height), (170, 170, 170, 255)).save(
+                    infrared_gray, "WEBP", lossless=True, exact=True
+                )
+                Image.new("L", (target.width, target.height), 255).save(mask, "PNG")
+                return RenderedSatellite(visible, infrared, infrared_gray, mask)
+
+            with mock.patch.dict(
+                "radarsat.westwx_satellite.DOMAINS",
+                {"north-america": north_america, "bc": bc},
+                clear=True,
+            ):
+                result = render_westwx_scan(
+                    root,
+                    source,
+                    client,  # type: ignore[arg-type]
+                    cache,
+                    render_source=fake_render,
+                )
+
+            self.assertEqual(result.status, "rendered")
+            self.assertEqual(len(client.downloaded), 1)
+            for domain, layer_ids in (
+                (north_america, ("westwx-visible", "westwx-visir", "westwx-ir")),
+                (bc, ("raw-visible", "raw-visir", "raw-ir")),
+            ):
+                for layer_id in layer_ids:
+                    layer = LAYERS[layer_id]
+                    self.assertTrue(frame_path(root, domain, layer, value).is_file())
+                    payload = json.loads(
+                        metadata_path(root, domain, layer, value).read_text()
+                    )
+                    self.assertEqual(payload["nominalCadenceMinutes"], 10)
+                    self.assertEqual(payload["rapidDomain"], domain.id)
 
     def test_failed_scan_is_isolated_and_later_scan_still_runs(self) -> None:
         values = [

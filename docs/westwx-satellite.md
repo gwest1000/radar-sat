@@ -1,18 +1,21 @@
 # WestWX ten-minute GOES-18 satellite path
 
-WestWX has a dedicated North America satellite ingest that is deliberately
-separate from the Forecast Graphics raw-satellite products. It reads genuine
-NOAA GOES-18 ABI Level-2 full-disk scans at their nominal ten-minute cadence,
-keeps the scan-start seconds from the NOAA filename, and writes:
+Radar-Sat has a dedicated rapid satellite ingest that is deliberately separate
+from the lower-rate multi-satellite products. It reads genuine NOAA GOES-18 ABI
+Level-2 full-disk scans at their nominal ten-minute cadence, keeps the scan-start
+seconds from the NOAA filename, downloads each scan once, and writes:
 
 - `westwx-visible`: calibrated true colour for daylight use;
 - `westwx-visir`: calibrated true colour in daylight blended into neutral IR
   through twilight; and
-- `westwx-ir`: the existing enhanced C13 brightness-temperature rendering.
+- `westwx-ir`: the existing enhanced C13 brightness-temperature rendering;
+- `raw-visible`, `raw-visir`, and `raw-ir`: the matching higher-resolution BC
+  renderings from the same source download.
 
-Radar-Sat and WestWX share these compact rendered layers. It does not change
-`raw-visible`, `raw-visir`, `raw-ir`, their half-hour clock, the GOES-18/19
-North America blend, or any Forecast Graphics product.
+Radar-Sat and WestWX share the compact North America renderings. When this path
+is enabled, the legacy raw ingest no longer writes duplicate half-hour BC frames;
+its GOES-18/19 North America blend and Himawari-9/GOES-18 Pacific blend remain on
+their lower-rate clocks.
 GOES-18-only imagery cannot cover the far eastern edge as well as the blended
 Forecast Graphics product; that is the intentional bandwidth tradeoff for a
 ten-minute WestWX loop.
@@ -26,7 +29,12 @@ again immediately before download. A failed scan is reported without stopping
 later scans. Raw NetCDF and intermediate rasters are deleted after each scan;
 only Satpy auxiliary data is cached.
 
-The scheduled production cycle permits at most two scans and 0.7 GB of source
+Objects are discovered from NOAA's public AWS bucket, then downloaded from the
+matching Google public-data mirror when available. NOAA/AWS remains an automatic
+fallback if that mirror fails. This keeps discovery independent while avoiding
+the materially slower AWS route observed from the production host.
+
+The scheduled production cycle permits at most two scans and 0.8 GB of source
 downloads. That lets it recover the occasional scan left behind by a long
 radar/Pacific cycle without starting an unbounded catch-up. Source files are
 still processed one at a time and deleted after the compact display rasters
@@ -45,9 +53,10 @@ PYTHONPATH=. .venv/bin/python scripts/backfill_westwx_satellite.py \
 ```
 
 The measured source-object sizes should be checked before widening the bounds.
-At roughly 300–310 MB per scan, a complete day is about 43–45 GB of source
-transfer even though the retained WebP archive is much smaller. No command in
-the normal pipeline starts that full backfill automatically.
+At roughly 360–370 MB per scan, a complete day is about 52–54 GB of source
+transfer even though the retained WebP archive is much smaller. Rendering both
+grids does not require a second source download. No command in the normal
+pipeline starts that full backfill automatically.
 
 After the benchmark, the exact three-hour command is:
 
@@ -62,11 +71,11 @@ Then the exact 24-hour catch-up command is:
 ```bash
 PYTHONPATH=. .venv/bin/python scripts/backfill_westwx_satellite.py \
   --output-root data/output --hours 24 --max-frames 144 \
-  --max-download-gb 46 --apply
+  --max-download-gb 55 --apply
 ```
 
 The second command resumes rather than redownloading the first three hours.
-If current object sizes make the 46 GB boundary insufficient, it stops at a
+If current object sizes make the 55 GB boundary insufficient, it stops at a
 contiguous newest-first prefix; rerun with a deliberately reviewed higher byte
 cap. Status and per-scan download/render timings are written to
 `data/output/status/westwx-satellite-backfill.json`.

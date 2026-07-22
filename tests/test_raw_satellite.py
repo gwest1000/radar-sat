@@ -8,11 +8,13 @@ from pathlib import Path
 from unittest import mock
 
 import numpy as np
+import requests
 from PIL import Image
 
 from radarsat.config import DOMAINS, LAYERS, Domain
 from radarsat.pipeline import derive_raw_visir_archive, frame_path, metadata_path, write_metadata
 from radarsat.raw_satellite import (
+    PublicObject,
     PublicSatelliteClient,
     RenderedSatellite,
     _harmonize_visible_overlap,
@@ -40,6 +42,48 @@ class DiscoveryClient(PublicSatelliteClient):
 
 
 class RawSatelliteTests(unittest.TestCase):
+    def test_goes18_download_uses_google_mirror_then_aws_fallback(self) -> None:
+        item = PublicObject(
+            "noaa-goes18",
+            "ABI-L2-MCMIPF/2026/203/21/example.nc",
+            3,
+            dt.datetime(2026, 7, 22, 21, 10, tzinfo=UTC),
+        )
+        self.assertEqual(
+            item.urls,
+            (
+                "https://storage.googleapis.com/gcp-public-data-goes-18/"
+                "ABI-L2-MCMIPF/2026/203/21/example.nc",
+                "https://noaa-goes18.s3.amazonaws.com/"
+                "ABI-L2-MCMIPF/2026/203/21/example.nc",
+            ),
+        )
+        response = mock.Mock()
+        response.iter_content.return_value = [b"abc"]
+        session = mock.Mock()
+        session.get.side_effect = [requests.ConnectionError("mirror unavailable"), response]
+        client = PublicSatelliteClient()
+        client.session = session
+        with tempfile.TemporaryDirectory() as temporary:
+            downloaded = client.download(item, Path(temporary), 10)
+            self.assertEqual(downloaded.read_bytes(), b"abc")
+        self.assertEqual(
+            [call.args[0] for call in session.get.call_args_list], list(item.urls)
+        )
+        response.close.assert_called_once()
+
+        goes19 = PublicObject(
+            "noaa-goes19",
+            "ABI-L2-MCMIPF/2026/203/21/example.nc",
+            3,
+            item.valid_time,
+        )
+        self.assertTrue(
+            goes19.url.startswith(
+                "https://storage.googleapis.com/gcp-public-data-goes-19/"
+            )
+        )
+
     def test_goes_scans_are_normalized_to_archive_clock(self) -> None:
         source = dt.datetime(2026, 7, 21, 6, 40, 20, tzinfo=UTC)
         self.assertEqual(normalized_frame_time(source), dt.datetime(2026, 7, 21, 6, 30, tzinfo=UTC))

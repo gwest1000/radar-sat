@@ -25,6 +25,12 @@ from .geomet import projected_bbox
 
 UTC = dt.timezone.utc
 GOES_BUCKETS = {"G18": "noaa-goes18", "G19": "noaa-goes19"}
+PUBLIC_DOWNLOAD_MIRRORS = {
+    # Google mirrors the NOAA GOES archives and is often materially faster
+    # from western Canada. Keep NOAA's AWS bucket as the automatic fallback.
+    "noaa-goes18": ("https://storage.googleapis.com/gcp-public-data-goes-18",),
+    "noaa-goes19": ("https://storage.googleapis.com/gcp-public-data-goes-19",),
+}
 HIMAWARI_BUCKET = "noaa-himawari9"
 GOES_FILENAME = re.compile(r"_s(?P<year>\d{4})(?P<day>\d{3})(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})\d_")
 HIMAWARI_FILENAME = re.compile(
@@ -42,7 +48,15 @@ class PublicObject:
 
     @property
     def url(self) -> str:
-        return f"https://{self.bucket}.s3.amazonaws.com/{quote(self.key, safe='/')}"
+        return self.urls[0]
+
+    @property
+    def urls(self) -> tuple[str, ...]:
+        encoded_key = quote(self.key, safe="/")
+        mirrors = tuple(
+            f"{base}/{encoded_key}" for base in PUBLIC_DOWNLOAD_MIRRORS.get(self.bucket, ())
+        )
+        return (*mirrors, f"https://{self.bucket}.s3.amazonaws.com/{encoded_key}")
 
 
 @dataclass(frozen=True)
@@ -163,23 +177,37 @@ class PublicSatelliteClient:
             raise RuntimeError(
                 f"Raw satellite cache cap would be exceeded: {existing + item.size:,} > {max_bytes:,} bytes"
             )
-        response = self.session.get(item.url, stream=True, timeout=self.timeout)
-        response.raise_for_status()
-        written = 0
-        try:
-            with partial.open("wb") as output:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if not chunk:
-                        continue
-                    output.write(chunk)
-                    written += len(chunk)
-            if written != item.size:
-                raise RuntimeError(f"Truncated satellite download for {item.key}: {written:,} != {item.size:,}")
-            partial.replace(destination)
-        finally:
+        failures: list[str] = []
+        for url in item.urls:
+            response = None
+            written = 0
             partial.unlink(missing_ok=True)
-            response.close()
-        return destination
+            try:
+                response = self.session.get(url, stream=True, timeout=self.timeout)
+                response.raise_for_status()
+                with partial.open("wb") as output:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if not chunk:
+                            continue
+                        output.write(chunk)
+                        written += len(chunk)
+                if written != item.size:
+                    raise RuntimeError(
+                        f"Truncated satellite download for {item.key}: "
+                        f"{written:,} != {item.size:,}"
+                    )
+                partial.replace(destination)
+                return destination
+            except (requests.RequestException, RuntimeError) as error:
+                failures.append(f"{url}: {type(error).__name__}: {error}")
+            finally:
+                partial.unlink(missing_ok=True)
+                if response is not None:
+                    response.close()
+        raise RuntimeError(
+            f"All public satellite download endpoints failed for {item.key}: "
+            + "; ".join(failures)
+        )
 
 
 def clear_downloads(cache_root: Path) -> int:

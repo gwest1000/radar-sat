@@ -1,9 +1,9 @@
 """Dedicated ten-minute GOES-18 satellite ingest for WestWX.
 
 This module intentionally does not change the lower-cadence, multi-satellite
-path in :mod:`radarsat.pipeline`. It renders only the ``north-america`` grid
-and writes shared ten-minute ``westwx-visible``, ``westwx-visir`` and
-``westwx-ir`` layers used by WestWX and Radar-Sat.
+path in :mod:`radarsat.pipeline`. It downloads each GOES-18 scan once, renders
+the ``north-america`` WestWX layers, and reuses the same source for Radar-Sat's
+BC raw layers at the genuine ten-minute scan cadence.
 """
 
 from __future__ import annotations
@@ -36,11 +36,12 @@ from .raw_satellite import (
 
 UTC = dt.timezone.utc
 WESTWX_DOMAIN_ID = "north-america"
+WESTWX_DOMAIN_IDS = (WESTWX_DOMAIN_ID, "bc")
 WESTWX_PRODUCT = "ABI-L2-MCMIPF"
 WESTWX_SOURCE = "NOAA GOES-18"
 WESTWX_SOURCE_LAYER = "ABI-L2-MCMIPF"
 WESTWX_RENDER_VERSION = 2
-DEFAULT_MAX_SOURCE_BYTES = 350_000_000
+DEFAULT_MAX_SOURCE_BYTES = 400_000_000
 
 
 class WestWxDownloadBudgetError(RuntimeError):
@@ -197,11 +198,23 @@ def westwx_scan_ready(
     scan: PublicObject,
     domain: Domain | None = None,
 ) -> bool:
-    selected = domain or DOMAINS[WESTWX_DOMAIN_ID]
-    for layer_id in ("westwx-visible", "westwx-visir", "westwx-ir"):
+    selected_domains = (domain,) if domain is not None else tuple(
+        DOMAINS[domain_id] for domain_id in WESTWX_DOMAIN_IDS
+    )
+    return all(_domain_scan_ready(root, scan, selected) for selected in selected_domains)
+
+
+def _layer_ids(domain: Domain) -> tuple[str, str, str]:
+    if domain.id == "bc":
+        return "raw-visible", "raw-visir", "raw-ir"
+    return "westwx-visible", "westwx-visir", "westwx-ir"
+
+
+def _domain_scan_ready(root: Path, scan: PublicObject, domain: Domain) -> bool:
+    for layer_id in _layer_ids(domain):
         layer = LAYERS[layer_id]
-        image = frame_path(root, selected, layer, scan.valid_time)
-        metadata = metadata_path(root, selected, layer, scan.valid_time)
+        image = frame_path(root, domain, layer, scan.valid_time)
+        metadata = metadata_path(root, domain, layer, scan.valid_time)
         if not image.is_file() or not _metadata_matches(metadata, scan):
             return False
     return True
@@ -222,11 +235,10 @@ def plan_backfill(
         raise ValueError("max_frames must be positive")
     if max_download_bytes <= 0:
         raise ValueError("max_download_bytes must be positive")
-    selected_domain = domain or DOMAINS[WESTWX_DOMAIN_ID]
     pending: list[PublicObject] = []
     skipped_ready = 0
     for scan in discovery.scans:
-        if not overwrite and westwx_scan_ready(root, scan, selected_domain):
+        if not overwrite and westwx_scan_ready(root, scan, domain):
             skipped_ready += 1
             continue
         pending.append(scan)
@@ -293,12 +305,19 @@ def render_westwx_scan(
     domain: Domain | None = None,
     render_source: RenderSource = render_satpy_domain_isolated,
 ) -> ScanResult:
-    """Download and atomically install one genuine GOES-18 scan pair."""
+    """Download once and atomically install every requested GOES-18 grid."""
 
-    selected_domain = domain or DOMAINS[WESTWX_DOMAIN_ID]
-    if selected_domain.id != WESTWX_DOMAIN_ID:
-        raise ValueError("the WestWX rapid path may render only north-america")
-    if not overwrite and westwx_scan_ready(root, scan, selected_domain):
+    selected_domains = (domain,) if domain is not None else tuple(
+        DOMAINS[domain_id] for domain_id in WESTWX_DOMAIN_IDS
+    )
+    if any(selected.id not in WESTWX_DOMAIN_IDS for selected in selected_domains):
+        raise ValueError("the WestWX rapid path may render only north-america and bc")
+    pending_domains = tuple(
+        selected
+        for selected in selected_domains
+        if overwrite or not _domain_scan_ready(root, scan, selected)
+    )
+    if not pending_domains:
         return ScanResult(scan.valid_time, "skipped", scan.size)
     if scan.size > max_source_bytes:
         raise WestWxDownloadBudgetError(
@@ -313,81 +332,88 @@ def render_westwx_scan(
         source_path = client.download(scan, cache_root, max_source_bytes)
         download_seconds = time.perf_counter() - download_started
         render_started = time.perf_counter()
-        stem = f"westwx-g18-{scan.valid_time:%Y%m%dT%H%M%S}"
-        rendered = render_source(
-            [source_path],
-            "abi_l2_nc",
-            "C13",
-            selected_domain,
-            cache_root,
-            stem,
-        )
-        staging = cache_root / "westwx-staging"
-        staging.mkdir(parents=True, exist_ok=True)
-        staged_visible = staging / f"{stem}-visible.webp"
-        staged_visir = staging / f"{stem}-visir.webp"
-        staged_ir = staging / f"{stem}-ir.webp"
-        compose_details = compose_visible_infrared(
-            rendered.visible,
-            rendered.infrared_gray,
-            selected_domain,
-            scan.valid_time,
-            staged_visir,
-        )
-        _stage_rgb(rendered.visible, staged_visible)
-        _stage_rgb(rendered.infrared, staged_ir)
+        for selected_domain in pending_domains:
+            stem = f"westwx-g18-{selected_domain.id}-{scan.valid_time:%Y%m%dT%H%M%S}"
+            rendered = render_source(
+                [source_path],
+                "abi_l2_nc",
+                "C13",
+                selected_domain,
+                cache_root,
+                stem,
+            )
+            staging = cache_root / "westwx-staging" / selected_domain.id
+            staging.mkdir(parents=True, exist_ok=True)
+            staged_visible = staging / f"{stem}-visible.webp"
+            staged_visir = staging / f"{stem}-visir.webp"
+            staged_ir = staging / f"{stem}-ir.webp"
+            compose_details = compose_visible_infrared(
+                rendered.visible,
+                rendered.infrared_gray,
+                selected_domain,
+                scan.valid_time,
+                staged_visir,
+            )
+            _stage_rgb(rendered.visible, staged_visible)
+            _stage_rgb(rendered.infrared, staged_ir)
 
-        visible_layer = LAYERS["westwx-visible"]
-        visir_layer = LAYERS["westwx-visir"]
-        ir_layer = LAYERS["westwx-ir"]
-        visible_destination = frame_path(root, selected_domain, visible_layer, scan.valid_time)
-        visir_destination = frame_path(root, selected_domain, visir_layer, scan.valid_time)
-        ir_destination = frame_path(root, selected_domain, ir_layer, scan.valid_time)
-        _install_staged(staged_visible, visible_destination)
-        _install_staged(staged_visir, visir_destination)
-        _install_staged(staged_ir, ir_destination)
-        common_extra: dict[str, object] = {
-            "renderVersion": WESTWX_RENDER_VERSION,
-            "sourceFile": Path(scan.key).name,
-            "sourceBytes": scan.size,
-            "scanStart": format_utc(scan.valid_time),
-            "nominalCadenceMinutes": 10,
-            "westwxOnly": True,
-        }
-        source_times = {"GOES-18 ABI scan start": scan.valid_time}
-        write_metadata(
-            root,
-            selected_domain,
-            visible_layer,
-            scan.valid_time,
-            visible_destination,
-            source_times,
-            source=WESTWX_SOURCE,
-            source_layer=f"{WESTWX_SOURCE_LAYER} true colour",
-            extra=common_extra,
-        )
-        write_metadata(
-            root,
-            selected_domain,
-            visir_layer,
-            scan.valid_time,
-            visir_destination,
-            source_times,
-            source=WESTWX_SOURCE,
-            source_layer=f"{WESTWX_SOURCE_LAYER} true-colour/IR blend",
-            extra={**common_extra, **compose_details},
-        )
-        write_metadata(
-            root,
-            selected_domain,
-            ir_layer,
-            scan.valid_time,
-            ir_destination,
-            source_times,
-            source=WESTWX_SOURCE,
-            source_layer=f"{WESTWX_SOURCE_LAYER} C13",
-            extra=common_extra,
-        )
+            visible_id, visir_id, ir_id = _layer_ids(selected_domain)
+            visible_layer = LAYERS[visible_id]
+            visir_layer = LAYERS[visir_id]
+            ir_layer = LAYERS[ir_id]
+            visible_destination = frame_path(
+                root, selected_domain, visible_layer, scan.valid_time
+            )
+            visir_destination = frame_path(
+                root, selected_domain, visir_layer, scan.valid_time
+            )
+            ir_destination = frame_path(root, selected_domain, ir_layer, scan.valid_time)
+            _install_staged(staged_visible, visible_destination)
+            _install_staged(staged_visir, visir_destination)
+            _install_staged(staged_ir, ir_destination)
+            common_extra: dict[str, object] = {
+                "renderVersion": WESTWX_RENDER_VERSION,
+                "sourceFile": Path(scan.key).name,
+                "sourceBytes": scan.size,
+                "scanStart": format_utc(scan.valid_time),
+                "nominalCadenceMinutes": 10,
+                "westwxOnly": True,
+                "rapidDomain": selected_domain.id,
+            }
+            source_times = {"GOES-18 ABI scan start": scan.valid_time}
+            write_metadata(
+                root,
+                selected_domain,
+                visible_layer,
+                scan.valid_time,
+                visible_destination,
+                source_times,
+                source=WESTWX_SOURCE,
+                source_layer=f"{WESTWX_SOURCE_LAYER} true colour",
+                extra=common_extra,
+            )
+            write_metadata(
+                root,
+                selected_domain,
+                visir_layer,
+                scan.valid_time,
+                visir_destination,
+                source_times,
+                source=WESTWX_SOURCE,
+                source_layer=f"{WESTWX_SOURCE_LAYER} true-colour/IR blend",
+                extra={**common_extra, **compose_details},
+            )
+            write_metadata(
+                root,
+                selected_domain,
+                ir_layer,
+                scan.valid_time,
+                ir_destination,
+                source_times,
+                source=WESTWX_SOURCE,
+                source_layer=f"{WESTWX_SOURCE_LAYER} C13",
+                extra=common_extra,
+            )
         render_seconds = time.perf_counter() - render_started
         return ScanResult(
             scan.valid_time,

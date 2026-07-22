@@ -1402,7 +1402,7 @@ def ingest_raw_satellite(
     domain_ids: Iterable[str],
     now: dt.datetime | None = None,
 ) -> dict[str, object]:
-    """Ingest one bounded half-hourly calibrated satellite frame.
+    """Ingest one bounded half-hourly calibrated legacy satellite frame.
 
     Large source files are downloaded one satellite at a time and removed in a
     ``finally`` block. Only compact WebP display rasters and Satpy's small
@@ -1420,6 +1420,13 @@ def ingest_raw_satellite(
 
     selected = [DOMAINS[domain_id] for domain_id in domain_ids if domain_id in DOMAINS]
     selected = [domain for domain in selected if domain.id in {"bc", "north-america", "north-pacific"}]
+    rapid_bc_enabled = os.environ.get(
+        "RADARSAT_WESTWX_SATELLITE_ENABLED", "0"
+    ).lower() in {"1", "true", "yes"}
+    if rapid_bc_enabled:
+        # The dedicated GOES-18 path reuses each ten-minute download for BC.
+        # Avoid a duplicate, normalized half-hour BC frame from this legacy path.
+        selected = [domain for domain in selected if domain.id != "bc"]
     if not selected:
         return {"status": "disabled", "domains": []}
     current = (now or dt.datetime.now(UTC)).astimezone(UTC)

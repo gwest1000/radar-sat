@@ -28,7 +28,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Discover exact GOES-18 full-disk scan times and render a newest-first, "
-            "bounded WestWX-only north-america archive. The default is a dry run."
+            "bounded North America and BC rapid archive. The default is a dry run."
         )
     )
     parser.add_argument("--output-root", type=Path, default=Path("data/output"))
@@ -55,7 +55,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--max-source-mb",
         type=float,
         default=DEFAULT_MAX_SOURCE_BYTES / 1_000_000,
-        help="Reject any single unexpectedly large NOAA object (default: 350).",
+        help="Reject any single unexpectedly large NOAA object (default: 400).",
     )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument(
