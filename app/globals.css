@@ -51,9 +51,9 @@ input:focus-visible {
 }
 
 .app-shell {
-  width: min(1680px, 100%);
+  width: 100%;
   margin: 0 auto;
-  padding: 18px clamp(12px, 2vw, 30px) 30px;
+  padding: 14px clamp(10px, 1vw, 18px) 30px;
 }
 
 .site-header {
@@ -159,8 +159,8 @@ input:focus-visible {
 
 .viewer-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 205px;
-  gap: 13px;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 10px;
   align-items: start;
 }
 
@@ -733,26 +733,6 @@ input:focus-visible {
 
   .coverage-key {
     display: none;
-  }
-}
-
-@media (min-width: 841px) and (max-height: 900px) {
-  .app-shell {
-    padding-top: 10px;
-  }
-
-  .site-header {
-    margin-bottom: 8px;
-  }
-
-  .product-nav {
-    margin-bottom: 8px;
-  }
-
-  .map-stage,
-  .timeline-panel {
-    width: min(100%, max(320px, var(--map-cap-width)));
-    margin-inline: auto;
   }
 }
 

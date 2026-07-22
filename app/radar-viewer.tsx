@@ -1036,7 +1036,6 @@ export function RadarViewer() {
           className="map-column"
           style={{
             "--map-aspect": `${mapAspect}`,
-            "--map-cap-width": `calc(${(mapAspect * 100).toFixed(6)}vh - ${(mapAspect * 330).toFixed(3)}px)`,
           } as CSSProperties}
         >
           <div className="timeline-panel">

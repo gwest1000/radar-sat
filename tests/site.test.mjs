@@ -51,6 +51,15 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(styles, /@keyframes lightning-arrival/);
 });
 
+test("keeps the desktop controls and map at the full available width", async () => {
+  const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /\.app-shell\s*\{[\s\S]*?width: 100%/);
+  assert.match(styles, /\.viewer-grid\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 190px/);
+  assert.doesNotMatch(styles, /--map-cap-width/);
+  assert.doesNotMatch(viewer, /--map-cap-width/);
+});
+
 test("ships a runtime data configuration", async () => {
   const config = JSON.parse(await readFile(new URL("../public/config.json", import.meta.url), "utf8"));
   assert.equal(typeof config.catalogUrl, "string");
