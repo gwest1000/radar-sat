@@ -143,6 +143,10 @@ const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]
 // 7–12 KB). Prefer them to downloading point JSON and repainting hundreds of
 // symbols in the browser on every animation frame.
 const RASTER_LIGHTNING_OVERLAYS = true;
+// Active-fire and hotspot point payloads remain available for crisp regional
+// rendering, but overview loops use a precomposed transparent PNG to avoid
+// repainting hundreds of flame paths on every animation frame.
+const RASTER_FIRE_OVERLAYS = true;
 const WEB_MERCATOR_RADIUS = 6_378_137;
 const WGS84_ECCENTRICITY = 0.08181919084262149;
 const NORTH_AMERICA_BOUNDS = [-21_051_700.011, 557_305.257, -4_551_782.871, 12_932_243.112] as const;
@@ -174,6 +178,10 @@ function usesRasterLightning(product: Product | undefined): boolean {
   // from point data on cropped BC views so bolts and their arrival glow remain
   // sharp at the final browser resolution.
   return RASTER_LIGHTNING_OVERLAYS && !(product?.domain === "bc" && product.viewport);
+}
+
+function usesRasterFire(product: Product | undefined): boolean {
+  return RASTER_FIRE_OVERLAYS && !(product?.domain === "bc" && product.viewport);
 }
 
 function absoluteUrl(path: string, base: string): string {
@@ -613,7 +621,10 @@ function composeLayers(
     if (
       pointsId
       && domain.layers[pointsId]?.frames?.length
-      && (!LIGHTNING_CONTROLLERS.has(recipe.id) || !usesRasterLightning(product))
+      && (
+        (LIGHTNING_CONTROLLERS.has(recipe.id) && !usesRasterLightning(product))
+        || (recipe.id === "hotspots" && !usesRasterFire(product))
+      )
     ) return [];
     const staticLayer = domain.staticLayers[recipe.id];
     if (staticLayer) {
@@ -1462,7 +1473,7 @@ export function RadarViewer() {
       : product.domain === "bc"
         ? catalog?.domains.bc
         : catalog?.domains["north-america"];
-    return resilientActiveFireFrameReferences(
+    return rollingPointFrameReferences(
       pointDomain?.layers["hotspot-points"]?.frames ?? [],
       anchor.validTime,
       catalogBase,
@@ -1481,7 +1492,7 @@ export function RadarViewer() {
     const pointDomain = domain?.layers["active-fire-points"]?.frames?.length
       ? domain
       : catalog.domains["north-america"];
-    return rollingPointFrameReferences(
+    return resilientActiveFireFrameReferences(
       pointDomain?.layers["active-fire-points"]?.frames ?? [],
       anchor.validTime,
       catalogBase,
@@ -1537,6 +1548,10 @@ export function RadarViewer() {
 
   useEffect(() => {
     let cancelled = false;
+    if (usesRasterFire(product)) {
+      const clearMarkers = window.setTimeout(() => setFireMarkers([]), 0);
+      return () => window.clearTimeout(clearMarkers);
+    }
     const hotspotReference = firePointReferences[0];
     const activeReference = activeFirePointReferences[0];
     if (!hotspotReference && !activeReference) {
@@ -1550,7 +1565,7 @@ export function RadarViewer() {
       if (!cancelled) setFireMarkers([]);
     });
     return () => { cancelled = true; };
-  }, [activeFirePointReferences, firePointReferences, product?.domain]);
+  }, [activeFirePointReferences, firePointReferences, product]);
 
   useEffect(() => {
     if (!isAnimating || !catalog || !domain || !product || !catalogBase) return;
@@ -1558,6 +1573,7 @@ export function RadarViewer() {
       const references = product.layers.flatMap((recipe) => {
         if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
         if (usesRasterLightning(product) && LIGHTNING_CONTROLLERS.has(recipe.id)) return [];
+        if (usesRasterFire(product) && recipe.id === "hotspots") return [];
         const pointsId = pointLayerId(recipe.id);
         if (!pointsId) return [];
         const nativePointDomain = domain.layers[pointsId]?.frames?.length ? domain : undefined;
@@ -1582,7 +1598,11 @@ export function RadarViewer() {
             );
       });
       const fireRecipe = product.layers.find((recipe) => recipe.id === "hotspots");
-      if (fireRecipe && isProductLayerEnabled(fireRecipe, optionalLayers, product.layers)) {
+      if (
+        !usesRasterFire(product)
+        && fireRecipe
+        && isProductLayerEnabled(fireRecipe, optionalLayers, product.layers)
+      ) {
         const activePointDomain = domain.layers["active-fire-points"]?.frames?.length
           ? domain
           : catalog.domains["north-america"];

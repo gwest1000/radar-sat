@@ -55,6 +55,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /candidate\.pointReferences\.forEach\(\(reference\) => preloadPointFrame/);
   assert.match(viewer, /<LightningCanvas/);
   assert.match(viewer, /RASTER_LIGHTNING_OVERLAYS = true/);
+  assert.match(viewer, /RASTER_FIRE_OVERLAYS = true/);
   assert.match(viewer, /typically only[\s\S]*7–12 KB/);
   assert.match(viewer, /<FireCanvas/);
   assert.match(viewer, /data-marker-count=\{markers\.length\}/);
@@ -80,6 +81,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.doesNotMatch(viewer, /latestRollingPointFrameReferences/);
   assert.match(viewer, /resilientActiveFireFrameReferences/);
   assert.match(viewer, /usesRasterLightning\(product\)/);
+  assert.match(viewer, /usesRasterFire\(product\)/);
+  assert.match(viewer, /usesRasterFire\(product\) && recipe\.id === "hotspots"/);
   assert.match(viewer, /createRadialGradient/);
   assert.match(viewer, /layerId\.startsWith\("westwx-"\)/);
   assert.match(pointData, /coordinateSpace\.origin === "top-left"/);

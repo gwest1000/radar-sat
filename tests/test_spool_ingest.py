@@ -15,7 +15,7 @@ from rasterio.transform import from_bounds
 import shapefile
 
 from radarsat.config import LAYERS, Domain
-from radarsat.hotspots import render_hotspots
+from radarsat.hotspots import render_fire_overlay, render_hotspots
 from radarsat.images import lightning_trail, render_watershed_overlay
 from radarsat.pipeline import (
     derive_lightning_trails,
@@ -181,6 +181,61 @@ class NativeRenderTests(unittest.TestCase):
             self.assertTrue(np.any(np.all(rendered[:, :, :3] == (255, 229, 92), axis=2)))
             self.assertTrue(np.any(np.all(rendered[:, :, :3] == (255, 148, 31), axis=2)))
             self.assertTrue(np.any(np.all(rendered[:, :, :3] == (217, 75, 61), axis=2)))
+
+    def test_fire_overlay_renders_filled_and_hollow_flames_on_transparency(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = Domain(
+                id="bc",
+                title="BC",
+                west=-125.0,
+                south=48.0,
+                east=-120.0,
+                north=53.0,
+                crs="EPSG:4326",
+                width=240,
+                height=200,
+                tier="bc",
+                projected_bounds=(-125.0, 48.0, -120.0, 53.0),
+            )
+            destination = root / "fire-overlay.png"
+            summary = render_fire_overlay(
+                [
+                    [0.20, 0.20, 120.0, 140.0, 1],
+                    [0.35, 0.35, 800.0, 150.0, 1],
+                ],
+                [
+                    [0.55, 0.55, None, 25.0, 1, 0],
+                    [0.80, 0.80, None, 250.0, 1, 1],
+                ],
+                domain,
+                destination,
+            )
+
+            rendered = np.asarray(Image.open(destination).convert("RGBA"))
+            alpha = rendered[:, :, 3]
+            self.assertEqual(summary["activeFireDisplayCount"], 2)
+            self.assertEqual(summary["hotspotDisplayCount"], 2)
+            self.assertTrue(np.any(alpha == 0))
+            self.assertTrue(np.any(alpha > 0))
+            coral = (
+                (rendered[:, :, 0] > 245)
+                & (rendered[:, :, 1] > 90)
+                & (rendered[:, :, 1] < 145)
+                & (rendered[:, :, 2] < 110)
+                & (alpha > 0)
+            )
+            yellow_outline = (
+                (rendered[:, :, 0] > 245)
+                & (rendered[:, :, 1] > 205)
+                & (rendered[:, :, 2] < 130)
+                & (alpha > 0)
+            )
+            self.assertTrue(np.any(coral))
+            self.assertTrue(np.any(yellow_outline))
+            # The newest thermal detection is an outlined flame, not a filled
+            # marker, so its centre remains transparent.
+            self.assertEqual(alpha[round(0.20 * 199) + 1, round(0.20 * 239)], 0)
 
     @mock.patch("radarsat.pipeline.fetch_hotspots")
     def test_hotspot_snapshot_uses_ten_minute_archive_clock(self, fetch: mock.Mock) -> None:

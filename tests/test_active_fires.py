@@ -17,8 +17,16 @@ from radarsat.active_fires import (
     fetch_canadian_active_fires,
     project_active_fires,
 )
-from radarsat.config import DOMAINS, LAYERS
-from radarsat.pipeline import frame_path, ingest_active_fire_snapshot, metadata_path
+from radarsat.config import DOMAINS, LAYERS, Domain
+from radarsat.pipeline import (
+    FIRE_OVERLAY_RENDER_VERSION,
+    derive_fire_overlays,
+    frame_path,
+    ingest_active_fire_snapshot,
+    metadata_path,
+    write_metadata,
+)
+from radarsat.point_frames import write_point_frame
 
 
 UTC = dt.timezone.utc
@@ -272,6 +280,93 @@ class ActiveFireTests(unittest.TestCase):
             self.assertFalse(
                 frame_path(root, domain, LAYERS["active-fire-points"], second_valid).exists()
             )
+
+    def test_derived_fire_overlay_combines_point_frames(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = Domain(
+                id="bc",
+                title="BC",
+                west=-125.0,
+                south=48.0,
+                east=-120.0,
+                north=53.0,
+                crs="EPSG:4326",
+                width=240,
+                height=200,
+                tier="bc",
+                projected_bounds=(-125.0, 48.0, -120.0, 53.0),
+            )
+            valid_time = VALID.replace(minute=10, second=0, microsecond=0)
+            hotspot_layer = LAYERS["hotspot-points"]
+            active_layer = LAYERS["active-fire-points"]
+            hotspot_path = frame_path(root, domain, hotspot_layer, valid_time)
+            active_path = frame_path(root, domain, active_layer, valid_time)
+            write_point_frame(
+                hotspot_path,
+                layer=hotspot_layer.id,
+                domain=domain,
+                valid_time=valid_time,
+                window_start=valid_time - dt.timedelta(hours=24),
+                window_end=valid_time,
+                age_reference_time=valid_time,
+                point_schema=hotspot_layer.point_schema,
+                points=[[0.25, 0.25, 60.0, 120.0, 1]],
+                age_mode="exact-detection-time",
+                age_precision_seconds=60,
+            )
+            write_point_frame(
+                active_path,
+                layer=active_layer.id,
+                domain=domain,
+                valid_time=valid_time,
+                window_start=valid_time,
+                window_end=valid_time,
+                age_reference_time=valid_time,
+                point_schema=active_layer.point_schema,
+                points=[[0.75, 0.75, None, 250.0, 1, 1]],
+                age_mode="source-status-time",
+                age_precision_seconds=60,
+            )
+            write_metadata(
+                root,
+                domain,
+                hotspot_layer,
+                valid_time,
+                hotspot_path,
+                extra={"pointCount": 1, "renderVersion": 2},
+            )
+            write_metadata(
+                root,
+                domain,
+                active_layer,
+                valid_time,
+                active_path,
+                extra={
+                    "pointCount": 1,
+                    "renderVersion": 3,
+                    "canadianFeatureCount": 1,
+                    "bcwsFeatureCount": 1,
+                    "usFeatureCount": 1,
+                    "sourceErrors": [],
+                },
+            )
+
+            summary = derive_fire_overlays(root, domain, hours=1)
+
+            overlay_path = frame_path(root, domain, LAYERS["hotspots"], valid_time)
+            overlay_metadata = json.loads(
+                metadata_path(root, domain, LAYERS["hotspots"], valid_time).read_text()
+            )
+            self.assertEqual(summary["rendered"], 1)
+            self.assertTrue(overlay_path.exists())
+            self.assertEqual(
+                overlay_metadata["fireOverlayRenderVersion"],
+                FIRE_OVERLAY_RENDER_VERSION,
+            )
+            self.assertEqual(overlay_metadata["activeFireDisplayCount"], 1)
+            self.assertEqual(overlay_metadata["hotspotDisplayCount"], 1)
+            self.assertEqual(overlay_metadata["activeFireValidTime"], "2026-07-22T19:10:00Z")
 
 
 if __name__ == "__main__":

@@ -24,7 +24,13 @@ from .active_fires import (
 from .catalog import write_catalog
 from .config import DOMAINS, LAYERS, Domain, Layer
 from .geomet import GeoMetClient, at_or_before, format_utc, frame_stamp
-from .hotspots import CWFIS_HOTSPOT_LAYER, fetch_hotspots, project_hotspots, render_hotspots
+from .hotspots import (
+    CWFIS_HOTSPOT_LAYER,
+    fetch_hotspots,
+    project_hotspots,
+    render_fire_overlay,
+    render_hotspots,
+)
 from .images import (
     lightning_trail,
     reproject_overlay,
@@ -51,6 +57,7 @@ LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
 ACTIVE_FIRE_POINT_RENDER_VERSION = 3
+FIRE_OVERLAY_RENDER_VERSION = 1
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 2
@@ -772,6 +779,137 @@ def _archived_layer_times(root: Path, domain: Domain, layer: Layer) -> list[dt.d
         except (OSError, KeyError, ValueError, json.JSONDecodeError):
             continue
     return sorted(set(values))
+
+
+def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dict[str, object]:
+    """Combine agency fires and thermal hotspots into lightweight transparent PNGs."""
+    hotspot_layer = LAYERS["hotspot-points"]
+    active_layer = LAYERS["active-fire-points"]
+    output_layer = LAYERS["hotspots"]
+    hotspot_times = _archived_layer_times(root, domain, hotspot_layer)
+    active_times = _archived_layer_times(root, domain, active_layer)
+    if not hotspot_times:
+        return {"status": "unavailable", "rendered": 0}
+    cutoff = max(hotspot_times) - dt.timedelta(hours=hours)
+    anchors = [value for value in hotspot_times if value >= cutoff]
+    rendered = 0
+
+    def payload(layer: Layer, valid_time: dt.datetime) -> dict[str, object] | None:
+        path = frame_path(root, domain, layer, valid_time)
+        try:
+            value = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    def metadata(layer: Layer, valid_time: dt.datetime) -> dict[str, object]:
+        path = metadata_path(root, domain, layer, valid_time)
+        try:
+            value = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def active_time_for(anchor: dt.datetime) -> dt.datetime | None:
+        candidates = [
+            value
+            for value in active_times
+            if value <= anchor and anchor - value <= dt.timedelta(hours=6)
+        ]
+        if not candidates:
+            return None
+        selected = candidates[-1]
+        selected_metadata = metadata(active_layer, selected)
+        if not selected_metadata.get("sourceErrors"):
+            return selected
+        for candidate in reversed(candidates[:-1]):
+            candidate_metadata = metadata(active_layer, candidate)
+            if (
+                not candidate_metadata.get("sourceErrors")
+                and int(candidate_metadata.get("usFeatureCount", 0)) > 0
+            ):
+                return candidate
+        return selected
+
+    for anchor in anchors:
+        hotspot_payload = payload(hotspot_layer, anchor)
+        if hotspot_payload is None:
+            continue
+        selected_active_time = active_time_for(anchor)
+        active_payload = (
+            payload(active_layer, selected_active_time)
+            if selected_active_time is not None
+            else None
+        )
+        destination = frame_path(root, domain, output_layer, anchor)
+        existing_metadata = metadata(output_layer, anchor)
+        expected_active_time = (
+            format_utc(selected_active_time)
+            if selected_active_time is not None
+            else None
+        )
+        if (
+            destination.is_file()
+            and existing_metadata.get("fireOverlayRenderVersion") == FIRE_OVERLAY_RENDER_VERSION
+            and existing_metadata.get("activeFireValidTime") == expected_active_time
+        ):
+            continue
+        summary = render_fire_overlay(
+            hotspot_payload.get("points", []),
+            active_payload.get("points", []) if active_payload else [],
+            domain,
+            destination,
+        )
+        active_metadata = (
+            metadata(active_layer, selected_active_time)
+            if selected_active_time is not None
+            else {}
+        )
+        extra = {
+            key: value
+            for key, value in existing_metadata.items()
+            if key not in {
+                "validTime",
+                "path",
+                "source",
+                "sourceLayer",
+                "fetchedAt",
+                "sourceTimes",
+            }
+        }
+        extra.update({
+            **summary,
+            "renderVersion": HOTSPOT_RENDER_VERSION,
+            "fireOverlayRenderVersion": FIRE_OVERLAY_RENDER_VERSION,
+            "activeFireValidTime": expected_active_time,
+            "activeFirePointCount": int(active_metadata.get("pointCount", 0)),
+            "canadianFeatureCount": int(active_metadata.get("canadianFeatureCount", 0)),
+            "bcwsFeatureCount": int(active_metadata.get("bcwsFeatureCount", 0)),
+            "usFeatureCount": int(active_metadata.get("usFeatureCount", 0)),
+            "sourceErrors": active_metadata.get("sourceErrors", []),
+        })
+        source_times = {"hotspots": anchor}
+        if selected_active_time is not None:
+            source_times["active fires"] = selected_active_time
+        write_metadata(
+            root,
+            domain,
+            output_layer,
+            anchor,
+            destination,
+            source_times,
+            source="NRCan CWFIS + BCWS + NIFC WFIGS",
+            source_layer=(
+                f"{CWFIS_HOTSPOT_LAYER} + agency-reported active-fire point frames"
+            ),
+            extra=extra,
+        )
+        rendered += 1
+    return {
+        "status": "rendered" if rendered else "unchanged",
+        "rendered": rendered,
+        "latestValidTime": format_utc(anchors[-1]),
+    }
 
 
 def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0) -> None:
@@ -1710,6 +1848,7 @@ def run(
     auxiliary_warnings: list[str] = []
     hotspot_status: dict[str, object] = {}
     active_fire_status: dict[str, object] = {}
+    fire_overlay_status: dict[str, object] = {}
     raw_satellite_status: dict[str, object] = {}
     goes_hazard_status: dict[str, object] = {}
     with GeoMetClient() as client:
@@ -1765,6 +1904,13 @@ def run(
                         "Agency-reported active fires unavailable: "
                         f"{type(error).__name__}: {error}"
                     )
+                try:
+                    fire_overlay_status[domain.id] = derive_fire_overlays(output_root, domain)
+                except Exception as error:
+                    auxiliary_warnings.append(
+                        "Wildfire display overlay unavailable: "
+                        f"{type(error).__name__}: {error}"
+                    )
         if os.environ.get("RADARSAT_RAW_SAT_ENABLED", "1").lower() not in {"0", "false", "no"}:
             try:
                 raw_satellite_status = ingest_raw_satellite(output_root, domain_ids)
@@ -1813,6 +1959,7 @@ def run(
             },
             "hotspots": hotspot_status,
             "activeFires": active_fire_status,
+            "fireOverlays": fire_overlay_status,
             "rawSatellite": raw_satellite_status,
             "goesHazards": goes_hazard_status,
             "warnings": auxiliary_warnings,

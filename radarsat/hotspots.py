@@ -4,10 +4,10 @@ import datetime as dt
 from dataclasses import dataclass
 import math
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from pyproj import Transformer
 
 from .config import Domain
@@ -27,6 +27,18 @@ class HotspotPoint:
     age_minutes: float
     frp: float
     count: int
+
+
+@dataclass
+class FireDisplayPoint:
+    x: float
+    y: float
+    kind: str
+    notable: bool
+    highlight: int
+    signal: float
+    age: int
+    count: int = 1
 
 
 def fetch_hotspots(
@@ -186,4 +198,264 @@ def render_hotspots(
         "detectionCount": len(points),
         "newestDetectionTime": newest.isoformat().replace("+00:00", "Z") if newest else None,
         "windowHours": 24,
+    }
+
+
+def _flame_outline(size: float) -> list[tuple[float, float]]:
+    """Sample the browser flame's cubic path into a compact polygon."""
+
+    def cubic(
+        start: tuple[float, float],
+        control_a: tuple[float, float],
+        control_b: tuple[float, float],
+        end: tuple[float, float],
+    ) -> list[tuple[float, float]]:
+        values: list[tuple[float, float]] = []
+        for index in range(1, 7):
+            amount = index / 6
+            inverse = 1 - amount
+            values.append((
+                inverse ** 3 * start[0]
+                + 3 * inverse ** 2 * amount * control_a[0]
+                + 3 * inverse * amount ** 2 * control_b[0]
+                + amount ** 3 * end[0],
+                inverse ** 3 * start[1]
+                + 3 * inverse ** 2 * amount * control_a[1]
+                + 3 * inverse * amount ** 2 * control_b[1]
+                + amount ** 3 * end[1],
+            ))
+        return values
+
+    segments = [
+        ((12, 3), (13, 7), (16, 7), (17, 10)),
+        ((17, 10), (21, 13), (20, 19), (16, 21)),
+        ((16, 21), (11, 24), (5, 21), (5, 16)),
+        ((5, 16), (5, 14), (6, 12), (7, 11)),
+        ((7, 11), (8, 14), (11, 14), (11, 11)),
+        ((11, 11), (11, 8), (9.5, 7), (9.5, 5)),
+        ((9.5, 5), (9.5, 4), (10.5, 3.5), (12, 3)),
+    ]
+    points = [(12.0, 3.0)]
+    for segment in segments:
+        points.extend(cubic(*segment))
+    return [
+        ((x - 12) * size / 24, (y - 12) * size / 24)
+        for x, y in points
+    ]
+
+
+def _cluster_notable_fires(
+    markers: list[FireDisplayPoint],
+    domain: Domain,
+) -> list[FireDisplayPoint]:
+    regular = [marker for marker in markers if not marker.notable]
+    remaining = [marker for marker in markers if marker.notable]
+    clustered: list[FireDisplayPoint] = []
+    cluster_distance = 0.008 if domain.id == "bc" else 0.0035
+    while remaining:
+        seed = remaining.pop(0)
+        group = [seed]
+        for index in range(len(remaining) - 1, -1, -1):
+            candidate = remaining[index]
+            if (
+                candidate.highlight == seed.highlight
+                and math.hypot(candidate.x - seed.x, candidate.y - seed.y) < cluster_distance
+            ):
+                group.append(candidate)
+                remaining.pop(index)
+        if len(group) == 1:
+            clustered.append(seed)
+            continue
+        clustered.append(FireDisplayPoint(
+            x=sum(marker.x for marker in group) / len(group),
+            y=sum(marker.y for marker in group) / len(group),
+            kind="active",
+            notable=True,
+            highlight=seed.highlight,
+            signal=max(marker.signal for marker in group),
+            age=0,
+            count=sum(marker.count for marker in group),
+        ))
+    return [*regular, *clustered]
+
+
+def render_fire_overlay(
+    hotspot_rows: Sequence[Sequence[float | int | None]],
+    active_rows: Sequence[Sequence[float | int | None]],
+    domain: Domain,
+    destination: Path,
+    *,
+    hotspot_age_offset_minutes: float = 0,
+) -> dict[str, int]:
+    """Render browser-equivalent wildfire flames into a transparent PNG."""
+    overview = domain.id in {"north-america", "north-pacific"}
+    active_markers: list[FireDisplayPoint] = []
+    for row in active_rows:
+        if len(row) < 6:
+            continue
+        try:
+            x, y = float(row[0]), float(row[1])
+            size_hectares = float(row[3] or 0)
+            highlight = int(row[5] or 0)
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(x) and math.isfinite(y) and 0 <= x <= 1 and 0 <= y <= 1):
+            continue
+        if overview and highlight == 0:
+            continue
+        active_markers.append(FireDisplayPoint(
+            x=x,
+            y=y,
+            kind="active",
+            notable=highlight > 0,
+            highlight=highlight,
+            signal=size_hectares,
+            age=0,
+        ))
+    active_markers = _cluster_notable_fires(active_markers, domain)
+
+    hotspot_markers: list[FireDisplayPoint] = []
+    duplicate_distance = 0.012 if domain.id == "bc" else 0.0035
+    for row in hotspot_rows:
+        if len(row) < 4:
+            continue
+        try:
+            x, y = float(row[0]), float(row[1])
+            point_age = float(row[2] or 0)
+            frp = float(row[3] or 0)
+        except (TypeError, ValueError):
+            continue
+        if not (
+            math.isfinite(x)
+            and math.isfinite(y)
+            and math.isfinite(point_age)
+            and 0 <= x <= 1
+            and 0 <= y <= 1
+        ):
+            continue
+        if overview and frp < 100:
+            continue
+        if any(
+            math.hypot(x - active.x, y - active.y) < duplicate_distance
+            for active in active_markers
+        ):
+            continue
+        total_age = max(0, hotspot_age_offset_minutes + point_age)
+        hotspot_markers.append(FireDisplayPoint(
+            x=x,
+            y=y,
+            kind="hotspot",
+            notable=False,
+            highlight=0,
+            signal=frp,
+            age=0 if total_age <= 6 * 60 else 1 if total_age <= 12 * 60 else 2,
+        ))
+
+    markers = sorted(
+        [*hotspot_markers, *active_markers],
+        key=lambda marker: (marker.notable, marker.signal),
+    )
+    canvas = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+    glow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow, "RGBA")
+    symbol_draw = ImageDraw.Draw(canvas, "RGBA")
+    domain_scale = domain.width / 1280
+    hotspot_colours = [
+        (255, 176, 93, 255),
+        (240, 141, 67, 184),
+        (201, 102, 59, 112),
+    ]
+
+    for marker in markers:
+        desired_size = 21 if marker.notable else 13
+        size = max(8, round(desired_size * domain_scale))
+        centre_x = marker.x * (domain.width - 1)
+        centre_y = marker.y * (domain.height - 1)
+        outline = [
+            (round(centre_x + x), round(centre_y + y))
+            for x, y in _flame_outline(size)
+        ]
+        closed = [*outline, outline[0]]
+        if marker.kind == "active":
+            glow_width = max(3, round(size * 0.26))
+            glow_draw.line(
+                closed,
+                fill=(255, 229, 190, 150),
+                width=glow_width,
+                joint="curve",
+            )
+            glow_draw.polygon(outline, fill=(255, 188, 141, 95))
+
+    canvas.alpha_composite(glow.filter(ImageFilter.GaussianBlur(radius=max(1.5, domain_scale * 1.6))))
+    for marker in markers:
+        desired_size = 21 if marker.notable else 13
+        size = max(8, round(desired_size * domain_scale))
+        centre_x = marker.x * (domain.width - 1)
+        centre_y = marker.y * (domain.height - 1)
+        outline = [
+            (round(centre_x + x), round(centre_y + y))
+            for x, y in _flame_outline(size)
+        ]
+        closed = [*outline, outline[0]]
+        if marker.notable:
+            symbol_draw.line(
+                closed,
+                fill=(255, 228, 91, 255),
+                width=max(4, round(size * 0.20)),
+                joint="curve",
+            )
+        if marker.kind == "active":
+            colour = (255, 121, 86, 255)
+            symbol_draw.polygon(outline, fill=colour)
+            symbol_draw.line(
+                closed,
+                fill=colour,
+                width=max(2, round(size * 0.10)),
+                joint="curve",
+            )
+        else:
+            colour = hotspot_colours[marker.age]
+            symbol_draw.line(
+                closed,
+                fill=(2, 7, 11, min(210, colour[3])),
+                width=max(3, round(size * 0.17)),
+                joint="curve",
+            )
+            symbol_draw.line(
+                closed,
+                fill=colour,
+                width=max(2, round(size * 0.11)),
+                joint="curve",
+            )
+        if marker.count > 1:
+            font_size = max(8, round(size * 0.43))
+            try:
+                font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+            except OSError:
+                font = ImageFont.load_default(size=font_size)
+            label = str(marker.count)
+            symbol_draw.text(
+                (round(centre_x), round(centre_y + size * 0.055)),
+                label,
+                fill=(58, 21, 11, 255),
+                font=font,
+                anchor="mm",
+                stroke_width=1,
+                stroke_fill=(255, 242, 204, 210),
+            )
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    try:
+        canvas.quantize(
+            colors=64,
+            method=Image.Quantize.FASTOCTREE,
+            dither=Image.Dither.NONE,
+        ).save(temporary, "PNG", optimize=True)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {
+        "activeFireDisplayCount": len(active_markers),
+        "hotspotDisplayCount": len(hotspot_markers),
     }
