@@ -141,6 +141,10 @@ const WGS84_ECCENTRICITY = 0.08181919084262149;
 const NORTH_AMERICA_BOUNDS = [-21_051_700.011, 557_305.257, -4_551_782.871, 12_932_243.112] as const;
 const NORTH_PACIFIC_BOUNDS = [-3_339_584.7, 764_000, 15_584_728.7, 11_413_000] as const;
 const imageFrameCache = new Map<string, Promise<void>>();
+const lightningMarkerCache = new Map<string, Promise<LightningMarker[]>>();
+const fireMarkerCache = new Map<string, Promise<FireMarker[]>>();
+const IMAGE_FRAME_CACHE_LIMIT = 96;
+const MARKER_CACHE_LIMIT = 96;
 const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA GOES-18": "Calibrated ABI satellite imagery, GLM total lightning and smoke-detection products.",
   "NOAA Open Data": "Public cloud distribution for GOES ABI Level-2 satellite source files.",
@@ -211,10 +215,17 @@ function frameUrl(frame: Frame, base: string): string {
 
 function preloadImageFrame(url: string): Promise<void> {
   const existing = imageFrameCache.get(url);
-  if (existing) return existing;
+  if (existing) {
+    imageFrameCache.delete(url);
+    imageFrameCache.set(url, existing);
+    return existing;
+  }
   const request = new Promise<void>((resolve) => {
     const image = new Image();
+    let finished = false;
     const finish = () => {
+      if (finished) return;
+      finished = true;
       if (typeof image.decode === "function") {
         void image.decode().catch(() => undefined).then(() => resolve());
       } else {
@@ -227,6 +238,11 @@ function preloadImageFrame(url: string): Promise<void> {
     if (image.complete) finish();
   });
   imageFrameCache.set(url, request);
+  while (imageFrameCache.size > IMAGE_FRAME_CACHE_LIMIT) {
+    const oldest = imageFrameCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    imageFrameCache.delete(oldest);
+  }
   return request;
 }
 
@@ -339,6 +355,38 @@ async function buildLightningMarkers(
     .slice(0, maxMarkers);
   // Paint older symbols first so the bright newest detections remain legible.
   return freshest.sort((left, right) => right.age - left.age);
+}
+
+function cachedLightningMarkers(
+  references: PointFrameReference[],
+  idPrefix: string,
+  maxMarkers: number,
+  targetDomain: string | undefined,
+): Promise<LightningMarker[]> {
+  const key = [
+    targetDomain ?? "",
+    idPrefix,
+    maxMarkers,
+    ...references.map((reference) => `${reference.url}@${reference.ageMinutes.toFixed(2)}`),
+  ].join("|");
+  const existing = lightningMarkerCache.get(key);
+  if (existing) {
+    lightningMarkerCache.delete(key);
+    lightningMarkerCache.set(key, existing);
+    return existing;
+  }
+  const request = buildLightningMarkers(references, idPrefix, maxMarkers, targetDomain)
+    .catch((error) => {
+      lightningMarkerCache.delete(key);
+      throw error;
+    });
+  lightningMarkerCache.set(key, request);
+  while (lightningMarkerCache.size > MARKER_CACHE_LIMIT) {
+    const oldest = lightningMarkerCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    lightningMarkerCache.delete(oldest);
+  }
+  return request;
 }
 
 function remapFirePoint(
@@ -479,6 +527,40 @@ async function buildFireMarkers(
   return [...hotspotMarkers, ...displayedActiveMarkers].sort((left, right) => (
     Number(left.notable) - Number(right.notable) || left.signal - right.signal
   ));
+}
+
+function cachedFireMarkers(
+  activeReference: PointFrameReference | undefined,
+  hotspotReference: PointFrameReference | undefined,
+  targetDomain: string,
+): Promise<FireMarker[]> {
+  // Fire display age changes only at 6/12-hour boundaries. A 30-minute age
+  // bucket avoids rebuilding hundreds of markers on every 5/10-minute map.
+  const hotspotAgeBucket = Math.floor((hotspotReference?.ageMinutes ?? 0) / 30);
+  const key = [
+    targetDomain,
+    activeReference?.url ?? "",
+    hotspotReference?.url ?? "",
+    hotspotAgeBucket,
+  ].join("|");
+  const existing = fireMarkerCache.get(key);
+  if (existing) {
+    fireMarkerCache.delete(key);
+    fireMarkerCache.set(key, existing);
+    return existing;
+  }
+  const request = buildFireMarkers(activeReference, hotspotReference, targetDomain)
+    .catch((error) => {
+      fireMarkerCache.delete(key);
+      throw error;
+    });
+  fireMarkerCache.set(key, request);
+  while (fireMarkerCache.size > MARKER_CACHE_LIMIT) {
+    const oldest = fireMarkerCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    fireMarkerCache.delete(oldest);
+  }
+  return request;
 }
 
 type ComposedLayer = {
@@ -849,6 +931,113 @@ function LightningCanvas({
   );
 }
 
+function FireCanvas({
+  markers,
+  style,
+}: {
+  markers: FireMarker[];
+  style: CSSProperties;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const draw = () => {
+      const bounds = canvas.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(1, Math.round(bounds.width * ratio));
+      const height = Math.max(1, Math.round(bounds.height * ratio));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.clearRect(0, 0, width, height);
+      context.save();
+      context.scale(ratio, ratio);
+
+      const drawFlame = (marker: FireMarker) => {
+        const active = marker.kind === "active";
+        const baseSize = marker.notable
+          ? Math.max(14, Math.min(21, window.innerWidth * 0.0165))
+          : active
+            ? Math.max(8, Math.min(13, window.innerWidth * 0.009))
+            : Math.max(7, Math.min(13, window.innerWidth * 0.0102));
+        const hotspotColors = ["#ffb05d", "#f08d43", "#c9663b"];
+        const hotspotOpacity = [1, 0.72, 0.44];
+        const colour = active ? "#ff7956" : hotspotColors[marker.age];
+        const opacity = active ? 1 : hotspotOpacity[marker.age];
+
+        context.save();
+        context.translate(marker.x / 100 * bounds.width, marker.y / 100 * bounds.height);
+        context.scale(baseSize / 24, baseSize / 24);
+        context.translate(-12, -12);
+        context.globalAlpha = opacity;
+        context.shadowColor = active
+          ? "rgba(255, 229, 190, 0.72)"
+          : "rgba(0, 0, 0, 0.72)";
+        context.shadowBlur = active ? 3 : 2;
+        context.shadowOffsetY = 1.5;
+        context.beginPath();
+        context.moveTo(12, 3);
+        context.bezierCurveTo(13, 7, 16, 7, 17, 10);
+        context.bezierCurveTo(21, 13, 20, 19, 16, 21);
+        context.bezierCurveTo(11, 24, 5, 21, 5, 16);
+        context.bezierCurveTo(5, 14, 6, 12, 7, 11);
+        context.bezierCurveTo(8, 14, 11, 14, 11, 11);
+        context.bezierCurveTo(11, 8, 9.5, 7, 9.5, 5);
+        context.bezierCurveTo(9.5, 4, 10.5, 3.5, 12, 3);
+        context.closePath();
+        if (marker.notable) {
+          context.strokeStyle = "#ffe45b";
+          context.lineWidth = 4;
+          context.stroke();
+        }
+        context.strokeStyle = colour;
+        context.fillStyle = colour;
+        context.lineWidth = active ? 2 : 2.6;
+        if (active) context.fill();
+        context.stroke();
+        context.restore();
+
+        if (marker.count > 1) {
+          context.save();
+          context.translate(marker.x / 100 * bounds.width, marker.y / 100 * bounds.height + baseSize * 0.055);
+          context.fillStyle = "#3a150b";
+          context.font = `800 ${Math.max(7, Math.min(9, baseSize * 0.43))}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+          context.textAlign = "center";
+          context.textBaseline = "middle";
+          context.shadowColor = "rgba(255, 242, 204, 0.8)";
+          context.shadowBlur = 2;
+          context.fillText(String(marker.count), 0, 0);
+          context.restore();
+        }
+      };
+
+      markers.forEach(drawFlame);
+      context.restore();
+    };
+    draw();
+    const observer = new ResizeObserver(draw);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [markers]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="point-symbol-layer fire-canvas"
+      style={style}
+      role="img"
+      aria-label="Agency-reported active wildfires and satellite thermal hotspots"
+      data-marker-count={markers.length}
+    />
+  );
+}
+
 function FlameIcon({ filled = true, highlighted = false }: { filled?: boolean; highlighted?: boolean }) {
   const path = "M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4";
   return (
@@ -999,6 +1188,7 @@ export function RadarViewer() {
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [pageActive, setPageActive] = useState(true);
   const preferencesRef = useRef<ViewerPreferences>({
     productId: "bc-large-overlay",
     speedIndex: 3,
@@ -1130,6 +1320,24 @@ export function RadarViewer() {
     };
   }, []);
 
+  useEffect(() => {
+    // Pausing on blur matters on desktop: a visible Radar-Sat window on a
+    // second monitor should not keep decoding imagery while another app is in
+    // use. Playback resumes from the same frame when focus returns.
+    const updateActivity = () => {
+      setPageActive(document.visibilityState === "visible" && document.hasFocus());
+    };
+    updateActivity();
+    document.addEventListener("visibilitychange", updateActivity);
+    window.addEventListener("focus", updateActivity);
+    window.addEventListener("blur", updateActivity);
+    return () => {
+      document.removeEventListener("visibilitychange", updateActivity);
+      window.removeEventListener("focus", updateActivity);
+      window.removeEventListener("blur", updateActivity);
+    };
+  }, []);
+
   const availableProducts = useMemo(
     () => catalog?.products.filter((item) => productHasFrames(catalog, item)) ?? [],
     [catalog],
@@ -1165,7 +1373,7 @@ export function RadarViewer() {
   const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
 
   const currentFrameIndex = Math.min(frameIndex, Math.max(0, anchorFrames.length - 1));
-  const isAnimating = playing && anchorFrames.length > 1;
+  const isAnimating = playing && pageActive && anchorFrames.length > 1;
   const anchor = anchorFrames[currentFrameIndex];
   const lightningController = product?.layers.find((recipe) => LIGHTNING_CONTROLLERS.has(recipe.id));
   const lightningPointsId = lightningController ? pointLayerId(lightningController.id) : undefined;
@@ -1272,7 +1480,7 @@ export function RadarViewer() {
       return () => window.clearTimeout(clearMarkers);
     }
 
-    void buildLightningMarkers(
+    void cachedLightningMarkers(
       lightningPointReferences,
       "",
       domain?.id === "north-america" ? 700 : 1_200,
@@ -1292,7 +1500,7 @@ export function RadarViewer() {
       return () => window.clearTimeout(clearMarkers);
     }
 
-    void buildLightningMarkers(ecccFallbackPointReferences, "eccc-", 250, "bc").then((markers) => {
+    void cachedLightningMarkers(ecccFallbackPointReferences, "eccc-", 250, "bc").then((markers) => {
       if (!cancelled) setEcccFallbackLightningMarkers(markers);
     }).catch(() => {
       if (!cancelled) setEcccFallbackLightningMarkers([]);
@@ -1309,7 +1517,7 @@ export function RadarViewer() {
       return () => window.clearTimeout(clearMarkers);
     }
 
-    void buildFireMarkers(activeReference, hotspotReference, product?.domain ?? "bc").then((markers) => {
+    void cachedFireMarkers(activeReference, hotspotReference, product?.domain ?? "bc").then((markers) => {
       if (!cancelled) setFireMarkers(markers);
     }).catch(() => {
       if (!cancelled) setFireMarkers([]);
@@ -1374,7 +1582,7 @@ export function RadarViewer() {
       }
       return references;
     };
-    const lookaheadCount = product.domain === "north-america" ? 10 : 4;
+    const lookaheadCount = 2;
     const lookahead = Array.from({ length: Math.min(lookaheadCount, anchorFrames.length - 1) }, (_, offset) => {
       const index = (currentFrameIndex + offset + 1) % anchorFrames.length;
       const candidate = anchorFrames[index];
@@ -1386,9 +1594,8 @@ export function RadarViewer() {
     const nextFrame = lookahead[0];
     if (!nextFrame) return;
 
-    // Decode a rolling buffer instead of serially fetching only the next map.
-    // This keeps the 10-minute continental loop moving at a steady cadence
-    // after its first frame without blanking during an initial cold cache.
+    // Decode only the next two maps. A large rolling decode buffer competes
+    // with painting and can make the whole browser choppy on broad products.
     lookahead.forEach((candidate) => {
       candidate.urls.forEach((url) => void preloadImageFrame(url));
       candidate.pointReferences.forEach((reference) => preloadPointFrame(reference.url));
@@ -1403,8 +1610,9 @@ export function RadarViewer() {
     void Promise.all(loads).then(() => {
       if (cancelled) return;
       const finalFrame = currentFrameIndex === anchorFrames.length - 1;
-      // The former 0.75× setting is now the easier-to-understand 1× baseline.
-      const delay = finalFrame ? 400 / speed : 100 / speed;
+      // Four to five frames per second is smooth for meteorological loops
+      // without monopolizing the main thread or GPU decode queue.
+      const delay = finalFrame ? 650 / speed : 220 / speed;
       timer = window.setTimeout(() => advance(1), delay);
     });
 
@@ -1690,7 +1898,7 @@ export function RadarViewer() {
                 src={layer.url}
                 alt=""
                 aria-hidden="true"
-                key={`${layer.id}-${layer.url}`}
+                key={layer.id}
                 style={{
                   ...cropStyle,
                   opacity: layer.opacity,
@@ -1718,32 +1926,7 @@ export function RadarViewer() {
               />
             )}
             {fireMarkers.length > 0 && (
-              <div
-                className="point-symbol-layer"
-                style={cropStyle}
-                role="img"
-                aria-label="Agency-reported active wildfires and satellite thermal hotspots"
-              >
-                {fireMarkers.map((marker) => (
-                  <span
-                    className={`fire-marker ${marker.kind === "active" ? "active-fire-marker" : "hotspot-fire-marker"}${marker.notable ? " fire-notable" : ""} age-${marker.age}`}
-                    key={marker.id}
-                    style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
-                    title={marker.highlight === 1
-                      ? marker.count > 1
-                        ? `${marker.count} nearby BCWS Wildfires of Note`
-                        : "BCWS Wildfire of Note"
-                      : marker.highlight === 2
-                        ? "U.S. current ICS-209 large incident"
-                        : marker.kind === "active"
-                          ? "Agency-reported active wildfire"
-                          : "Satellite thermal hotspot"}
-                  >
-                    <FlameIcon filled={marker.kind === "active"} highlighted={marker.notable} />
-                    {marker.count > 1 && <span className="fire-count">{marker.count}</span>}
-                  </span>
-                ))}
-              </div>
+              <FireCanvas markers={fireMarkers} style={cropStyle} />
             )}
             {anchor && (
               <div className="map-status">

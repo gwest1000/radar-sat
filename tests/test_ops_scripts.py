@@ -172,6 +172,27 @@ class OpsScriptTests(unittest.TestCase):
             self.assertFalse(log.exists())
             self.assertTrue(lock.exists())
 
+    def test_split_workers_keep_rapid_satellite_isolated_from_slow_renderers(self) -> None:
+        satellite = (PROJECT / "scripts" / "ops" / "run_satellite_cycle.zsh").read_text()
+        observations = (PROJECT / "scripts" / "ops" / "run_observation_cycle.zsh").read_text()
+        archive = (PROJECT / "scripts" / "ops" / "run_archive_cycle.zsh").read_text()
+        install = (PROJECT / "scripts" / "ops" / "install_launchd.zsh").read_text()
+
+        self.assertIn("backfill_westwx_satellite.py", satellite)
+        self.assertIn("backfill_five_minute_bc_satellite.py", satellite)
+        self.assertNotIn("backfill_native_bc_satellite.py", satellite)
+        self.assertNotIn("scripts/run_ingest.py", satellite)
+        self.assertIn("publish_locked.zsh", satellite)
+
+        self.assertIn("RADARSAT_RAW_SAT_ENABLED=0", observations)
+        self.assertIn("--spool-mode only", observations)
+        self.assertIn("publish_locked.zsh", observations)
+
+        self.assertIn("--domain north-pacific", archive)
+        self.assertIn("--latest-only", archive)
+        self.assertIn("RADARSAT_GOES_HAZARDS_ENABLED=0", archive)
+        self.assertIn("for name in ingest observations archive health", install)
+
     def test_setup_installs_renderer_and_feed_requirements(self) -> None:
         setup = (PROJECT / "scripts" / "ops" / "setup_local.zsh").read_text()
         self.assertIn('requirements.txt"', setup)

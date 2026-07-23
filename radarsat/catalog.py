@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -100,7 +101,13 @@ def build_catalog(root: Path) -> dict[str, Any]:
 def write_catalog(root: Path) -> Path:
     path = root / "catalog.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(build_catalog(root), indent=2) + "\n")
-    temporary.replace(path)
+    # Satellite, radar and slow archive workers intentionally run independently.
+    # A PID-specific temporary keeps simultaneous atomic refreshes from
+    # clobbering one another's staging file.
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(json.dumps(build_catalog(root), indent=2) + "\n")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
     return path
