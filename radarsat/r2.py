@@ -9,6 +9,7 @@ import random
 import re
 import shutil
 import sqlite3
+import stat as stat_module
 import subprocess
 import sys
 import time
@@ -217,15 +218,42 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _safe_local_path(root: Path, relative: str) -> Path:
+def _safe_local_object(
+    root: Path,
+    root_resolved: Path,
+    relative: str,
+    resolved_parents: dict[str, Path],
+) -> LocalObject:
     if not relative or relative.startswith("/"):
         raise PublicationSafetyError(f"Unsafe catalog path: {relative!r}")
-    candidate = (root / relative).resolve()
-    if not candidate.is_relative_to(root.resolve()):
+    relative_path = Path(relative)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
         raise PublicationSafetyError(f"Catalog path escapes output root: {relative!r}")
-    if not candidate.is_file() or candidate.stat().st_size <= 0:
+    parent_key = relative_path.parent.as_posix()
+    parent = resolved_parents.get(parent_key)
+    if parent is None:
+        parent = (root / relative_path.parent).resolve()
+        if not parent.is_relative_to(root_resolved):
+            raise PublicationSafetyError(f"Catalog path escapes output root: {relative!r}")
+        resolved_parents[parent_key] = parent
+    candidate = parent / relative_path.name
+    try:
+        # ``lstat`` both rejects a final symlink and supplies size/mtime in one
+        # filesystem call. Parent directories are resolved and containment-
+        # checked once per directory above.
+        item_stat = candidate.lstat()
+    except OSError as error:
+        raise PublicationSafetyError(
+            f"Catalog asset is missing or unreadable: {relative}"
+        ) from error
+    if not stat_module.S_ISREG(item_stat.st_mode) or item_stat.st_size <= 0:
         raise PublicationSafetyError(f"Catalog asset is missing or empty: {relative}")
-    return candidate
+    return LocalObject(
+        key=relative,
+        path=candidate,
+        size=item_stat.st_size,
+        mtime_ns=item_stat.st_mtime_ns,
+    )
 
 
 def _metadata_path_for_frame(root: Path, frame_key: str) -> Path:
@@ -256,11 +284,8 @@ def discover_objects(root: Path) -> tuple[list[LocalObject], bytes]:
         for layer in domain.get("layers", {}).values():
             for frame in layer.get("frames", []):
                 key = str(frame.get("path", ""))
-                _safe_local_path(root, key)
                 relative_paths.add(key)
                 metadata_path = _metadata_path_for_frame(root, key)
-                if not metadata_path.is_file():
-                    raise PublicationSafetyError(f"Missing frame metadata: {metadata_path}")
                 relative_paths.add(metadata_path.relative_to(root).as_posix())
                 frame_count += 1
         for static in domain.get("staticLayers", {}).values():
@@ -272,11 +297,12 @@ def discover_objects(root: Path) -> tuple[list[LocalObject], bytes]:
     if frame_count == 0:
         raise PublicationSafetyError("Refusing to publish a catalog containing zero frames")
 
-    objects: list[LocalObject] = []
-    for key in sorted(relative_paths):
-        path = _safe_local_path(root, key)
-        stat = path.stat()
-        objects.append(LocalObject(key=key, path=path, size=stat.st_size, mtime_ns=stat.st_mtime_ns))
+    root_resolved = root.resolve()
+    resolved_parents: dict[str, Path] = {}
+    objects = [
+        _safe_local_object(root, root_resolved, key, resolved_parents)
+        for key in sorted(relative_paths)
+    ]
     return objects, catalog_bytes
 
 
