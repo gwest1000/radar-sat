@@ -402,7 +402,9 @@ def render_glm_bins(
     longitudes = flashes.longitudes[latitude_mask]
     transformer = Transformer.from_crs("EPSG:4326", domain.crs, always_xy=True, force_over=True)
     if len(longitudes):
-        xs, ys = transformer.transform(longitudes.tolist(), latitudes.tolist())
+        projected_longitudes = np.where(longitudes < 0, longitudes + 360, longitudes) \
+            if domain.id == "north-pacific" else longitudes
+        xs, ys = transformer.transform(projected_longitudes.tolist(), latitudes.tolist())
         xs = np.asarray(xs, dtype=np.float64)
         ys = np.asarray(ys, dtype=np.float64)
     else:

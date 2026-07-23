@@ -136,6 +136,11 @@ const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
   height: `${BC_ON_NORTH_AMERICA.height * 100}%`,
 };
 const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]);
+const WEB_MERCATOR_RADIUS = 6_378_137;
+const WGS84_ECCENTRICITY = 0.08181919084262149;
+const NORTH_AMERICA_BOUNDS = [-21_051_700.011, 557_305.257, -4_551_782.871, 12_932_243.112] as const;
+const NORTH_PACIFIC_BOUNDS = [-3_339_584.7, 764_000, 15_584_728.7, 11_413_000] as const;
+const imageFrameCache = new Map<string, Promise<void>>();
 const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA GOES-18": "Calibrated ABI satellite imagery, GLM total lightning and smoke-detection products.",
   "NOAA Open Data": "Public cloud distribution for GOES ABI Level-2 satellite source files.",
@@ -202,6 +207,27 @@ function frameUrl(frame: Frame, base: string): string {
   // fetch timestamp makes that replacement visible to a long-open browser.
   url.searchParams.set("v", frame.fetchedAt);
   return url.toString();
+}
+
+function preloadImageFrame(url: string): Promise<void> {
+  const existing = imageFrameCache.get(url);
+  if (existing) return existing;
+  const request = new Promise<void>((resolve) => {
+    const image = new Image();
+    const finish = () => {
+      if (typeof image.decode === "function") {
+        void image.decode().catch(() => undefined).then(() => resolve());
+      } else {
+        resolve();
+      }
+    };
+    image.onload = finish;
+    image.onerror = () => resolve();
+    image.src = url;
+    if (image.complete) finish();
+  });
+  imageFrameCache.set(url, request);
+  return request;
 }
 
 function pointFrameReferences(
@@ -282,6 +308,7 @@ async function buildLightningMarkers(
   references: PointFrameReference[],
   idPrefix = "",
   maxMarkers = 1_200,
+  targetDomain?: string,
 ): Promise<LightningMarker[]> {
   const frames = await Promise.all(references.map(async (reference) => ({
     reference,
@@ -292,13 +319,15 @@ async function buildLightningMarkers(
     payload.points.forEach((point, index) => {
       const [x, y, pointAge = 0] = point;
       if (![x, y, pointAge].every(Number.isFinite) || x < 0 || x > 1 || y < 0 || y > 1) return;
+      const mapped = remapFirePoint(x, y, payload.domain, targetDomain ?? payload.domain);
+      if (!mapped) return;
       const totalAge = Math.max(0, reference.ageMinutes + pointAge);
       const age: LightningMarker["age"] = totalAge < 10 ? 0 : totalAge < 20 ? 1 : totalAge < 30 ? 2 : 3;
       const location = `${Math.round(x * 10_000)}-${Math.round(y * 10_000)}`;
       const marker = {
         id: `${idPrefix}${payload.domain}-${reference.validTime}-${index}`,
-        x: x * 100,
-        y: y * 100,
+        x: mapped[0] * 100,
+        y: mapped[1] * 100,
         age,
       } satisfies LightningMarker;
       const previous = byLocation.get(location);
@@ -330,6 +359,25 @@ function remapFirePoint(
       BC_ON_NORTH_AMERICA.left + x * BC_ON_NORTH_AMERICA.width,
       BC_ON_NORTH_AMERICA.top + y * BC_ON_NORTH_AMERICA.height,
     ];
+  }
+  if (sourceDomain === "north-america" && targetDomain === "north-pacific") {
+    const [naXmin, naYmin, naXmax, naYmax] = NORTH_AMERICA_BOUNDS;
+    const projectedX = naXmin + x * (naXmax - naXmin);
+    const projectedY = naYmax - y * (naYmax - naYmin);
+    const longitude = projectedX / WEB_MERCATOR_RADIUS * 180 / Math.PI;
+    const latitude = Math.atan(Math.sinh(projectedY / WEB_MERCATOR_RADIUS));
+    const wrappedLongitude = longitude < 0 ? longitude + 360 : longitude;
+    const pacificX = WEB_MERCATOR_RADIUS * (wrappedLongitude - 150) * Math.PI / 180;
+    const sineLatitude = Math.sin(latitude);
+    const pacificY = WEB_MERCATOR_RADIUS * Math.log(
+      Math.tan(Math.PI / 4 + latitude / 2)
+      * ((1 - WGS84_ECCENTRICITY * sineLatitude) / (1 + WGS84_ECCENTRICITY * sineLatitude)) ** (WGS84_ECCENTRICITY / 2),
+    );
+    const [npXmin, npYmin, npXmax, npYmax] = NORTH_PACIFIC_BOUNDS;
+    const mappedX = (pacificX - npXmin) / (npXmax - npXmin);
+    const mappedY = (npYmax - pacificY) / (npYmax - npYmin);
+    if (mappedX < 0 || mappedX > 1 || mappedY < 0 || mappedY > 1) return undefined;
+    return [mappedX, mappedY];
   }
   return undefined;
 }
@@ -716,6 +764,91 @@ function ZapIcon() {
   );
 }
 
+function LightningCanvas({
+  markers,
+  style,
+  className = "",
+  label,
+}: {
+  markers: LightningMarker[];
+  style: CSSProperties;
+  className?: string;
+  label: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const draw = () => {
+      const bounds = canvas.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(1, Math.round(bounds.width * ratio));
+      const height = Math.max(1, Math.round(bounds.height * ratio));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.clearRect(0, 0, width, height);
+      context.save();
+      context.scale(ratio, ratio);
+      const size = Math.max(8, Math.min(15, window.innerWidth * 0.0115));
+      const colors = ["#fffef0", "#fff29a", "#ffe064", "#f6d451"];
+      const opacity = [1, 0.82, 0.56, 0.30];
+      for (const marker of markers) {
+        context.save();
+        context.translate(marker.x / 100 * bounds.width, marker.y / 100 * bounds.height);
+        context.scale(size / 24, size / 24);
+        context.translate(-12, -12);
+        context.globalAlpha = opacity[marker.age];
+        context.fillStyle = colors[marker.age];
+        if (marker.age === 0) {
+          context.shadowColor = "rgba(255, 254, 220, 0.96)";
+          context.shadowBlur = 9;
+        } else {
+          context.shadowColor = "rgba(0, 0, 0, 0.72)";
+          context.shadowBlur = 3;
+          context.shadowOffsetY = 2;
+        }
+        context.beginPath();
+        context.moveTo(13.4, 1.6);
+        context.lineTo(3.2, 12.4);
+        context.quadraticCurveTo(2.4, 13.4, 4.0, 14.0);
+        context.lineTo(11.8, 14.0);
+        context.lineTo(10.0, 21.4);
+        context.quadraticCurveTo(9.7, 22.8, 11.0, 21.8);
+        context.lineTo(20.8, 11.6);
+        context.quadraticCurveTo(21.7, 10.5, 20.0, 10.0);
+        context.lineTo(12.1, 10.0);
+        context.lineTo(14.0, 2.6);
+        context.quadraticCurveTo(14.3, 1.2, 13.4, 1.6);
+        context.closePath();
+        context.fill();
+        context.restore();
+      }
+      context.restore();
+    };
+    draw();
+    const observer = new ResizeObserver(draw);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [markers]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className={`point-symbol-layer lightning-canvas ${className}`.trim()}
+      style={style}
+      role="img"
+      aria-label={label}
+      data-marker-count={markers.length}
+    />
+  );
+}
+
 function FlameIcon({ filled = true, highlighted = false }: { filled?: boolean; highlighted?: boolean }) {
   const path = "M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4";
   return (
@@ -1036,10 +1169,17 @@ export function RadarViewer() {
   const anchor = anchorFrames[currentFrameIndex];
   const lightningController = product?.layers.find((recipe) => LIGHTNING_CONTROLLERS.has(recipe.id));
   const lightningPointsId = lightningController ? pointLayerId(lightningController.id) : undefined;
+  // GOES-18 GLM has the same physical coverage in both broad views. Reuse the
+  // dense North America point archive on the dateline-centred Pacific grid;
+  // the client remaps those normalized Mercator coordinates without another
+  // network product or a duplicate R2 archive.
+  const lightningPointDomain = domain?.id === "north-pacific"
+    ? catalog?.domains["north-america"]
+    : domain;
   const lightningPointReferences = useMemo(() => {
     if (
       !product
-      || !domain
+      || !lightningPointDomain
       || !anchor
       || !catalogBase
       || !lightningController
@@ -1047,13 +1187,13 @@ export function RadarViewer() {
       || !isProductLayerEnabled(lightningController, optionalLayers, product.layers)
     ) return [];
     return pointFrameReferences(
-      domain.layers[lightningPointsId]?.frames ?? [],
+      lightningPointDomain.layers[lightningPointsId]?.frames ?? [],
       anchor.validTime,
       catalogBase,
       32,
       3,
     );
-  }, [anchor, catalogBase, domain, lightningController, lightningPointsId, optionalLayers, product]);
+  }, [anchor, catalogBase, lightningController, lightningPointDomain, lightningPointsId, optionalLayers, product]);
   const ecccFallbackPointReferences = useMemo(() => {
     if (
       !catalog
@@ -1084,7 +1224,9 @@ export function RadarViewer() {
     ) return [];
     const pointDomain = domain.layers["hotspot-points"]?.frames?.length
       ? domain
-      : catalog?.domains.bc;
+      : product.domain === "bc"
+        ? catalog?.domains.bc
+        : catalog?.domains["north-america"];
     return rollingPointFrameReferences(
       pointDomain?.layers["hotspot-points"]?.frames ?? [],
       anchor.validTime,
@@ -1134,13 +1276,14 @@ export function RadarViewer() {
       lightningPointReferences,
       "",
       domain?.id === "north-america" ? 700 : 1_200,
+      product?.domain,
     ).then((markers) => {
       if (!cancelled) setLightningMarkers(markers);
     }).catch(() => {
       if (!cancelled) setLightningMarkers([]);
     });
     return () => { cancelled = true; };
-  }, [domain?.id, lightningPointReferences]);
+  }, [domain?.id, lightningPointReferences, product?.domain]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1149,7 +1292,7 @@ export function RadarViewer() {
       return () => window.clearTimeout(clearMarkers);
     }
 
-    void buildLightningMarkers(ecccFallbackPointReferences, "eccc-", 250).then((markers) => {
+    void buildLightningMarkers(ecccFallbackPointReferences, "eccc-", 250, "bc").then((markers) => {
       if (!cancelled) setEcccFallbackLightningMarkers(markers);
     }).catch(() => {
       if (!cancelled) setEcccFallbackLightningMarkers([]);
@@ -1176,80 +1319,84 @@ export function RadarViewer() {
 
   useEffect(() => {
     if (!isAnimating || !catalog || !domain || !product || !catalogBase) return;
-    const nextIndex = (currentFrameIndex + 1) % anchorFrames.length;
-    const nextAnchor = anchorFrames[nextIndex];
-    if (!nextAnchor) return;
-
-    // Live R2 rasters are much larger than the bundled demo. Keep displaying
-    // the current map until every layer in the next composition is ready, so
-    // first-pass playback can slow down but never flashes a blank frame.
-    const nextUrls = composeLayers(
-      product,
-      domain,
-      nextAnchor,
-      catalogBase,
-      optionalLayers,
-    ).map((layer) => layer.url);
-    const nextPointReferences = product.layers.flatMap((recipe) => {
-      if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
-      const pointsId = pointLayerId(recipe.id);
-      if (!pointsId) return [];
-      const pointDomain = recipe.id === "hotspots" && !domain.layers[pointsId]?.frames?.length
-        ? catalog.domains.bc
-        : domain;
-      return recipe.id === "hotspots"
-        ? rollingPointFrameReferences(
-            pointDomain?.layers[pointsId]?.frames ?? [],
-            nextAnchor.validTime,
-            catalogBase,
-            6 * 60,
-          )
-        : pointFrameReferences(
-            pointDomain?.layers[pointsId]?.frames ?? [],
-            nextAnchor.validTime,
-            catalogBase,
-            32,
-            3,
-          );
+    const pointReferencesFor = (candidate: Frame): PointFrameReference[] => {
+      const references = product.layers.flatMap((recipe) => {
+        if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
+        const pointsId = pointLayerId(recipe.id);
+        if (!pointsId) return [];
+        const nativePointDomain = domain.layers[pointsId]?.frames?.length ? domain : undefined;
+        const pointDomain = recipe.id === "hotspots"
+          ? nativePointDomain ?? (product.domain === "bc" ? catalog.domains.bc : catalog.domains["north-america"])
+          : product.domain === "north-pacific"
+            ? catalog.domains["north-america"]
+            : domain;
+        return recipe.id === "hotspots"
+          ? rollingPointFrameReferences(
+              pointDomain?.layers[pointsId]?.frames ?? [],
+              candidate.validTime,
+              catalogBase,
+              6 * 60,
+            )
+          : pointFrameReferences(
+              pointDomain?.layers[pointsId]?.frames ?? [],
+              candidate.validTime,
+              catalogBase,
+              32,
+              3,
+            );
+      });
+      const fireRecipe = product.layers.find((recipe) => recipe.id === "hotspots");
+      if (fireRecipe && isProductLayerEnabled(fireRecipe, optionalLayers, product.layers)) {
+        const activePointDomain = domain.layers["active-fire-points"]?.frames?.length
+          ? domain
+          : catalog.domains["north-america"];
+        references.push(...latestRollingPointFrameReferences(
+          activePointDomain?.layers["active-fire-points"]?.frames ?? [],
+          candidate.validTime,
+          catalogBase,
+          6 * 60,
+        ));
+      }
+      if (
+        product.domain === "north-america"
+        && product.layers.some((recipe) => (
+          LIGHTNING_CONTROLLERS.has(recipe.id)
+          && isProductLayerEnabled(recipe, optionalLayers, product.layers)
+        ))
+      ) {
+        references.push(...pointFrameReferences(
+          catalog.domains.bc?.layers["lightning-points"]?.frames ?? [],
+          candidate.validTime,
+          catalogBase,
+          32,
+          3,
+        ));
+      }
+      return references;
+    };
+    const lookaheadCount = product.domain === "north-america" ? 10 : 4;
+    const lookahead = Array.from({ length: Math.min(lookaheadCount, anchorFrames.length - 1) }, (_, offset) => {
+      const index = (currentFrameIndex + offset + 1) % anchorFrames.length;
+      const candidate = anchorFrames[index];
+      return {
+        urls: composeLayers(product, domain, candidate, catalogBase, optionalLayers).map((layer) => layer.url),
+        pointReferences: pointReferencesFor(candidate),
+      };
     });
-    const fireRecipe = product.layers.find((recipe) => recipe.id === "hotspots");
-    if (fireRecipe && isProductLayerEnabled(fireRecipe, optionalLayers, product.layers)) {
-      const activePointDomain = domain.layers["active-fire-points"]?.frames?.length
-        ? domain
-        : catalog.domains["north-america"];
-      nextPointReferences.push(...latestRollingPointFrameReferences(
-        activePointDomain?.layers["active-fire-points"]?.frames ?? [],
-        nextAnchor.validTime,
-        catalogBase,
-        6 * 60,
-      ));
-    }
-    if (
-      product.domain === "north-america"
-      && product.layers.some((recipe) => (
-        LIGHTNING_CONTROLLERS.has(recipe.id)
-        && isProductLayerEnabled(recipe, optionalLayers, product.layers)
-      ))
-    ) {
-      nextPointReferences.push(...pointFrameReferences(
-        catalog.domains.bc?.layers["lightning-points"]?.frames ?? [],
-        nextAnchor.validTime,
-        catalogBase,
-        32,
-        3,
-      ));
-    }
-    nextPointReferences.forEach((reference) => preloadPointFrame(reference.url));
+    const nextFrame = lookahead[0];
+    if (!nextFrame) return;
+
+    // Decode a rolling buffer instead of serially fetching only the next map.
+    // This keeps the 10-minute continental loop moving at a steady cadence
+    // after its first frame without blanking during an initial cold cache.
+    lookahead.forEach((candidate) => {
+      candidate.urls.forEach((url) => void preloadImageFrame(url));
+      candidate.pointReferences.forEach((reference) => preloadPointFrame(reference.url));
+    });
     let cancelled = false;
     let timer: number | undefined;
-    const loads = nextUrls.map((url) => new Promise<void>((resolve) => {
-      const image = new Image();
-      image.onload = () => resolve();
-      image.onerror = () => resolve();
-      image.src = url;
-      if (image.complete) resolve();
-    }));
-    loads.push(...nextPointReferences.map((reference) => (
+    const loads = nextFrame.urls.map(preloadImageFrame);
+    loads.push(...nextFrame.pointReferences.map((reference) => (
       loadPointFrame(reference.url).then(() => undefined).catch(() => undefined)
     )));
 
@@ -1556,40 +1703,19 @@ export function RadarViewer() {
               />
             ))}
             {lightningMarkers.length > 0 && (
-              <div
-                className="point-symbol-layer"
+              <LightningCanvas
+                markers={lightningMarkers}
                 style={cropStyle}
-                role="img"
-                aria-label="Recent lightning activity; brighter bolts are newer"
-              >
-                {lightningMarkers.map((event) => (
-                  <span
-                    className={`lightning-marker age-${event.age}`}
-                    key={event.id}
-                    style={{ left: `${event.x}%`, top: `${event.y}%` }}
-                  >
-                    <ZapIcon />
-                  </span>
-                ))}
-              </div>
+                label="Recent lightning activity; brighter bolts are newer"
+              />
             )}
             {ecccFallbackLightningMarkers.length > 0 && product.domain === "north-america" && (
-              <div
-                className="point-symbol-layer eccc-north-fallback"
+              <LightningCanvas
+                markers={ecccFallbackLightningMarkers}
                 style={BC_ON_NORTH_AMERICA_STYLE}
-                role="img"
-                aria-label="Recent ECCC lightning activity in northern British Columbia"
-              >
-                {ecccFallbackLightningMarkers.map((event) => (
-                  <span
-                    className={`lightning-marker age-${event.age}`}
-                    key={event.id}
-                    style={{ left: `${event.x}%`, top: `${event.y}%` }}
-                  >
-                    <ZapIcon />
-                  </span>
-                ))}
-              </div>
+                className="eccc-north-fallback"
+                label="Recent ECCC lightning activity in northern British Columbia"
+              />
             )}
             {fireMarkers.length > 0 && (
               <div

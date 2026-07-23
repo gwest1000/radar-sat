@@ -48,15 +48,15 @@ from .point_frames import (
 UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 2
 LIGHTNING_POINT_RENDER_VERSION = 1
-HOTSPOT_RENDER_VERSION = 3
-HOTSPOT_POINT_RENDER_VERSION = 1
-ACTIVE_FIRE_POINT_RENDER_VERSION = 2
+HOTSPOT_RENDER_VERSION = 4
+HOTSPOT_POINT_RENDER_VERSION = 2
+ACTIVE_FIRE_POINT_RENDER_VERSION = 3
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 2
-GLM_LIGHTNING_RENDER_VERSION = 1
-GLM_LIGHTNING_TRAIL_RENDER_VERSION = 1
-GLM_LIGHTNING_POINT_RENDER_VERSION = 1
+GLM_LIGHTNING_RENDER_VERSION = 2
+GLM_LIGHTNING_TRAIL_RENDER_VERSION = 2
+GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
@@ -583,7 +583,10 @@ def ingest_geomet(
                         outside_no_coverage=layer_id.endswith("coverage"),
                     )
             except Exception:
-                if layer.daylight_only:
+                # A blank or temporarily unavailable qualitative satellite
+                # frame must not abort radar, fire, and hazard ingest for every
+                # later domain in the operational cycle.
+                if layer.daylight_only or layer.role == "background":
                     continue
                 raise
             if layer.role == "background":

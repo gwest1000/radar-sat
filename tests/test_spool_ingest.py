@@ -219,7 +219,7 @@ class NativeRenderTests(unittest.TestCase):
             self.assertEqual(payload["source"], "NRCan CWFIS")
             self.assertEqual(payload["detectionCount"], 1)
             self.assertEqual(payload["sourceLayer"], "public:hotspots_24h")
-            self.assertEqual(payload["renderVersion"], 3)
+            self.assertEqual(payload["renderVersion"], 4)
 
     def test_local_bch_watershed_shapefile_renders_to_aligned_overlay(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

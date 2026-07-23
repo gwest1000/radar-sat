@@ -223,7 +223,7 @@ class ActiveFireTests(unittest.TestCase):
             ])
             self.assertEqual({point[4] for point in payload["points"]}, {1, 2})
             self.assertEqual({point[5] for point in payload["points"]}, {0})
-            self.assertEqual(metadata["renderVersion"], 2)
+            self.assertEqual(metadata["renderVersion"], 3)
             self.assertEqual(metadata["source"], "NRCan CWFIS + BCWS + NIFC WFIGS")
 
 

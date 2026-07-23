@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 from pyproj import Transformer
 
 from radarsat.catalog import build_catalog
-from radarsat.config import LAYERS, Domain
+from radarsat.config import DOMAINS, LAYERS, Domain
 from radarsat.pipeline import frame_path, metadata_path, write_metadata
 from radarsat.point_frames import (
     glm_point_rows,
@@ -47,6 +47,20 @@ def test_domain(domain_id: str = "north-america") -> Domain:
 
 
 class PointFrameTests(unittest.TestCase):
+    def test_pacific_rows_wrap_western_longitudes_onto_dateline_grid(self) -> None:
+        domain = DOMAINS["north-pacific"]
+        points, summary = glm_point_rows(
+            np.asarray([40.0, 50.0]),
+            np.asarray([-120.0, -100.0]),
+            None,
+            domain,
+            VALID,
+        )
+
+        self.assertEqual(len(points), 2)
+        self.assertEqual(summary["mappedFlashCount"], 2)
+        self.assertTrue(all(0 <= point[0] <= 1 and 0 <= point[1] <= 1 for point in points))
+
     def test_glm_rows_are_normalized_counted_and_aged_at_window_end(self) -> None:
         domain = test_domain()
         reference = VALID + dt.timedelta(minutes=10)

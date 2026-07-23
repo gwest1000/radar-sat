@@ -288,6 +288,11 @@ input:focus-visible {
   user-select: none;
 }
 
+.lightning-canvas {
+  display: block;
+  contain: strict;
+}
+
 .eccc-north-fallback {
   /* GLM supplies the south; ECCC density fills northern BC as in WestWX. */
   clip-path: inset(0 0 39% 0);

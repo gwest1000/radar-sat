@@ -21,7 +21,7 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /actualSourceTime\(item\.id, item\.frame\)/);
   assert.match(viewer, /RANGE_OPTIONS = \[3, 6, 12, 24, 168\]/);
   assert.match(viewer, /Promise\.all\(loads\)/);
-  assert.match(viewer, /first-pass playback can slow down but never flashes a blank frame/);
+  assert.match(viewer, /Decode a rolling buffer instead of serially fetching only the next map/);
   assert.match(viewer, /atOrBeforeSourceTime/);
   assert.match(viewer, /sourceCount > selectedSourceCount/);
   assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.25, 0\.5, 0\.75, 1, 1\.25, 1\.5, 1\.75, 2\]/);
@@ -47,7 +47,12 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /pointFrameReferences\([\s\S]*6 \* 60/);
   assert.match(viewer, /<ZapIcon \/>/);
   assert.match(viewer, /<FlameIcon highlighted \/>/);
-  assert.match(viewer, /nextPointReferences\.forEach\(\(reference\) => preloadPointFrame/);
+  assert.match(viewer, /candidate\.pointReferences\.forEach\(\(reference\) => preloadPointFrame/);
+  assert.match(viewer, /<LightningCanvas/);
+  assert.match(viewer, /data-marker-count=\{markers\.length\}/);
+  assert.match(viewer, /lookaheadCount = product\.domain === "north-america" \? 10 : 4/);
+  assert.match(viewer, /preloadImageFrame/);
+  assert.match(viewer, /targetDomain === "north-pacific"/);
   assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
   assert.match(viewer, /active-fire-marker/);
   assert.match(viewer, /clusterNotableFires/);

@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 from pyproj import Transformer
 
 from .config import Domain
-from .geomet import projected_bbox
+from .geomet import projected_bbox, projection_longitude
 
 
 UTC = dt.timezone.utc
@@ -106,7 +106,7 @@ def project_hotspots(
             frp = max(0.0, float(properties.get("frp") or 0.0))
         except (KeyError, TypeError, ValueError):
             continue
-        x, y = transformer.transform(lon, lat)
+        x, y = transformer.transform(projection_longitude(lon, domain), lat)
         if not (xmin <= x <= xmax and ymin <= y <= ymax):
             continue
         px = round((x - xmin) / (xmax - xmin) * (domain.width - 1))

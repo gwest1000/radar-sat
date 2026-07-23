@@ -9,7 +9,7 @@ import requests
 from pyproj import Transformer
 
 from .config import Domain
-from .geomet import projected_bbox
+from .geomet import projected_bbox, projection_longitude
 
 
 UTC = dt.timezone.utc
@@ -243,7 +243,7 @@ def project_active_fires(
             if coordinate is None:
                 continue
             lon, lat = coordinate
-            x, y = transformer.transform(lon, lat)
+            x, y = transformer.transform(projection_longitude(lon, domain), lat)
             if not all(math.isfinite(value) for value in (x, y)):
                 continue
             if not (xmin <= x <= xmax and ymin <= y <= ymax):

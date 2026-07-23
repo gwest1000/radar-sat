@@ -18,6 +18,13 @@ from .config import Domain, GEOMET_URL, Layer
 UTC = dt.timezone.utc
 
 
+def projection_longitude(longitude: float, domain: Domain) -> float:
+    """Wrap western longitudes onto the Pacific-centred domain's x branch."""
+    if domain.id == "north-pacific" and longitude < 0:
+        return longitude + 360.0
+    return longitude
+
+
 def parse_utc(value: str) -> dt.datetime:
     return dt.datetime.fromisoformat(value.strip().replace("Z", "+00:00")).astimezone(UTC)
 
