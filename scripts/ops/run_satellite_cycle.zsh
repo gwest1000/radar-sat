@@ -49,9 +49,15 @@ acquire_lock() {
 if ! acquire_lock; then
   exit 0
 fi
-trap release_lock EXIT
-trap 'release_lock; exit 130' INT
-trap 'release_lock; exit 143' TERM
+
+source "${PROJECT_ROOT}/scripts/ops/heavy_satellite_lock.zsh"
+release_all_locks() {
+  release_heavy_satellite_lock
+  release_lock
+}
+trap release_all_locks EXIT
+trap 'release_all_locks; exit 130' INT
+trap 'release_all_locks; exit 143' TERM
 
 ENV_FILE="${RADARSAT_ENV_FILE:-${PROJECT_ROOT}/.env}"
 if [[ -f "${ENV_FILE}" ]]; then
@@ -62,6 +68,11 @@ fi
 
 export PYTHONPATH="${PROJECT_ROOT}"
 export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
+
+if ! try_acquire_heavy_satellite_lock; then
+  print "A low-priority satellite render is already active; deferring this rapid cycle."
+  exit 0
+fi
 
 if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
   "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_westwx_satellite.py" \

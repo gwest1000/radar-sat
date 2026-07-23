@@ -49,9 +49,15 @@ acquire_lock() {
 if ! acquire_lock; then
   exit 0
 fi
-trap release_lock EXIT
-trap 'release_lock; exit 130' INT
-trap 'release_lock; exit 143' TERM
+
+source "${PROJECT_ROOT}/scripts/ops/heavy_satellite_lock.zsh"
+release_all_locks() {
+  release_heavy_satellite_lock
+  release_lock
+}
+trap release_all_locks EXIT
+trap 'release_all_locks; exit 130' INT
+trap 'release_all_locks; exit 143' TERM
 
 ENV_FILE="${RADARSAT_ENV_FILE:-${PROJECT_ROOT}/.env}"
 if [[ -f "${ENV_FILE}" ]]; then
@@ -64,6 +70,19 @@ export PYTHONPATH="${PROJECT_ROOT}"
 export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
 export RADARSAT_RAW_SAT_ENABLED=1
 export RADARSAT_GOES_HAZARDS_ENABLED=0
+
+# The workers normally launch together after login. Let the latency-sensitive
+# rapid path claim the shared Satpy slot first, then wait for a quiet interval.
+sleep "${RADARSAT_ARCHIVE_START_DELAY_SECONDS:-30}"
+archive_wait_seconds=0
+until try_acquire_heavy_satellite_lock; do
+  if (( archive_wait_seconds >= 150 )); then
+    print "Rapid satellite work stayed busy; deferring this archive cycle."
+    exit 0
+  fi
+  sleep 5
+  (( archive_wait_seconds += 5 ))
+done
 
 # The slow multi-satellite blend is needed only for the half-hour North Pacific
 # background. North America and BC are served by the independent rapid paths.
