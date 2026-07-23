@@ -2028,46 +2028,48 @@ export function RadarViewer() {
               ))}
             </div>
           )}
-          <h2 className="legend-title">Legend</h2>
-          {visibleLegends.map((legendId) => {
-            const legend = catalog.legends[legendId];
-            if (!legend) return null;
-            if (legend.kind === "lightning-age") return <LightningLegend key={legendId} />;
-            if (legend.kind === "smoke-confidence") {
-              const smokeFrame = composedLayers.find((layer) => layer.id === "smoke")?.frame;
-              return <SmokeLegend frame={smokeFrame} key={legendId} />;
-            }
-            if (legend.kind === "hotspots") {
-              const hotspotFrame = firePointReferences[0]?.frame
-                ?? composedLayers.find((layer) => layer.id === "hotspots")?.frame;
-              return (
-                <FireLegend
-                  hotspotFrame={hotspotFrame}
-                  activeFrame={activeFirePointReferences[0]?.frame}
-                  showUsLarge={product.domain === "north-america"}
-                  key={legendId}
-                />
-              );
-            }
-            if (legend.kind === "raw-ir") return <InfraredLegend key={legendId} />;
-            if (legend.kind === "watersheds") return <WatershedLegend key={legendId} />;
-            return legend.path ? (
-              // Legend rasters are supplied by the authoritative data source.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className="legend-image" src={absoluteUrl(legend.path, catalogBase)} alt={legend.title} key={legendId} />
-            ) : null;
-          })}
-          {!visibleLegends.length && (
-            <p className="detail-copy">
-              {product.id === "bc-ir"
-                ? "Enhanced RGB; no calibrated brightness-temperature scale."
-                : product.group === "Satellite"
-                  ? "Qualitative satellite RGB; no calibrated numerical scale."
-                  : product.legends.length
-                    ? "No legend-bearing layers are enabled."
-                    : "Qualitative RGB product; no numerical scale."}
-            </p>
-          )}
+          <div className="legend-content">
+            <h2 className="legend-title">Legend</h2>
+            {visibleLegends.map((legendId) => {
+              const legend = catalog.legends[legendId];
+              if (!legend) return null;
+              if (legend.kind === "lightning-age") return <LightningLegend key={legendId} />;
+              if (legend.kind === "smoke-confidence") {
+                const smokeFrame = composedLayers.find((layer) => layer.id === "smoke")?.frame;
+                return <SmokeLegend frame={smokeFrame} key={legendId} />;
+              }
+              if (legend.kind === "hotspots") {
+                const hotspotFrame = firePointReferences[0]?.frame
+                  ?? composedLayers.find((layer) => layer.id === "hotspots")?.frame;
+                return (
+                  <FireLegend
+                    hotspotFrame={hotspotFrame}
+                    activeFrame={activeFirePointReferences[0]?.frame}
+                    showUsLarge={product.domain === "north-america"}
+                    key={legendId}
+                  />
+                );
+              }
+              if (legend.kind === "raw-ir") return <InfraredLegend key={legendId} />;
+              if (legend.kind === "watersheds") return <WatershedLegend key={legendId} />;
+              return legend.path ? (
+                // Legend rasters are supplied by the authoritative data source.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="legend-image" src={absoluteUrl(legend.path, catalogBase)} alt={legend.title} key={legendId} />
+              ) : null;
+            })}
+            {!visibleLegends.length && (
+              <p className="detail-copy">
+                {product.id === "bc-ir"
+                  ? "Enhanced RGB; no calibrated brightness-temperature scale."
+                  : product.group === "Satellite"
+                    ? "Qualitative satellite RGB; no calibrated numerical scale."
+                    : product.legends.length
+                      ? "No legend-bearing layers are enabled."
+                      : "Qualitative RGB product; no numerical scale."}
+              </p>
+            )}
+          </div>
           <button className="sources-button" type="button" onClick={() => setSourcesOpen(true)}>
             Sources
           </button>

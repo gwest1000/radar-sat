@@ -100,11 +100,13 @@ test("keeps the desktop controls and map at the full available width", async () 
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(styles, /\.app-shell\s*\{[\s\S]*?width: 100%/);
-  assert.match(styles, /\.app-shell\s*\{[\s\S]*?grid-template-columns: minmax\(260px, 310px\) minmax\(0, 1fr\)/);
+  assert.match(styles, /\.app-shell\s*\{[\s\S]*?grid-template-columns: clamp\(360px, 26vw, 420px\) minmax\(0, 1fr\)/);
   assert.match(styles, /\.viewer-grid\s*\{[\s\S]*?display: contents/);
   assert.match(styles, /\.map-column\s*\{[\s\S]*?display: contents/);
   assert.match(styles, /\.map-stage\s*\{[\s\S]*?grid-column: 2/);
+  assert.match(styles, /\.map-stage\s*\{[\s\S]*?place-self: center/);
   assert.match(styles, /\.legend-rail\s*\{[\s\S]*?grid-column: 1/);
+  assert.match(styles, /\.legend-rail\s*\{[\s\S]*?overflow: visible/);
   assert.match(styles, /\.timeline-scrubber\s*\{[\s\S]*?grid-column: 1 \/ -1/);
   assert.match(styles, /width: min\(100%, var\(--map-max-width/);
   assert.match(viewer, /"--map-max-width": `calc\(\$\{mapAspect \* 100\}dvh/);
