@@ -365,6 +365,13 @@ BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
     # 170 E–102 W, 20–66 N: the eastern half of the North Pacific through the
     # eastern edge of Colorado, without Kamchatka or the far tropical Pacific.
     "pacific-wna": {"left": 0.2941, "top": 0.1479, "width": 0.5176, "height": 0.7117},
+    # Crop the continental display near 69 N and the eastern edge of Maine.
+    # Keeping the source grid intact means satellite, radar and hazards remain
+    # pixel-registered while the browser devotes its space to useful terrain.
+    "north-america": {"left": 0.0, "top": 0.1763, "width": 0.8272, "height": 0.8237},
+    # Retain the full Pacific western edge, but remove the high Arctic and stop
+    # at roughly 102 W (the eastern edge of Colorado).
+    "north-pacific": {"left": 0.0, "top": 0.0659, "width": 0.8118, "height": 0.9341},
 }
 
 
@@ -547,6 +554,7 @@ PRODUCTS: list[dict[str, object]] = [
             "GOES-18 supplies genuine ten-minute scan times on the common 2 km display grid; the far eastern edge has weaker viewing geometry than the legacy GOES-18/19 blend.",
             "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder.",
         ],
+        BROAD_VIEWPORTS["north-america"],
     ),
     _broad_product(
         "north-pacific-overlay",
@@ -558,6 +566,7 @@ PRODUCTS: list[dict[str, object]] = [
             "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
             "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
         ],
+        BROAD_VIEWPORTS["north-pacific"],
     ),
 ]
 

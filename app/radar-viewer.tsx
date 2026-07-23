@@ -281,47 +281,10 @@ function rollingPointFrameReferences(
   catalogBase: string,
   maxAgeMinutes: number,
 ): PointFrameReference[] {
-  const references = pointFrameReferences(frames, target, catalogBase, maxAgeMinutes, 1);
-  if (references.length) return references;
-  const latest = frames[frames.length - 1];
-  const targetTime = Date.parse(target);
-  const latestTime = latest ? Date.parse(latest.validTime) : Number.NaN;
-  if (
-    !latest
-    || !Number.isFinite(targetTime)
-    || !Number.isFinite(latestTime)
-    || latestTime < targetTime
-    || latestTime - targetTime > maxAgeMinutes * 60_000
-  ) return [];
-  return [{
-    validTime: latest.validTime,
-    url: frameUrl(latest, catalogBase),
-    ageMinutes: 0,
-    frame: latest,
-  }];
-}
-
-function latestRollingPointFrameReferences(
-  frames: Frame[],
-  target: string,
-  catalogBase: string,
-  maxOffsetMinutes: number,
-): PointFrameReference[] {
-  const latest = frames[frames.length - 1];
-  const targetTime = Date.parse(target);
-  const latestTime = latest ? Date.parse(latest.validTime) : Number.NaN;
-  if (
-    !latest
-    || !Number.isFinite(targetTime)
-    || !Number.isFinite(latestTime)
-    || Math.abs(latestTime - targetTime) > maxOffsetMinutes * 60_000
-  ) return [];
-  return [{
-    validTime: latest.validTime,
-    url: frameUrl(latest, catalogBase),
-    ageMinutes: Math.max(0, (targetTime - latestTime) / 60_000),
-    frame: latest,
-  }];
+  // Never put a future fire snapshot on an earlier weather frame. If the
+  // archive does not yet contain an at-or-before observation, omit the fire
+  // overlay instead of labelling a future valid time.
+  return pointFrameReferences(frames, target, catalogBase, maxAgeMinutes, 1);
 }
 
 async function buildLightningMarkers(
@@ -478,7 +441,10 @@ async function buildFireMarkers(
     activeReference ? loadPointFrame(activeReference.url) : Promise.resolve(undefined),
     hotspotReference ? loadPointFrame(hotspotReference.url) : Promise.resolve(undefined),
   ]);
-  const overview = targetDomain === "north-america";
+  // Both continental domains are overview maps. Filtering weak hotspots and
+  // routine agency points avoids redrawing nearly two thousand sub-pixel
+  // symbols per Pacific frame while retaining notable fires and strong heat.
+  const overview = targetDomain === "north-america" || targetDomain === "north-pacific";
   const activeMarkers = (activePayload?.points ?? []).flatMap((point, index): FireMarker[] => {
     const [x, y, , sizeValue, , highlightValue] = point;
     const sizeHectares = Number.isFinite(sizeValue) ? sizeValue : 0;
@@ -621,27 +587,26 @@ function composeLayers(
     }
     let dynamicLayer = domain.layers[recipe.id];
     let frames = dynamicLayer?.frames ?? [];
-    if (product.domain === "bc" && ["raw-visir", "raw-visir-5min"].includes(recipe.id)) {
-      const standardLayer = domain.layers["raw-visir"];
+    if (product.domain === "bc" && recipe.id === "raw-visir-5min") {
       const rapidLayer = domain.layers["raw-visir-5min"];
-      const nativeLayer = domain.layers["raw-visir-native"];
-      const nativeFrame = nearestFrame(nativeLayer?.frames ?? [], anchor.validTime, 2);
-      const standardFrame = nearestFrame(standardLayer?.frames ?? [], anchor.validTime, 2)
-        ?? atOrBefore(standardLayer?.frames ?? [], anchor.validTime, standardLayer?.maxAgeMinutes);
       const rapidFrame = atOrBefore(
         rapidLayer?.frames ?? [],
         anchor.validTime,
         rapidLayer?.maxAgeMinutes,
       );
+      if (rapidFrame) {
+        dynamicLayer = rapidLayer;
+        frames = [rapidFrame];
+      }
+    } else if (product.domain === "bc" && recipe.id === "raw-visir") {
+      const standardLayer = domain.layers["raw-visir"];
+      const nativeLayer = domain.layers["raw-visir-native"];
+      const nativeFrame = nearestFrame(nativeLayer?.frames ?? [], anchor.validTime, 2);
+      const standardFrame = nearestFrame(standardLayer?.frames ?? [], anchor.validTime, 2)
+        ?? atOrBefore(standardLayer?.frames ?? [], anchor.validTime, standardLayer?.maxAgeMinutes);
       if (nativeFrame) {
         dynamicLayer = nativeLayer;
         frames = [nativeFrame];
-      } else if (standardFrame && Math.abs(Date.parse(standardFrame.validTime) - Date.parse(anchor.validTime)) <= 120_000) {
-        dynamicLayer = standardLayer;
-        frames = [standardFrame];
-      } else if (rapidFrame) {
-        dynamicLayer = rapidLayer;
-        frames = [rapidFrame];
       } else if (standardFrame) {
         dynamicLayer = standardLayer;
         frames = [standardFrame];
@@ -1458,7 +1423,7 @@ export function RadarViewer() {
     const pointDomain = domain?.layers["active-fire-points"]?.frames?.length
       ? domain
       : catalog.domains["north-america"];
-    return latestRollingPointFrameReferences(
+    return rollingPointFrameReferences(
       pointDomain?.layers["active-fire-points"]?.frames ?? [],
       anchor.validTime,
       catalogBase,
@@ -1563,7 +1528,7 @@ export function RadarViewer() {
         const activePointDomain = domain.layers["active-fire-points"]?.frames?.length
           ? domain
           : catalog.domains["north-america"];
-        references.push(...latestRollingPointFrameReferences(
+        references.push(...rollingPointFrameReferences(
           activePointDomain?.layers["active-fire-points"]?.frames ?? [],
           candidate.validTime,
           catalogBase,

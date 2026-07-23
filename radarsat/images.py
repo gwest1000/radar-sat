@@ -109,7 +109,7 @@ def reproject_overlay(
 
 
 def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
-    """Render age-fading lightning clusters as haloed circular flash markers."""
+    """Render age-fading lightning clusters as haloed bolt markers."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     size: tuple[int, int] | None = None
     masks: list[np.ndarray | None] = []
@@ -153,33 +153,32 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas, "RGBA")
     # Source order is current, 10–20 and 20–30 minutes. Draw oldest first so a
-    # new flash wins where intervals overlap. The dark outer halo and white ring
-    # remain visible over both high reflectivity and bright cloud RGBs.
+    # new flash wins where intervals overlap. These are the same illuminated
+    # white-to-yellow bolt symbols used before lightning moved to a lightweight
+    # transparent raster; the dark outline remains visible over bright cloud.
     styles = [
-        # New flashes are illuminated white; older flashes fade through
-        # yellow, never orange/coral where they could be confused with fire.
-        ((255, 255, 255, 255), (255, 239, 116, 255), 6),
-        ((255, 226, 76, 220), (255, 255, 255, 215), 5),
-        ((207, 188, 82, 150), (255, 255, 255, 145), 4),
+        ((255, 254, 240, 255), (255, 255, 255, 180), 8),
+        ((255, 242, 154, 210), (255, 255, 255, 120), 7),
+        ((255, 224, 100, 145), (255, 255, 255, 70), 6),
     ]
-    for mask, (fill, ring, base_radius) in reversed(list(zip(masks, styles))):
+    for mask, (fill, glow, half_height) in reversed(list(zip(masks, styles))):
         if mask is None:
             continue
         for x, y, area in component_centres(mask):
-            radius = base_radius + min(2, max(0, area.bit_length() - 2))
-            draw.ellipse((x - radius - 2, y - radius - 2, x + radius + 2, y + radius + 2), fill=(2, 7, 11, 225))
-            draw.ellipse((x - radius - 1, y - radius - 1, x + radius + 1, y + radius + 1), fill=ring)
-            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=fill)
-            if radius >= 5:
-                bolt = [
-                    (x + 1, y - radius + 2),
-                    (x - 2, y),
-                    (x, y),
-                    (x - 1, y + radius - 2),
-                    (x + 3, y - 1),
-                    (x + 1, y - 1),
-                ]
-                draw.polygon(bolt, fill=(7, 13, 21, min(235, fill[3])))
+            height = half_height + min(2, max(0, area.bit_length() - 2))
+            width = max(5, round(height * 0.72))
+            bolt = [
+                (x + round(width * 0.18), y - height),
+                (x - width, y + round(height * 0.08)),
+                (x - round(width * 0.15), y + round(height * 0.08)),
+                (x - round(width * 0.38), y + height),
+                (x + width, y - round(height * 0.18)),
+                (x + round(width * 0.18), y - round(height * 0.18)),
+            ]
+            closed_bolt = bolt + [bolt[0]]
+            draw.line(closed_bolt, fill=(2, 7, 11, min(225, fill[3])), width=5, joint="curve")
+            draw.line(closed_bolt, fill=glow, width=3, joint="curve")
+            draw.polygon(bolt, fill=fill)
     canvas.quantize(colors=32, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(
         destination,
         "PNG",

@@ -76,6 +76,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /layerId === "westwx-visir"\) return "NOAA VIS\/IR"/);
   assert.match(viewer, /layerId === "daynight"\) return "ECCC VIS\/IR"/);
   assert.match(viewer, /pointDomain = domain\?\.layers\["active-fire-points"\]/);
+  assert.match(viewer, /targetDomain === "north-america" \|\| targetDomain === "north-pacific"/);
+  assert.doesNotMatch(viewer, /latestRollingPointFrameReferences/);
   assert.match(viewer, /layerId\.startsWith\("westwx-"\)/);
   assert.match(pointData, /coordinateSpace\.origin === "top-left"/);
   assert.match(styles, /\.lightning-marker\.age-0/);
@@ -133,6 +135,7 @@ test("ships a runtime data configuration", async () => {
   const northAmerica = demo.products.find((product) => product.id === "north-america-overlay");
   const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
   assert.equal(northAmerica.anchorLayer, "westwx-ir");
+  assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.8272, height: 0.8237 });
   assert.deepEqual(
     northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
     ["westwx-visir", "westwx-ir"],
@@ -140,6 +143,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-ir");
+  assert.deepEqual(northPacific.viewport, { left: 0, top: 0.0659, width: 0.8118, height: 0.9341 });
   assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
 });
