@@ -58,8 +58,11 @@ DOMAINS: dict[str, Domain] = {
         east=-50.0,
         north=75.0,
         crs="EPSG:3857",
-        width=1440,
-        height=1080,
+        # This overview is display-limited well before native ABI resolution.
+        # A 1280 px grid reduces decode/transfer cost without losing useful
+        # continental-scale meteorological detail.
+        width=1280,
+        height=960,
         tier="broad",
     ),
     "north-pacific": Domain(
@@ -306,6 +309,16 @@ LAYERS: dict[str, Layer] = {
         source="NOAA Open Data",
         max_age_minutes=90,
     ),
+    "raw-visir-5min": Layer(
+        id="raw-visir-5min",
+        title="GOES-18 five-minute PACUS true-colour / neutral infrared",
+        source_layer=None,
+        image_format="image/webp",
+        extension="webp",
+        role="background",
+        source="NOAA GOES-18",
+        max_age_minutes=15,
+    ),
     "raw-visir-native": Layer(
         id="raw-visir-native",
         title="Higher-resolution GOES-18 true-colour / neutral infrared satellite imagery",
@@ -349,8 +362,9 @@ VIEWPORTS: dict[str, dict[str, float]] = {
 
 
 BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
-    # 155 E–95 W, 15–70 N on the dateline-safe EPSG:3832 North Pacific grid.
-    "pacific-wna": {"left": 0.2059, "top": 0.0361, "width": 0.6471, "height": 0.8781},
+    # 170 E–102 W, 20–66 N: the eastern half of the North Pacific through the
+    # eastern edge of Colorado, without Kamchatka or the far tropical Pacific.
+    "pacific-wna": {"left": 0.2941, "top": 0.1479, "width": 0.5176, "height": 0.7117},
 }
 
 
@@ -359,14 +373,18 @@ def _overlay_product(
     title: str,
     short_title: str,
     viewport: dict[str, float] | None = None,
+    *,
+    five_minute: bool = False,
+    max_hours: int | None = None,
 ) -> dict[str, object]:
+    visir_layer = "raw-visir-5min" if five_minute else "raw-visir"
     product: dict[str, object] = {
         "id": product_id,
         "title": title,
         "shortTitle": short_title,
         "group": "Overlay",
         "domain": "bc",
-        "anchorLayer": "raw-visir",
+        "anchorLayer": visir_layer,
         "defaultHours": 3,
         "description": (
             "A configurable satellite, radar or precipitation-type overlay with "
@@ -375,7 +393,7 @@ def _overlay_product(
         ),
         "layers": [
             {"id": "base-dark", "opacity": 1.0},
-            {"id": "raw-visir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
+            {"id": visir_layer, "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
             {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "daynight", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
@@ -392,7 +410,11 @@ def _overlay_product(
         ],
         "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds"],
         "notes": [
-            "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
+            (
+                "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5°N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km."
+                if five_minute
+                else "This view uses genuine ten-minute GOES-18 full-disk scans. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback."
+            ),
             "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
             "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
             "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -401,6 +423,8 @@ def _overlay_product(
     }
     if viewport is not None:
         product["viewport"] = viewport
+    if max_hours is not None:
+        product["maxHours"] = max_hours
     return product
 
 
@@ -418,6 +442,7 @@ def _snowfog_product(
         "domain": "bc",
         "anchorLayer": "snowfog",
         "defaultHours": 12,
+        "maxHours": 24,
         "viewport": viewport,
         "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
         "layers": [
@@ -457,21 +482,20 @@ def _broad_product(
             {"id": anchor_layer, "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
-            {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True},
+            {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
+            {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
+            {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            *(
-                [{"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True}]
-                if rapid_north_america
-                else []
-            ),
+            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "boundaries", "opacity": 1.0},
         ],
         "legends": [
             anchor_layer,
             "radar-rain",
+            "ptype",
             "glm-lightning-age",
             "smoke-confidence",
-            *(["hotspots"] if rapid_north_america else []),
+            "hotspots",
         ],
         "notes": notes
         + [
@@ -482,11 +506,7 @@ def _broad_product(
                 else []
             ),
             "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
-            *(
-                ["WestWX combines agency-reported Canadian and U.S. active wildfire locations with CWFIS satellite thermal detections; confirmed fires and satellite-only detections remain visually distinct."]
-                if rapid_north_america
-                else []
-            ),
+            "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
             "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         ],
     }
@@ -497,10 +517,10 @@ def _broad_product(
 
 PRODUCTS: list[dict[str, object]] = [
     _overlay_product("bc-large-overlay", "BC XL", "BC XL"),
-    _overlay_product("bc-small-overlay", "BC", "BC", VIEWPORTS["small"]),
-    _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"]),
-    _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"]),
-    _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"]),
+    _overlay_product("bc-small-overlay", "BC", "BC", VIEWPORTS["small"], five_minute=True, max_hours=24),
+    _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"], five_minute=True, max_hours=24),
+    _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"], five_minute=True, max_hours=24),
+    _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"], max_hours=24),
     _snowfog_product("bc-small-snowfog", "BC Small Snow / Fog", "BC Snow / Fog", VIEWPORTS["small"]),
     _snowfog_product("bc-southwest-snowfog", "BC Southwest Snow / Fog", "SW Snow / Fog", VIEWPORTS["southwest"]),
     _snowfog_product("bc-southeast-snowfog", "BC Southeast Snow / Fog", "SE Snow / Fog", VIEWPORTS["southeast"]),
@@ -512,7 +532,7 @@ PRODUCTS: list[dict[str, object]] = [
         "north-pacific",
         "A focused Eastern Pacific and Western North America satellite view with real West Coast radar coverage.",
         [
-            "The Pacific-centred crop covers roughly 155°E–95°W and 15–70°N without a dateline seam.",
+            "The Pacific-centred crop covers roughly 170°E–102°W and 20–66°N without a dateline seam.",
             "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
         ],
         BROAD_VIEWPORTS["pacific-wna"],

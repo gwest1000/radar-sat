@@ -92,3 +92,18 @@ does not prevent normal Forecast Graphics publication. The environment knobs
 `RADARSAT_WESTWX_SATELLITE_MAX_DOWNLOAD_GB`, and
 `RADARSAT_WESTWX_SATELLITE_MAX_SOURCE_MB` may tighten the defaults; do not widen
 them without reviewing a dry-run plan.
+
+When the ten-minute path is enabled, the southern-BC PACUS path defaults on as
+well. It processes at most two roughly 53 MB files per cycle, deletes each raw
+file after rendering, and retains only the compact `raw-visir-5min` finals for
+24 hours. The observed final is about 0.61 MB, or roughly 0.18 GB for all 288
+five-minute frames. PACUS ends near 53.5°N; the renderer uses the newest
+ten-minute full-disk frame farther north and feathers inward from the curved
+scan edge so the footprint is not drawn across the map. It can be controlled
+independently with:
+
+```text
+RADARSAT_FIVE_MINUTE_BC_SATELLITE_ENABLED=1
+RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_FRAMES=2
+RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_DOWNLOAD_GB=0.15
+```

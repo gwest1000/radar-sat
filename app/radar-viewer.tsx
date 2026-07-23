@@ -94,6 +94,7 @@ type Product = {
   domain: string;
   anchorLayer: string;
   defaultHours: number;
+  maxHours?: number;
   description: string;
   layers: ProductLayer[];
   legends: string[];
@@ -113,6 +114,7 @@ type Catalog = {
   domains: Record<string, Domain>;
   products: Product[];
   legends: Record<string, Legend>;
+  sources?: Record<string, string>;
 };
 
 type SiteConfig = {
@@ -123,7 +125,7 @@ type SiteConfig = {
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const AUTO_REFRESH_MS = 5 * 60_000;
-const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v3";
+const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
 const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
@@ -134,6 +136,15 @@ const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
   height: `${BC_ON_NORTH_AMERICA.height * 100}%`,
 };
 const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]);
+const SOURCE_SUMMARIES: Record<string, string> = {
+  "NOAA GOES-18": "Calibrated ABI satellite imagery, GLM total lightning and smoke-detection products.",
+  "NOAA Open Data": "Public cloud distribution for GOES ABI Level-2 satellite source files.",
+  "ECCC GeoMet": "Canadian radar, precipitation type and ECCC-rendered satellite products.",
+  "ECCC Datamart": "Canadian Lightning Detection Network gridded lightning-density observations.",
+  "NRCan CWFIS": "Timestamped satellite thermal detections and Canadian active-fire records.",
+  "BC Wildfire Service": "Official BC active fires and Wildfires of Note.",
+  "NIFC WFIGS": "Current U.S. ICS-209 large-incident locations.",
+};
 
 function pointLayerId(controllerId: string): string | undefined {
   if (controllerId === "lightning-trail") return "lightning-points";
@@ -147,7 +158,42 @@ function absoluteUrl(path: string, base: string): string {
 }
 
 function productHasFrames(catalog: Catalog, product: Product): boolean {
-  return Boolean(catalog.domains[product.domain]?.layers[product.anchorLayer]?.frames?.length);
+  const domain = catalog.domains[product.domain];
+  if (product.anchorLayer === "raw-visir-5min") {
+    return Boolean(
+      domain?.layers["raw-visir-5min"]?.frames?.length
+      || domain?.layers["raw-visir"]?.frames?.length,
+    );
+  }
+  return Boolean(domain?.layers[product.anchorLayer]?.frames?.length);
+}
+
+function mergedFrames(...collections: Frame[][]): Frame[] {
+  const byTime = new Map<number, Frame>();
+  for (const frames of collections) {
+    for (const frame of frames) {
+      const validTime = Date.parse(frame.validTime);
+      if (Number.isFinite(validTime)) byTime.set(Math.round(validTime / 300_000), frame);
+    }
+  }
+  return [...byTime.values()].sort((left, right) => (
+    Date.parse(left.validTime) - Date.parse(right.validTime)
+  ));
+}
+
+function nearestFrame(frames: Frame[], target: string, toleranceMinutes: number): Frame | undefined {
+  const targetTime = Date.parse(target);
+  if (!Number.isFinite(targetTime)) return undefined;
+  let selected: Frame | undefined;
+  let selectedOffset = Number.POSITIVE_INFINITY;
+  for (const frame of frames) {
+    const offset = Math.abs(Date.parse(frame.validTime) - targetTime);
+    if (Number.isFinite(offset) && offset < selectedOffset) {
+      selected = frame;
+      selectedOffset = offset;
+    }
+  }
+  return selectedOffset <= toleranceMinutes * 60_000 ? selected : undefined;
 }
 
 function frameUrl(frame: Frame, base: string): string {
@@ -235,6 +281,7 @@ function latestRollingPointFrameReferences(
 async function buildLightningMarkers(
   references: PointFrameReference[],
   idPrefix = "",
+  maxMarkers = 1_200,
 ): Promise<LightningMarker[]> {
   const frames = await Promise.all(references.map(async (reference) => ({
     reference,
@@ -258,7 +305,11 @@ async function buildLightningMarkers(
       if (!previous || marker.age < previous.age) byLocation.set(location, marker);
     });
   }
-  return [...byLocation.values()].sort((left, right) => right.age - left.age);
+  const freshest = [...byLocation.values()]
+    .sort((left, right) => left.age - right.age)
+    .slice(0, maxMarkers);
+  // Paint older symbols first so the bright newest detections remain legible.
+  return freshest.sort((left, right) => right.age - left.age);
 }
 
 function remapFirePoint(
@@ -407,7 +458,7 @@ function activeAnchorLayer(product: Product, optionalLayers: Record<string, bool
     const recipe = product.layers.find((candidate) => candidate.id === id);
     return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
   };
-  return ["raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "daynight", "ir", "convective", "radar-rain", "ptype", "lightning-trail", "hotspots"]
+  return ["raw-visir-5min", "raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "daynight", "ir", "convective", "radar-rain", "ptype", "lightning-trail", "hotspots"]
     .find(enabled) ?? product.anchorLayer;
 }
 
@@ -432,16 +483,30 @@ function composeLayers(
     }
     let dynamicLayer = domain.layers[recipe.id];
     let frames = dynamicLayer?.frames ?? [];
-    if (product.domain === "bc" && recipe.id === "raw-visir") {
+    if (product.domain === "bc" && ["raw-visir", "raw-visir-5min"].includes(recipe.id)) {
+      const standardLayer = domain.layers["raw-visir"];
+      const rapidLayer = domain.layers["raw-visir-5min"];
       const nativeLayer = domain.layers["raw-visir-native"];
-      const nativeFrame = atOrBefore(
-        nativeLayer?.frames ?? [],
+      const nativeFrame = nearestFrame(nativeLayer?.frames ?? [], anchor.validTime, 2);
+      const standardFrame = nearestFrame(standardLayer?.frames ?? [], anchor.validTime, 2)
+        ?? atOrBefore(standardLayer?.frames ?? [], anchor.validTime, standardLayer?.maxAgeMinutes);
+      const rapidFrame = atOrBefore(
+        rapidLayer?.frames ?? [],
         anchor.validTime,
-        nativeLayer?.maxAgeMinutes,
+        rapidLayer?.maxAgeMinutes,
       );
       if (nativeFrame) {
         dynamicLayer = nativeLayer;
         frames = [nativeFrame];
+      } else if (standardFrame && Math.abs(Date.parse(standardFrame.validTime) - Date.parse(anchor.validTime)) <= 120_000) {
+        dynamicLayer = standardLayer;
+        frames = [standardFrame];
+      } else if (rapidFrame) {
+        dynamicLayer = rapidLayer;
+        frames = [rapidFrame];
+      } else if (standardFrame) {
+        dynamicLayer = standardLayer;
+        frames = [standardFrame];
       }
     }
     // Trail rasters are regenerated on the radar clock, but their actual
@@ -467,7 +532,7 @@ function actualSourceTime(layerId: string, frame: Frame): string {
       .sort((left, right) => Date.parse(right) - Date.parse(left));
     if (values[0]) return values[0];
   }
-  if ((layerId === "raw-ir" || layerId === "raw-visir") && frame.sourceTimes) {
+  if (["raw-ir", "raw-visir", "raw-visir-5min"].includes(layerId) && frame.sourceTimes) {
     const values = Object.values(frame.sourceTimes)
       .filter((value) => Number.isFinite(Date.parse(value)))
       .sort((left, right) => Date.parse(right) - Date.parse(left));
@@ -586,7 +651,7 @@ function layerLabel(layerId: string): string {
   if (layerId === "site-radar") return "RADAR";
   if (layerId === "hotspots") return "FIRE";
   if (
-    ["daynight", "ir", "convective", "snowfog", "raw-visir", "raw-visir-native", "raw-ir"].includes(layerId)
+    ["daynight", "ir", "convective", "snowfog", "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir"].includes(layerId)
     || layerId.startsWith("westwx-")
   ) return "SAT";
   return layerId.toUpperCase();
@@ -605,6 +670,7 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "westwx-visir") return "NOAA VIS/IR";
   if (layerId === "westwx-ir") return "NOAA IR";
   if (layerId === "raw-visir") return "NOAA VIS/IR";
+  if (layerId === "raw-visir-5min") return "NOAA VIS/IR";
   if (layerId === "raw-ir") return "NOAA IR";
   if (layerId === "radar-rain") return "Radar";
   if (layerId === "radar-snow") return "Snow rate";
@@ -613,9 +679,9 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "ptype") return "Precip type";
   if (layerId === "lightning-trail") return "Lightning";
   if (layerId === "lightning") return "Flash density";
-  if (layerId === "glm-lightning-trail") return "GLM Total Lightning";
+  if (layerId === "glm-lightning-trail") return "Lightning";
   if (layerId === "glm-lightning") return "GLM flash bins";
-  if (layerId === "smoke") return "Satellite Smoke Detection";
+  if (layerId === "smoke") return "Enhanced Smoke";
   if (layerId === "hotspots") return "Fires & Hotspots";
   return layerLabel(layerId);
 }
@@ -634,7 +700,7 @@ function freshnessThresholds(layerId: string): [number, number] {
   if (layerId.includes("lightning")) return [25, 45];
   if (layerId === "smoke") return [30, 60];
   if (layerId === "hotspots") return [30, 90];
-  if (layerId === "raw-visible" || layerId === "raw-visir" || layerId === "raw-ir") return [90, 150];
+  if (["raw-visible", "raw-visir", "raw-visir-5min", "raw-ir"].includes(layerId)) return [25, 60];
   if (layerId.startsWith("westwx-")) return [25, 45];
   // The source valid time typically trails receipt by roughly 20–40 minutes;
   // use source-aware limits so normal ECCC publication latency is not reported
@@ -798,6 +864,8 @@ export function RadarViewer() {
   const [ecccFallbackLightningMarkers, setEcccFallbackLightningMarkers] = useState<LightningMarker[]>([]);
   const [fireMarkers, setFireMarkers] = useState<FireMarker[]>([]);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
+  const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const preferencesRef = useRef<ViewerPreferences>({
     productId: "bc-large-overlay",
     speedIndex: 3,
@@ -848,11 +916,11 @@ export function RadarViewer() {
               setError("");
               if (!initialized) {
                 setProductId(preferred.id);
-                setRangeHours(
-                  typeof stored.rangeHours === "number" && RANGE_OPTIONS.includes(stored.rangeHours)
-                    ? stored.rangeHours
-                    : preferred.defaultHours,
-                );
+                const requestedRange = typeof stored.rangeHours === "number"
+                  && RANGE_OPTIONS.includes(stored.rangeHours)
+                  ? stored.rangeHours
+                  : preferred.defaultHours;
+                setRangeHours(Math.min(requestedRange, preferred.maxHours ?? 168));
                 setSpeedIndex(
                   typeof stored.speedIndex === "number"
                     && stored.speedIndex >= 0
@@ -944,12 +1012,22 @@ export function RadarViewer() {
   );
   const anchorFrames = useMemo(() => {
     if (!domain || !product) return [];
-    const frames = domain.layers[activeAnchorId]?.frames ?? [];
+    const frames = activeAnchorId === "raw-visir-5min"
+      ? mergedFrames(
+          domain.layers["raw-visir"]?.frames ?? [],
+          domain.layers["raw-visir-5min"]?.frames ?? [],
+        )
+      : domain.layers[activeAnchorId]?.frames ?? [];
     if (!frames.length) return [];
     const newest = Date.parse(frames[frames.length - 1].validTime);
     const cutoff = newest - rangeHours * 60 * 60 * 1000;
     return frames.filter((frame) => Date.parse(frame.validTime) >= cutoff);
   }, [activeAnchorId, domain, product, rangeHours]);
+
+  const availableRangeOptions = useMemo(
+    () => RANGE_OPTIONS.filter((hours) => hours <= (product?.maxHours ?? 168)),
+    [product?.maxHours],
+  );
 
   const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
 
@@ -1052,13 +1130,17 @@ export function RadarViewer() {
       return () => window.clearTimeout(clearMarkers);
     }
 
-    void buildLightningMarkers(lightningPointReferences).then((markers) => {
+    void buildLightningMarkers(
+      lightningPointReferences,
+      "",
+      domain?.id === "north-america" ? 700 : 1_200,
+    ).then((markers) => {
       if (!cancelled) setLightningMarkers(markers);
     }).catch(() => {
       if (!cancelled) setLightningMarkers([]);
     });
     return () => { cancelled = true; };
-  }, [lightningPointReferences]);
+  }, [domain?.id, lightningPointReferences]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1067,7 +1149,7 @@ export function RadarViewer() {
       return () => window.clearTimeout(clearMarkers);
     }
 
-    void buildLightningMarkers(ecccFallbackPointReferences, "eccc-").then((markers) => {
+    void buildLightningMarkers(ecccFallbackPointReferences, "eccc-", 250).then((markers) => {
       if (!cancelled) setEcccFallbackLightningMarkers(markers);
     }).catch(() => {
       if (!cancelled) setEcccFallbackLightningMarkers([]);
@@ -1174,8 +1256,8 @@ export function RadarViewer() {
     void Promise.all(loads).then(() => {
       if (cancelled) return;
       const finalFrame = currentFrameIndex === anchorFrames.length - 1;
-      // The former 4× timing is now the easier-to-understand 1× baseline.
-      const delay = finalFrame ? 300 / speed : 75 / speed;
+      // The former 0.75× setting is now the easier-to-understand 1× baseline.
+      const delay = finalFrame ? 400 / speed : 100 / speed;
       timer = window.setTimeout(() => advance(1), delay);
     });
 
@@ -1215,6 +1297,15 @@ export function RadarViewer() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [advance]);
+
+  useEffect(() => {
+    if (!sourcesOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSourcesOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [sourcesOpen]);
 
   if (error) {
     return (
@@ -1333,40 +1424,6 @@ export function RadarViewer() {
         </div>
       </header>
 
-      <nav className="product-switcher" aria-label="Loop products">
-        <button
-          className="product-current"
-          type="button"
-          aria-expanded={regionMenuOpen}
-          onClick={() => setRegionMenuOpen((open) => !open)}
-        >
-          <span className="product-current-label">Region</span>
-          <span>{product.shortTitle}</span>
-          <span className="product-chevron" aria-hidden="true">⌄</span>
-        </button>
-        {regionMenuOpen && (
-          <div className="product-menu">
-            {availableProducts.map((item) => (
-              <button
-                className="product-button"
-                type="button"
-                aria-pressed={item.id === product.id}
-                key={item.id}
-                onClick={() => {
-                  setPlaying(true);
-                  setProductId(item.id);
-                  setRangeHours(item.defaultHours);
-                  setFrameIndex(NEWEST_FRAME);
-                  setRegionMenuOpen(false);
-                }}
-              >
-                {item.shortTitle}
-              </button>
-            ))}
-          </div>
-        )}
-      </nav>
-
       <section className="viewer-grid" aria-label={product.title}>
         <div
           className="map-column"
@@ -1379,7 +1436,9 @@ export function RadarViewer() {
             <div className="transport-row">
               <div className="transport-actions">
                 <button className="control-button" type="button" aria-label="Previous frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(-1); }}>‹</button>
-                <button className="control-button primary" type="button" aria-pressed={isAnimating} disabled={anchorFrames.length < 2} onClick={() => setPlaying((value) => !value)}>{isAnimating ? "Pause" : "Play"}</button>
+                <button className="control-button primary play-control" type="button" aria-label={isAnimating ? "Pause animation" : "Play animation"} aria-pressed={isAnimating} disabled={anchorFrames.length < 2} onClick={() => setPlaying((value) => !value)}>
+                  <span aria-hidden="true">{isAnimating ? "❚❚" : "▶"}</span>
+                </button>
                 <button className="control-button" type="button" aria-label="Next frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(1); }}>›</button>
               </div>
               <label className="speed-control">
@@ -1396,12 +1455,61 @@ export function RadarViewer() {
                 />
                 <span className="speed-value">{speed}×</span>
               </label>
-              <div className="range-actions" role="group" aria-label="Archive range">
-                {RANGE_OPTIONS.map((hours) => (
-                  <button className="range-button" type="button" aria-pressed={rangeHours === hours} key={hours} onClick={() => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); }}>
-                    {hours === 168 ? "7 d" : `${hours} h`}
-                  </button>
-                ))}
+              <div
+                className={`expanding-selector product-switcher${regionMenuOpen ? " is-open" : ""}`}
+                onMouseLeave={() => setRegionMenuOpen(false)}
+              >
+                <button
+                  className="selector-current"
+                  type="button"
+                  aria-expanded={regionMenuOpen}
+                  onClick={() => setRegionMenuOpen((open) => !open)}
+                >
+                  <span className="selector-label">Region</span>
+                  <span>{product.shortTitle}</span>
+                  <span className="selector-chevron" aria-hidden="true">›</span>
+                </button>
+                <div className="selector-options product-menu" role="group" aria-label="Loop products">
+                  {availableProducts.map((item) => (
+                    <button
+                      className="product-button"
+                      type="button"
+                      aria-pressed={item.id === product.id}
+                      key={item.id}
+                      onClick={() => {
+                        setPlaying(true);
+                        setProductId(item.id);
+                        setRangeHours(Math.min(item.defaultHours, item.maxHours ?? 168));
+                        setFrameIndex(NEWEST_FRAME);
+                        setRegionMenuOpen(false);
+                      }}
+                    >
+                      {item.shortTitle}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div
+                className={`expanding-selector range-selector${rangeMenuOpen ? " is-open" : ""}`}
+                onMouseLeave={() => setRangeMenuOpen(false)}
+              >
+                <button
+                  className="selector-current"
+                  type="button"
+                  aria-expanded={rangeMenuOpen}
+                  onClick={() => setRangeMenuOpen((open) => !open)}
+                >
+                  <span className="selector-label">Span</span>
+                  <span>{rangeHours === 168 ? "7 d" : `${rangeHours} h`}</span>
+                  <span className="selector-chevron" aria-hidden="true">›</span>
+                </button>
+                <div className="selector-options range-actions" role="group" aria-label="Archive range">
+                  {availableRangeOptions.map((hours) => (
+                    <button className="range-button" type="button" aria-pressed={rangeHours === hours} key={hours} onClick={() => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); setRangeMenuOpen(false); }}>
+                      {hours === 168 ? "7 d" : `${hours} h`}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="timeline-metadata">
                 <span className="frame-count">{anchorFrames.length ? `${currentFrameIndex + 1} / ${anchorFrames.length}` : "0 / 0"}</span>
@@ -1439,7 +1547,7 @@ export function RadarViewer() {
                   ...cropStyle,
                   opacity: layer.opacity,
                   filter: ["Overlay", "Broad"].includes(product.group)
-                    && ["ir", "daynight", "convective", "raw-visir", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
+                    && ["ir", "daynight", "convective", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
                     && (composedLayerIds.has("radar-rain") || composedLayerIds.has("ptype"))
                     ? "saturate(0.52) brightness(0.78) contrast(1.06)"
                     : undefined,
@@ -1595,18 +1703,45 @@ export function RadarViewer() {
                     : "Qualitative RGB product; no numerical scale."}
             </p>
           )}
+          <button className="sources-button" type="button" onClick={() => setSourcesOpen(true)}>
+            Sources
+          </button>
         </aside>
       </section>
 
-      <section className="product-detail">
-        <div>
-          <h2 className="detail-title">{product.title}</h2>
-          <p className="detail-copy">{product.description}</p>
-        </div>
-        <ul className="note-list">
-          {product.notes.map((note) => <li key={note}>{note}</li>)}
-        </ul>
-      </section>
+      {sourcesOpen && (
+        <>
+          <button className="sources-backdrop" type="button" aria-label="Close sources" onClick={() => setSourcesOpen(false)} />
+          <aside className="sources-drawer" role="dialog" aria-modal="true" aria-labelledby="sources-title">
+            <div className="sources-header">
+              <div>
+                <p className="drawer-eyebrow">Current display</p>
+                <h2 id="sources-title">Sources &amp; notes</h2>
+              </div>
+              <button className="drawer-close" type="button" aria-label="Close sources" onClick={() => setSourcesOpen(false)}>×</button>
+            </div>
+            <h3>{product.title}</h3>
+            <p>{product.description}</p>
+            <h3>Data feeds</h3>
+            <ul className="source-list">
+              {Object.entries(catalog.sources ?? {}).map(([name, url]) => (
+                <li key={name}>
+                  <a href={url} target="_blank" rel="noreferrer">{name}</a>
+                  <span>{SOURCE_SUMMARIES[name] ?? "Public operational data source."}</span>
+                </li>
+              ))}
+            </ul>
+            {product.notes.length > 0 && (
+              <>
+                <h3>Display notes</h3>
+                <ul className="drawer-notes">
+                  {product.notes.map((note) => <li key={note}>{note}</li>)}
+                </ul>
+              </>
+            )}
+          </aside>
+        </>
+      )}
     </main>
   );
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T23:43:58.453620Z",
+  "generatedAt": "2026-07-23T01:48:15.611488Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -1500,8 +1500,8 @@
     "north-america": {
       "id": "north-america",
       "title": "North America",
-      "width": 1440,
-      "height": 1080,
+      "width": 1280,
+      "height": 960,
       "projection": "EPSG:3857",
       "retention": {
         "allFramesHours": 24,
@@ -1636,7 +1636,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
+        "This view uses genuine ten-minute GOES-18 full-disk scans. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1649,7 +1649,7 @@
       "shortTitle": "BC",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir",
+      "anchorLayer": "raw-visir-5min",
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -1658,7 +1658,7 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir",
+          "id": "raw-visir-5min",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
@@ -1752,7 +1752,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
+        "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1763,7 +1763,8 @@
         "top": 0.1239,
         "width": 0.6534,
         "height": 0.75
-      }
+      },
+      "maxHours": 24
     },
     {
       "id": "bc-southwest-overlay",
@@ -1771,7 +1772,7 @@
       "shortTitle": "BC SW",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir",
+      "anchorLayer": "raw-visir-5min",
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -1780,7 +1781,7 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir",
+          "id": "raw-visir-5min",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
@@ -1874,7 +1875,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
+        "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -1885,7 +1886,8 @@
         "top": 0.53,
         "width": 0.3898,
         "height": 0.3438
-      }
+      },
+      "maxHours": 24
     },
     {
       "id": "bc-southeast-overlay",
@@ -1893,7 +1895,7 @@
       "shortTitle": "BC SE",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir",
+      "anchorLayer": "raw-visir-5min",
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -1902,7 +1904,7 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir",
+          "id": "raw-visir-5min",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
@@ -1996,7 +1998,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
+        "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -2007,7 +2009,8 @@
         "top": 0.4854,
         "width": 0.355,
         "height": 0.3473
-      }
+      },
+      "maxHours": 24
     },
     {
       "id": "bc-northeast-overlay",
@@ -2118,7 +2121,7 @@
         "watersheds"
       ],
       "notes": [
-        "Regional views reuse one aligned BC grid. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
+        "This view uses genuine ten-minute GOES-18 full-disk scans. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -2129,7 +2132,8 @@
         "top": 0.1525,
         "width": 0.452,
         "height": 0.4422
-      }
+      },
+      "maxHours": 24
     },
     {
       "id": "bc-small-snowfog",
@@ -2139,6 +2143,7 @@
       "domain": "bc",
       "anchorLayer": "snowfog",
       "defaultHours": 12,
+      "maxHours": 24,
       "viewport": {
         "left": 0.2133,
         "top": 0.1239,
@@ -2175,6 +2180,7 @@
       "domain": "bc",
       "anchorLayer": "snowfog",
       "defaultHours": 12,
+      "maxHours": 24,
       "viewport": {
         "left": 0.3531,
         "top": 0.53,
@@ -2211,6 +2217,7 @@
       "domain": "bc",
       "anchorLayer": "snowfog",
       "defaultHours": 12,
+      "maxHours": 24,
       "viewport": {
         "left": 0.5518,
         "top": 0.4854,
@@ -2247,6 +2254,7 @@
       "domain": "bc",
       "anchorLayer": "snowfog",
       "defaultHours": 12,
+      "maxHours": 24,
       "viewport": {
         "left": 0.4196,
         "top": 0.1525,
@@ -2318,10 +2326,29 @@
           "id": "radar-rain",
           "opacity": 0.84,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "ptype-coverage",
+          "opacity": 1.0,
+          "enabledWith": "ptype"
+        },
+        {
+          "id": "ptype",
+          "opacity": 0.9,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "precipitation"
         },
         {
           "id": "glm-lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "hotspots",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
@@ -2334,21 +2361,24 @@
       "legends": [
         "raw-ir",
         "radar-rain",
+        "ptype",
         "glm-lightning-age",
-        "smoke-confidence"
+        "smoke-confidence",
+        "hotspots"
       ],
       "notes": [
-        "The Pacific-centred crop covers roughly 155\u00b0E\u201395\u00b0W and 15\u201370\u00b0N without a dateline seam.",
+        "The Pacific-centred crop covers roughly 170\u00b0E\u2013102\u00b0W and 20\u201366\u00b0N without a dateline seam.",
         "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
         "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
         "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
+        "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ],
       "viewport": {
-        "left": 0.2059,
-        "top": 0.0361,
-        "width": 0.6471,
-        "height": 0.8781
+        "left": 0.2941,
+        "top": 0.1479,
+        "width": 0.5176,
+        "height": 0.7117
       }
     },
     {
@@ -2394,7 +2424,20 @@
           "id": "radar-rain",
           "opacity": 0.84,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "ptype-coverage",
+          "opacity": 1.0,
+          "enabledWith": "ptype"
+        },
+        {
+          "id": "ptype",
+          "opacity": 0.9,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "precipitation"
         },
         {
           "id": "glm-lightning-trail",
@@ -2416,6 +2459,7 @@
       "legends": [
         "westwx-ir",
         "radar-rain",
+        "ptype",
         "glm-lightning-age",
         "smoke-confidence",
         "hotspots"
@@ -2426,7 +2470,7 @@
         "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
         "North America satellite backgrounds use genuine GOES-18 scan times at a nominal ten-minute cadence; the far eastern edge is outside the best GOES-West viewing geometry.",
         "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
-        "WestWX combines agency-reported Canadian and U.S. active wildfire locations with CWFIS satellite thermal detections; confirmed fires and satellite-only detections remain visually distinct.",
+        "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ]
     },
@@ -2473,10 +2517,29 @@
           "id": "radar-rain",
           "opacity": 0.84,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "choiceGroup": "precipitation"
+        },
+        {
+          "id": "ptype-coverage",
+          "opacity": 1.0,
+          "enabledWith": "ptype"
+        },
+        {
+          "id": "ptype",
+          "opacity": 0.9,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "precipitation"
         },
         {
           "id": "glm-lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "hotspots",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
@@ -2489,14 +2552,17 @@
       "legends": [
         "raw-ir",
         "radar-rain",
+        "ptype",
         "glm-lightning-age",
-        "smoke-confidence"
+        "smoke-confidence",
+        "hotspots"
       ],
       "notes": [
         "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
         "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
         "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
         "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; ECCC lightning-density points fill northern BC beyond useful GOES-18 coverage.",
+        "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ]
     }

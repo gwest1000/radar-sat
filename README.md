@@ -1,4 +1,4 @@
-# BC Satellite/Radar/Lightning
+# BC Satellite/Radar/Lightning/Fires
 
 Operational satellite, radar, precipitation-type, and lightning loops for
 British Columbia and its upstream weather. The viewer uses one set of aligned
@@ -9,9 +9,9 @@ Public site: <https://gwest1000.github.io/radar-sat/>
 
 ## Launch products
 
-- **Overlay:** BC Large, tightly cropped BC Small, southwest, southeast and
-  northeast views. Each provides mutually exclusive visible, IR, day/night
-  VisIR and convective-sandwich satellite backgrounds; mutually exclusive
+- **Overlay:** BC XL, tightly cropped BC, southwest, southeast and northeast
+  views. Each provides mutually exclusive NOAA VIS/IR and IR plus ECCC VIS/IR,
+  IR and convective-sandwich satellite backgrounds; mutually exclusive
   radar/precipitation-type overlays; and independent lightning and wildfire
   hotspots.
 - **Snow / fog:** BC Small, southwest, southeast and northeast qualitative RGB
@@ -22,8 +22,12 @@ Public site: <https://gwest1000.github.io/radar-sat/>
 - **North Pacific:** Himawari-9/GOES-18 true colour or enhanced IR on a
   dateline-safe grid, with the real West Coast radar footprint.
 
-The regional displays crop the shared aligned BC grid, gaining on-screen detail
-without storing four duplicate seven-day archives. The watershed overlay uses
+The BC, southwest and southeast displays merge genuine five-minute GOES-18
+PACUS imagery south of its scan edge with ten-minute full-disk imagery farther
+north. Those five-minute finals are retained for 24 hours only; BC XL and BC NE
+remain ten-minute displays, and BC XL keeps the seven-day archive. All regional
+displays crop the shared aligned BC grid, gaining on-screen detail without
+storing duplicate regional rasters. The watershed overlay uses
 the same 54-polygon BC Hydro boundary source as the forecast-model plots.
 
 Every map shows the real source timestamps. Old data is never silently relabelled
@@ -54,6 +58,9 @@ GitHub Pages static viewer ◀────────────────�
 - BC grid: EPSG:3005, 1920×1472, approximately 145–108°W and 45–63°N.
 - BC retention: all observations for 24 hours, then `:00`/`:30` through day 7
   (432 ten-minute or 528 six-minute times per layer).
+- Five-minute BC PACUS finals require about 0.18 GB for a full 24-hour archive
+  at the observed 0.61 MB/frame. Source transfer is about 15 GB/day, but the
+  53 MB working file is deleted after each render.
 - North America satellite target: 10 minutes for 24 hours, then hourly through
   day 7. The Himawari-9/GOES-18 North Pacific blend remains 30 minutes for 24
   hours, then hourly; GOES-18 smoke and total lightning use a 10-minute clock.

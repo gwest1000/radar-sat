@@ -91,6 +91,23 @@ if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
   fi
 fi
 
+# PACUS provides a genuine five-minute update south of 53.5 N.  Each compact
+# final frame uses the latest full-disk render above as its northern fallback;
+# two source files cover the normal interval between ten-minute cycles.
+if [[ "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_ENABLED:-${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}}" == "1" ]]; then
+  live_satellite_refresh=1
+  if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_five_minute_bc_satellite.py" \
+    --output-root "${OUTPUT_ROOT}" \
+    --cache-root "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/five-minute-bc-satellite}" \
+    --hours "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_HOURS:-3}" \
+    --max-frames "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_FRAMES:-2}" \
+    --max-download-gb "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_DOWNLOAD_GB:-0.15}" \
+    --max-source-mb "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_SOURCE_MB:-100}" \
+    --apply; then
+    print -u2 "Warning: isolated five-minute BC satellite catch-up failed; continuing normal cycle."
+  fi
+fi
+
 # A daylight-only higher-resolution BC composite is isolated from the primary
 # ten-minute feed. Each ~0.61 GB source set is deleted after one compact WebP is
 # installed, and the final layer has a strict 24-hour retention policy.

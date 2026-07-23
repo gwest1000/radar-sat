@@ -27,7 +27,7 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.25, 0\.5, 0\.75, 1, 1\.25, 1\.5, 1\.75, 2\]/);
   assert.match(viewer, /useState\(3\)/);
   assert.match(viewer, /\? stored\.speedIndex\s*: 3/);
-  assert.match(viewer, /finalFrame \? 300 \/ speed : 75 \/ speed/);
+  assert.match(viewer, /finalFrame \? 400 \/ speed : 100 \/ speed/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
   assert.match(viewer, /AUTO_REFRESH_MS = 5 \* 60_000/);
@@ -71,7 +71,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(styles, /\.fire-count/);
   assert.match(styles, /\.hotspot-fire-marker svg/);
   assert.match(styles, /\.eccc-north-fallback/);
-  assert.match(styles, /@keyframes lightning-arrival/);
+  assert.doesNotMatch(styles, /@keyframes lightning-arrival/);
+  assert.match(styles, /\.lightning-marker\.age-3 \{ color: #f6d451/);
 });
 
 test("keeps the desktop controls and map at the full available width", async () => {
@@ -82,7 +83,8 @@ test("keeps the desktop controls and map at the full available width", async () 
   assert.match(styles, /width: min\(100%, var\(--map-max-width/);
   assert.match(viewer, /"--map-max-width": `calc\(\$\{mapAspect \* 100\}vh/);
   assert.match(styles, /\.sidebar-layer-controls/);
-  assert.match(viewer, /className="product-switcher"/);
+  assert.match(viewer, /product-switcher/);
+  assert.match(viewer, /className="sources-drawer"/);
 });
 
 test("ships a runtime data configuration", async () => {
@@ -95,6 +97,8 @@ test("ships a runtime data configuration", async () => {
   const small = demo.products.find((product) => product.id === "bc-small-overlay");
   assert.equal(overlay.shortTitle, "BC XL");
   assert.equal(small.shortTitle, "BC");
+  assert.equal(small.anchorLayer, "raw-visir-5min");
+  assert.equal(small.maxHours, 24);
   assert.equal(overlay.anchorLayer, "raw-visir");
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, false);
@@ -123,6 +127,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-ir");
+  assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
+  assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
 });
 
 test("deploy workflow uses the GitHub Pages artifact flow", async () => {

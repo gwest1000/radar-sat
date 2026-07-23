@@ -1646,7 +1646,7 @@ def prune(root: Path, now: dt.datetime) -> int:
                 meta_path.unlink(missing_ok=True)
                 removed += 1
                 continue
-            if layer_id == "raw-visir-native" and now - valid_time > dt.timedelta(hours=24):
+            if layer_id in {"raw-visir-native", "raw-visir-5min"} and now - valid_time > dt.timedelta(hours=24):
                 image_path.unlink(missing_ok=True)
                 meta_path.unlink(missing_ok=True)
                 removed += 1
@@ -1715,19 +1715,21 @@ def run(
                 hours,
                 latest_only,
                 exclude_layers=excluded,
-                include_layers=None if domain.id == "bc" else ("radar-rain", "radar-coverage"),
+                include_layers=None
+                if domain.id == "bc"
+                else ("radar-rain", "radar-coverage", "ptype", "ptype-coverage"),
             )
             if domain.id == "bc":
                 trail_hours = spool_hours if spool_mode != "off" else hours
                 derive_lightning_trails(output_root, domain, timelines, max(hours, trail_hours))
-            if domain.id in {"bc", "north-america"}:
+            if domain.id in {"bc", "north-america", "north-pacific"}:
                 try:
                     hotspot_status[domain.id] = ingest_hotspot_snapshot(output_root, domain)
                 except Exception as error:
                     auxiliary_warnings.append(
                         f"CWFIS wildfire hotspots unavailable: {type(error).__name__}: {error}"
                     )
-            if domain.id in {"bc", "north-america"}:
+            if domain.id in {"bc", "north-america", "north-pacific"}:
                 try:
                     active_fire_status[domain.id] = ingest_active_fire_snapshot(output_root, domain)
                     warnings = active_fire_status[domain.id].get("warnings", [])
