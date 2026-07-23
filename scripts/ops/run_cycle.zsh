@@ -71,27 +71,14 @@ fi
 export PYTHONPATH="${PROJECT_ROOT}"
 export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
 
-primary_ingest_status=0
-"${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/run_ingest.py" \
-  --output-root "${OUTPUT_ROOT}" \
-  --domain bc \
-  --domain north-america \
-  --domain north-pacific \
-  --hours "${RADARSAT_INGEST_HOURS:-3}" \
-  --spool-root "${RADARSAT_SPOOL_ROOT:-${HOME}/.local/share/radar-sat/spool/eccc}" \
-  --spool-mode "${RADARSAT_SPOOL_MODE:-auto}" \
-  --spool-hours "${RADARSAT_SPOOL_INGEST_HOURS:-12}" || primary_ingest_status=$?
-
-if (( primary_ingest_status != 0 )); then
-  print -u2 "Warning: primary Radar-Sat ingest failed with status ${primary_ingest_status}; continuing isolated recovery and publication steps."
-fi
-
 # This high-bandwidth rapid GOES path has a dedicated cache and a small
 # bounded catch-up allowance so a long radar/Pacific cycle cannot leave holes
 # in the ten-minute satellite clock. A failure is isolated so Forecast
 # Graphics ingest/publication can continue; the command writes its own
 # detailed status file.
+live_satellite_refresh=0
 if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
+  live_satellite_refresh=1
   if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_westwx_satellite.py" \
     --output-root "${OUTPUT_ROOT}" \
     --cache-root "${RADARSAT_WESTWX_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/westwx-satellite}" \
@@ -108,6 +95,7 @@ fi
 # ten-minute feed. Each ~0.61 GB source set is deleted after one compact WebP is
 # installed, and the final layer has a strict 24-hour retention policy.
 if [[ "${RADARSAT_NATIVE_BC_SATELLITE_ENABLED:-${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}}" == "1" ]]; then
+  live_satellite_refresh=1
   if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_native_bc_satellite.py" \
     --output-root "${OUTPUT_ROOT}" \
     --cache-root "${RADARSAT_NATIVE_BC_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/native-bc-satellite}" \
@@ -118,6 +106,33 @@ if [[ "${RADARSAT_NATIVE_BC_SATELLITE_ENABLED:-${RADARSAT_WESTWX_SATELLITE_ENABL
     --apply; then
     print -u2 "Warning: isolated native-resolution BC satellite catch-up failed; continuing normal cycle."
   fi
+fi
+
+# Publish the live satellite edge before the larger half-hour Pacific render.
+# That legacy path can take several minutes under memory pressure and must not
+# hold the default ten-minute BC view behind it.
+if (( live_satellite_refresh == 1 )); then
+  if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/publish_r2.py" \
+    --root "${OUTPUT_ROOT}" \
+    --state-path "${STATE_ROOT}/state/r2-publish.sqlite3" \
+    --status-path "${STATE_ROOT}/status/publish.json"; then
+    print -u2 "Warning: early live-satellite R2 publication failed; continuing the primary cycle."
+  fi
+fi
+
+primary_ingest_status=0
+"${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/run_ingest.py" \
+  --output-root "${OUTPUT_ROOT}" \
+  --domain bc \
+  --domain north-america \
+  --domain north-pacific \
+  --hours "${RADARSAT_INGEST_HOURS:-3}" \
+  --spool-root "${RADARSAT_SPOOL_ROOT:-${HOME}/.local/share/radar-sat/spool/eccc}" \
+  --spool-mode "${RADARSAT_SPOOL_MODE:-auto}" \
+  --spool-hours "${RADARSAT_SPOOL_INGEST_HOURS:-12}" || primary_ingest_status=$?
+
+if (( primary_ingest_status != 0 )); then
+  print -u2 "Warning: primary Radar-Sat ingest failed with status ${primary_ingest_status}; continuing isolated recovery and publication steps."
 fi
 
 # Raw staging objects may be discarded only when the primary renderer has
