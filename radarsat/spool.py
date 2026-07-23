@@ -310,7 +310,7 @@ def render_satellite(native_file: NativeFile, destination: Path, domain: Domain)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:
-        Image.fromarray(output).save(temporary, "WEBP", quality=88, method=6)
+        Image.fromarray(output).save(temporary, "WEBP", quality=88, method=4)
         temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)

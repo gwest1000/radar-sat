@@ -323,16 +323,16 @@ def render_satpy_domain(
             np.asarray(local["B03"].values),
             np.asarray(local["B02"].values),
             np.asarray(local["B01"].values),
-        ).save(visible, "WEBP", quality=88, method=6)
+        ).save(visible, "WEBP", quality=88, method=4)
     else:
         local.save_dataset("true_color", filename=str(visible_png), writer="simple_image")
-        Image.open(visible_png).convert("RGB").save(visible, "WEBP", quality=88, method=6)
+        Image.open(visible_png).convert("RGB").save(visible, "WEBP", quality=88, method=4)
     values = np.asarray(local[infrared_dataset].values)
-    _infrared_image(values).save(infrared, "WEBP", quality=88, method=6)
+    _infrared_image(values).save(infrared, "WEBP", quality=88, method=4)
     validity = (np.isfinite(values) * 255).astype(np.uint8)
     neutral_ir = _infrared_gray_image(values).convert("RGBA")
     neutral_ir.putalpha(Image.fromarray(validity))
-    neutral_ir.save(infrared_gray, "WEBP", quality=88, method=6, exact=True)
+    neutral_ir.save(infrared_gray, "WEBP", quality=88, method=4, exact=True)
     Image.fromarray(validity).save(valid_mask, "PNG", optimize=True)
     visible_png.unlink(missing_ok=True)
     rendered = RenderedSatellite(visible, infrared, infrared_gray, valid_mask)
@@ -450,7 +450,7 @@ def blend_satellites(
             if transparent_missing:
                 image = image.convert("RGBA")
                 image.putalpha(Image.fromarray(((first_mask | second_mask) * 255).astype(np.uint8)))
-            image.save(temporary, "WEBP", quality=88, method=6, exact=transparent_missing)
+            image.save(temporary, "WEBP", quality=88, method=4, exact=transparent_missing)
             temporary.replace(destination)
         finally:
             temporary.unlink(missing_ok=True)
@@ -605,7 +605,7 @@ def compose_visible_infrared(
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:
-        Image.fromarray(output).save(temporary, "WEBP", quality=88, method=6, exact=True)
+        Image.fromarray(output).save(temporary, "WEBP", quality=88, method=4, exact=True)
         temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)
@@ -687,7 +687,7 @@ def install_render(
                 temporary,
                 "WEBP",
                 quality=88,
-                method=6,
+                method=4,
                 exact=preserve_alpha,
             )
             temporary.replace(destination)

@@ -29,7 +29,7 @@ def bch_watershed_source() -> Path:
 def save_satellite(content: bytes, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     image = Image.open(io.BytesIO(content)).convert("RGB")
-    image.save(destination, "WEBP", quality=88, method=6)
+    image.save(destination, "WEBP", quality=88, method=4)
 
 
 def save_overlay(content: bytes, destination: Path) -> None:

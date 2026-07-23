@@ -283,7 +283,7 @@ def composite_over_fallback(
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(destination.suffix + ".tmp")
         try:
-            output.save(temporary, "WEBP", quality=86, method=6)
+            output.save(temporary, "WEBP", quality=86, method=4)
             temporary.replace(destination)
         finally:
             temporary.unlink(missing_ok=True)

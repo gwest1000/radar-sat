@@ -275,7 +275,7 @@ def _stage_rgb(source_path: Path, destination: Path) -> None:
             destination,
             "WEBP",
             quality=88,
-            method=6,
+            method=4,
         )
 
 
