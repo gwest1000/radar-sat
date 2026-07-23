@@ -14,6 +14,7 @@ from radarsat.five_minute_bc_satellite import (
     RENDER_VERSION,
     DiscoveryResult,
     FiveMinuteScan,
+    _fallback_frame,
     discover_scans,
     plan_backfill,
     render_scan,
@@ -65,6 +66,30 @@ class DownloadClient:
 
 
 class FiveMinuteSatelliteTests(unittest.TestCase):
+    def test_fallback_allows_one_delayed_full_disk_cycle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = tiny_domain()
+            fallback_time = dt.datetime(2026, 7, 23, 1, 20, tzinfo=UTC)
+            fallback = frame_path(root, domain, LAYERS["raw-visir"], fallback_time)
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (domain.width, domain.height), "black").save(fallback, "WEBP")
+            write_metadata(
+                root,
+                domain,
+                LAYERS["raw-visir"],
+                fallback_time,
+                fallback,
+                {"GOES-18 ABI scan start": fallback_time},
+            )
+
+            selected, _ = _fallback_frame(
+                root,
+                dt.datetime(2026, 7, 23, 1, 46, 17, tzinfo=UTC),
+            )
+
+            self.assertEqual(selected.resolve(), fallback.resolve())
+
     def test_discovery_preserves_source_time_and_normalizes_display_clock(self) -> None:
         first = dt.datetime(2026, 7, 23, 1, 31, 17, tzinfo=UTC)
         second = dt.datetime(2026, 7, 23, 1, 36, 17, tzinfo=UTC)

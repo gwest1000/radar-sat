@@ -231,8 +231,12 @@ def _fallback_frame(
     root: Path,
     source_time: dt.datetime,
     *,
-    max_age_minutes: int = 25,
+    max_age_minutes: int = 35,
 ) -> tuple[Path, dict[str, object]]:
+    # The full-disk source completes later than PACUS and can occasionally
+    # arrive on the next ten-minute ingest cycle.  Keep southern BC updating
+    # from the current PACUS scan while allowing one delayed full-disk cycle
+    # to fill only the pixels north of PACUS coverage.
     metadata_root = root / "metadata" / "bc" / "raw-visir"
     selected: tuple[dt.datetime, Path, dict[str, object]] | None = None
     for path in metadata_root.rglob("*.json") if metadata_root.exists() else ():
