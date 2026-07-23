@@ -46,7 +46,7 @@ from .point_frames import (
 
 
 UTC = dt.timezone.utc
-LIGHTNING_TRAIL_RENDER_VERSION = 4
+LIGHTNING_TRAIL_RENDER_VERSION = 5
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
@@ -55,7 +55,7 @@ RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 2
 GLM_LIGHTNING_RENDER_VERSION = 2
-GLM_LIGHTNING_TRAIL_RENDER_VERSION = 4
+GLM_LIGHTNING_TRAIL_RENDER_VERSION = 5
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
@@ -327,6 +327,30 @@ def ingest_active_fire_snapshot(
         source_errors.append(f"NIFC WFIGS: {type(error).__name__}: {error}")
     if len(source_errors) == 3:
         raise RuntimeError("; ".join(source_errors))
+    if source_errors:
+        # Never archive a partial agency snapshot over a recent complete one.
+        # Public ArcGIS services occasionally throttle an individual request;
+        # keeping the last full frame is preferable to making one country of
+        # fires disappear for ten minutes.
+        metadata_root = root / "metadata" / domain.id / layer.id
+        for previous_path in reversed(sorted(metadata_root.rglob("*.json"))) if metadata_root.exists() else []:
+            try:
+                previous = json.loads(previous_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            previous_errors = previous.get("sourceErrors")
+            previous_frame = root / str(previous.get("path", ""))
+            if previous_errors or not previous_frame.is_file():
+                continue
+            return {
+                "status": "retained",
+                "validTime": str(previous.get("validTime", "")),
+                "pointCount": int(previous.get("pointCount", 0)),
+                "canadianFeatureCount": int(previous.get("canadianFeatureCount", 0)),
+                "bcwsFeatureCount": int(previous.get("bcwsFeatureCount", 0)),
+                "usFeatureCount": int(previous.get("usFeatureCount", 0)),
+                "warnings": source_errors,
+            }
 
     projected = project_active_fires(
         canadian,

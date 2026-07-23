@@ -226,6 +226,53 @@ class ActiveFireTests(unittest.TestCase):
             self.assertEqual(metadata["renderVersion"], 3)
             self.assertEqual(metadata["source"], "NRCan CWFIS + BCWS + NIFC WFIGS")
 
+    @mock.patch("radarsat.pipeline.fetch_us_active_fires")
+    @mock.patch("radarsat.pipeline.fetch_bc_active_fires")
+    @mock.patch("radarsat.pipeline.fetch_canadian_active_fires")
+    def test_snapshot_retains_last_complete_frame_when_one_agency_is_throttled(
+        self,
+        fetch_canadian: mock.Mock,
+        fetch_bc: mock.Mock,
+        fetch_us: mock.Mock,
+    ) -> None:
+        canadian = [{
+            "geometry": {"type": "Point", "coordinates": [-120.0, 52.0]},
+            "properties": {
+                "fire_was_prescribed": 0,
+                "fire_size": 3.5,
+                "status_date": "2026-07-22T18:17:00Z",
+            },
+        }]
+        united_states = [{
+            "geometry": {"type": "Point", "coordinates": [-119.0, 40.0]},
+            "properties": {
+                "IncidentSize": 10.0,
+                "ModifiedOnDateTime_dt": int(VALID.timestamp() * 1000),
+            },
+        }]
+        fetch_canadian.return_value = canadian
+        fetch_bc.return_value = []
+        fetch_us.side_effect = [united_states, RuntimeError("Too many requests")]
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = DOMAINS["north-america"]
+            first_valid = VALID.replace(minute=10, second=0, microsecond=0)
+            second_requested = VALID + dt.timedelta(minutes=10)
+            second_valid = second_requested.replace(minute=20, second=0, microsecond=0)
+
+            first = ingest_active_fire_snapshot(root, domain, VALID)
+            retained = ingest_active_fire_snapshot(root, domain, second_requested)
+
+            self.assertEqual(first["status"], "rendered")
+            self.assertEqual(retained["status"], "retained")
+            self.assertEqual(retained["validTime"], first_valid.isoformat().replace("+00:00", "Z"))
+            self.assertEqual(retained["usFeatureCount"], 1)
+            self.assertTrue(any("NIFC WFIGS" in warning for warning in retained["warnings"]))
+            self.assertFalse(
+                frame_path(root, domain, LAYERS["active-fire-points"], second_valid).exists()
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

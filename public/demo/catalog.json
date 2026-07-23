@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-23T22:03:11.772908Z",
+  "generatedAt": "2026-07-23T23:23:38.445068Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -1577,6 +1577,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "snowfog",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "smoke",
           "opacity": 1.0,
           "optional": true,
@@ -1693,6 +1700,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "snowfog",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "smoke",
           "opacity": 1.0,
           "optional": true,
@@ -1759,10 +1773,10 @@
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.2133,
-        "top": 0.1239,
-        "width": 0.6534,
-        "height": 0.75
+        "left": 0.245,
+        "top": 0.155,
+        "width": 0.59,
+        "height": 0.68
       },
       "maxHours": 24
     },
@@ -1810,6 +1824,13 @@
         },
         {
           "id": "convective",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "snowfog",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -1939,6 +1960,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "snowfog",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "smoke",
           "opacity": 1.0,
           "optional": true,
@@ -2062,6 +2090,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "snowfog",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "smoke",
           "opacity": 1.0,
           "optional": true,
@@ -2134,154 +2169,6 @@
         "height": 0.4422
       },
       "maxHours": 24
-    },
-    {
-      "id": "bc-small-snowfog",
-      "title": "BC Small Snow / Fog",
-      "shortTitle": "BC Snow / Fog",
-      "group": "Snow / fog",
-      "domain": "bc",
-      "anchorLayer": "snowfog",
-      "defaultHours": 12,
-      "maxHours": 24,
-      "viewport": {
-        "left": 0.2133,
-        "top": 0.1239,
-        "width": 0.6534,
-        "height": 0.75
-      },
-      "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
-      "layers": [
-        {
-          "id": "snowfog",
-          "opacity": 1.0
-        },
-        {
-          "id": "watersheds",
-          "opacity": 1.0
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
-        }
-      ],
-      "legends": [
-        "watersheds"
-      ],
-      "notes": [
-        "RGB colours are qualitative; no numerical colourbar applies."
-      ]
-    },
-    {
-      "id": "bc-southwest-snowfog",
-      "title": "BC Southwest Snow / Fog",
-      "shortTitle": "SW Snow / Fog",
-      "group": "Snow / fog",
-      "domain": "bc",
-      "anchorLayer": "snowfog",
-      "defaultHours": 12,
-      "maxHours": 24,
-      "viewport": {
-        "left": 0.3531,
-        "top": 0.53,
-        "width": 0.3898,
-        "height": 0.3438
-      },
-      "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
-      "layers": [
-        {
-          "id": "snowfog",
-          "opacity": 1.0
-        },
-        {
-          "id": "watersheds",
-          "opacity": 1.0
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
-        }
-      ],
-      "legends": [
-        "watersheds"
-      ],
-      "notes": [
-        "RGB colours are qualitative; no numerical colourbar applies."
-      ]
-    },
-    {
-      "id": "bc-southeast-snowfog",
-      "title": "BC Southeast Snow / Fog",
-      "shortTitle": "SE Snow / Fog",
-      "group": "Snow / fog",
-      "domain": "bc",
-      "anchorLayer": "snowfog",
-      "defaultHours": 12,
-      "maxHours": 24,
-      "viewport": {
-        "left": 0.5518,
-        "top": 0.4854,
-        "width": 0.355,
-        "height": 0.3473
-      },
-      "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
-      "layers": [
-        {
-          "id": "snowfog",
-          "opacity": 1.0
-        },
-        {
-          "id": "watersheds",
-          "opacity": 1.0
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
-        }
-      ],
-      "legends": [
-        "watersheds"
-      ],
-      "notes": [
-        "RGB colours are qualitative; no numerical colourbar applies."
-      ]
-    },
-    {
-      "id": "bc-northeast-snowfog",
-      "title": "BC Northeast Snow / Fog",
-      "shortTitle": "NE Snow / Fog",
-      "group": "Snow / fog",
-      "domain": "bc",
-      "anchorLayer": "snowfog",
-      "defaultHours": 12,
-      "maxHours": 24,
-      "viewport": {
-        "left": 0.4196,
-        "top": 0.1525,
-        "width": 0.452,
-        "height": 0.4422
-      },
-      "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
-      "layers": [
-        {
-          "id": "snowfog",
-          "opacity": 1.0
-        },
-        {
-          "id": "watersheds",
-          "opacity": 1.0
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
-        }
-      ],
-      "legends": [
-        "watersheds"
-      ],
-      "notes": [
-        "RGB colours are qualitative; no numerical colourbar applies."
-      ]
     },
     {
       "id": "pacific-wna-overlay",
@@ -2573,9 +2460,9 @@
       ],
       "viewport": {
         "left": 0.0,
-        "top": 0.0659,
-        "width": 0.8118,
-        "height": 0.9341
+        "top": 0.065936,
+        "width": 0.705882,
+        "height": 0.934064
       }
     }
   ],

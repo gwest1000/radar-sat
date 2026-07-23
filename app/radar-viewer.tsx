@@ -19,6 +19,8 @@ type Frame = {
   highConfidencePixels?: number;
   mappedFlashCount?: number;
   pointCount?: number;
+  usFeatureCount?: number;
+  sourceErrors?: string[];
 };
 
 type PointFrameReference = {
@@ -123,9 +125,10 @@ type SiteConfig = {
 };
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
-const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 const AUTO_REFRESH_MS = 5 * 60_000;
-const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
+const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
+const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
 const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
@@ -164,6 +167,13 @@ function pointLayerId(controllerId: string): string | undefined {
   if (controllerId === "glm-lightning-trail") return "glm-lightning-points";
   if (controllerId === "hotspots") return "hotspot-points";
   return undefined;
+}
+
+function usesRasterLightning(product: Product | undefined): boolean {
+  // Cropping a full-domain PNG magnifies its encoded symbols. Render lightning
+  // from point data on cropped BC views so bolts and their arrival glow remain
+  // sharp at the final browser resolution.
+  return RASTER_LIGHTNING_OVERLAYS && !(product?.domain === "bc" && product.viewport);
 }
 
 function absoluteUrl(path: string, base: string): string {
@@ -285,6 +295,34 @@ function rollingPointFrameReferences(
   // archive does not yet contain an at-or-before observation, omit the fire
   // overlay instead of labelling a future valid time.
   return pointFrameReferences(frames, target, catalogBase, maxAgeMinutes, 1);
+}
+
+function resilientActiveFireFrameReferences(
+  frames: Frame[],
+  target: string,
+  catalogBase: string,
+  maxAgeMinutes: number,
+): PointFrameReference[] {
+  const current = rollingPointFrameReferences(frames, target, catalogBase, maxAgeMinutes);
+  const selected = current[0];
+  const nifcFailed = selected?.frame.sourceErrors?.some((error) => error.includes("NIFC WFIGS"));
+  if (!selected || !nifcFailed) return current;
+  const targetTime = Date.parse(target);
+  const fallback = [...frames].reverse().find((frame) => {
+    const validTime = Date.parse(frame.validTime);
+    return Number.isFinite(validTime)
+      && validTime <= targetTime
+      && targetTime - validTime <= maxAgeMinutes * 60_000
+      && (frame.usFeatureCount ?? 0) > 0
+      && !(frame.sourceErrors?.length);
+  });
+  if (!fallback) return current;
+  return [{
+    validTime: fallback.validTime,
+    url: frameUrl(fallback, catalogBase),
+    ageMinutes: Math.max(0, (targetTime - Date.parse(fallback.validTime)) / 60_000),
+    frame: fallback,
+  }];
 }
 
 async function buildLightningMarkers(
@@ -558,7 +596,7 @@ function activeAnchorLayer(product: Product, optionalLayers: Record<string, bool
     const recipe = product.layers.find((candidate) => candidate.id === id);
     return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
   };
-  return ["raw-visir-5min", "raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "daynight", "ir", "convective", "radar-rain", "ptype", "lightning-trail", "hotspots"]
+  return ["raw-visir-5min", "raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "daynight", "ir", "convective", "snowfog", "radar-rain", "ptype", "lightning-trail", "hotspots"]
     .find(enabled) ?? product.anchorLayer;
 }
 
@@ -575,7 +613,7 @@ function composeLayers(
     if (
       pointsId
       && domain.layers[pointsId]?.frames?.length
-      && !LIGHTNING_CONTROLLERS.has(recipe.id)
+      && (!LIGHTNING_CONTROLLERS.has(recipe.id) || !usesRasterLightning(product))
     ) return [];
     const staticLayer = domain.staticLayers[recipe.id];
     if (staticLayer) {
@@ -770,6 +808,7 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "ir") return "ECCC IR";
   if (layerId === "daynight") return "ECCC VIS/IR";
   if (layerId === "convective") return "ECCC Convective";
+  if (layerId === "snowfog") return "Snow / Fog";
   if (layerId === "westwx-visir") return "NOAA VIS/IR";
   if (layerId === "westwx-ir") return "NOAA IR";
   if (layerId === "raw-visir") return "NOAA VIS/IR";
@@ -859,6 +898,16 @@ function LightningCanvas({
         context.scale(size / 24, size / 24);
         context.translate(-12, -12);
         context.globalAlpha = opacity[marker.age];
+        if (marker.age === 0) {
+          const arrival = context.createRadialGradient(12, 12, 1, 12, 12, 11.5);
+          arrival.addColorStop(0, "rgba(255, 255, 246, 0.72)");
+          arrival.addColorStop(0.35, "rgba(255, 250, 205, 0.36)");
+          arrival.addColorStop(1, "rgba(255, 246, 170, 0)");
+          context.fillStyle = arrival;
+          context.beginPath();
+          context.arc(12, 12, 11.5, 0, Math.PI * 2);
+          context.fill();
+        }
         context.fillStyle = colors[marker.age];
         if (marker.age === 0) {
           context.shadowColor = "rgba(255, 254, 220, 0.96)";
@@ -1201,7 +1250,15 @@ export function RadarViewer() {
               let stored: Partial<ViewerPreferences> = {};
               if (!initialized) {
                 try {
-                  stored = JSON.parse(window.sessionStorage.getItem(VIEWER_PREFERENCES_KEY) ?? "{}") as Partial<ViewerPreferences>;
+                  const currentPreferences = window.sessionStorage.getItem(VIEWER_PREFERENCES_KEY);
+                  stored = JSON.parse(
+                    currentPreferences
+                      ?? window.sessionStorage.getItem(LEGACY_VIEWER_PREFERENCES_KEY)
+                      ?? "{}",
+                  ) as Partial<ViewerPreferences>;
+                  // The new 1× equals the former 2×. Preserve the other legacy
+                  // choices while resetting playback to the newly labelled 1×.
+                  if (currentPreferences === null) delete stored.speedIndex;
                 } catch {
                   stored = {};
                 }
@@ -1216,7 +1273,7 @@ export function RadarViewer() {
                   && RANGE_OPTIONS.includes(stored.rangeHours)
                   ? stored.rangeHours
                   : preferred.defaultHours;
-                setRangeHours(Math.min(requestedRange, preferred.maxHours ?? 168));
+                setRangeHours(requestedRange);
                 setSpeedIndex(
                   typeof stored.speedIndex === "number"
                     && stored.speedIndex >= 0
@@ -1318,6 +1375,7 @@ export function RadarViewer() {
     () => product ? activeAnchorLayer(product, optionalLayers) : "",
     [optionalLayers, product],
   );
+  const effectiveRangeHours = Math.min(rangeHours, product?.maxHours ?? 168);
   const anchorFrames = useMemo(() => {
     if (!domain || !product) return [];
     const frames = activeAnchorId === "raw-visir-5min"
@@ -1328,9 +1386,9 @@ export function RadarViewer() {
       : domain.layers[activeAnchorId]?.frames ?? [];
     if (!frames.length) return [];
     const newest = Date.parse(frames[frames.length - 1].validTime);
-    const cutoff = newest - rangeHours * 60 * 60 * 1000;
+    const cutoff = newest - effectiveRangeHours * 60 * 60 * 1000;
     return frames.filter((frame) => Date.parse(frame.validTime) >= cutoff);
-  }, [activeAnchorId, domain, product, rangeHours]);
+  }, [activeAnchorId, domain, effectiveRangeHours, product]);
 
   const availableRangeOptions = useMemo(
     () => RANGE_OPTIONS.filter((hours) => hours <= (product?.maxHours ?? 168)),
@@ -1353,7 +1411,7 @@ export function RadarViewer() {
     : domain;
   const lightningPointReferences = useMemo(() => {
     if (
-      RASTER_LIGHTNING_OVERLAYS
+      usesRasterLightning(product)
       || !product
       || !lightningPointDomain
       || !anchor
@@ -1372,7 +1430,7 @@ export function RadarViewer() {
   }, [anchor, catalogBase, lightningController, lightningPointDomain, lightningPointsId, optionalLayers, product]);
   const ecccFallbackPointReferences = useMemo(() => {
     if (
-      RASTER_LIGHTNING_OVERLAYS
+      usesRasterLightning(product)
       || !catalog
       || !product
       || domain?.id !== "north-america"
@@ -1404,7 +1462,7 @@ export function RadarViewer() {
       : product.domain === "bc"
         ? catalog?.domains.bc
         : catalog?.domains["north-america"];
-    return rollingPointFrameReferences(
+    return resilientActiveFireFrameReferences(
       pointDomain?.layers["hotspot-points"]?.frames ?? [],
       anchor.validTime,
       catalogBase,
@@ -1499,7 +1557,7 @@ export function RadarViewer() {
     const pointReferencesFor = (candidate: Frame): PointFrameReference[] => {
       const references = product.layers.flatMap((recipe) => {
         if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
-        if (RASTER_LIGHTNING_OVERLAYS && LIGHTNING_CONTROLLERS.has(recipe.id)) return [];
+        if (usesRasterLightning(product) && LIGHTNING_CONTROLLERS.has(recipe.id)) return [];
         const pointsId = pointLayerId(recipe.id);
         if (!pointsId) return [];
         const nativePointDomain = domain.layers[pointsId]?.frames?.length ? domain : undefined;
@@ -1528,7 +1586,7 @@ export function RadarViewer() {
         const activePointDomain = domain.layers["active-fire-points"]?.frames?.length
           ? domain
           : catalog.domains["north-america"];
-        references.push(...rollingPointFrameReferences(
+        references.push(...resilientActiveFireFrameReferences(
           activePointDomain?.layers["active-fire-points"]?.frames ?? [],
           candidate.validTime,
           catalogBase,
@@ -1536,7 +1594,7 @@ export function RadarViewer() {
         ));
       }
       if (
-        !RASTER_LIGHTNING_OVERLAYS
+        !usesRasterLightning(product)
         && product.domain === "north-america"
         && product.layers.some((recipe) => (
           LIGHTNING_CONTROLLERS.has(recipe.id)
@@ -1583,7 +1641,7 @@ export function RadarViewer() {
       const finalFrame = currentFrameIndex === anchorFrames.length - 1;
       // Four to five frames per second is smooth for meteorological loops
       // without monopolizing the main thread or GPU decode queue.
-      const delay = finalFrame ? 650 / speed : 220 / speed;
+      const delay = finalFrame ? 325 / speed : 110 / speed;
       timer = window.setTimeout(() => advance(1), delay);
     });
 
@@ -1742,7 +1800,12 @@ export function RadarViewer() {
     <main className="app-shell">
       <header className="site-header">
         <div className="brand-row">
-          <h1 className="brand">BC Satellite<span className="brand-mark">/</span>Radar<span className="brand-mark">/</span>Lightning<span className="brand-mark">/</span>Fires</h1>
+          <h1 className="brand">
+            BC Satellite<span className="brand-mark">/</span><wbr />
+            Radar<span className="brand-mark">/</span><wbr />
+            Lightning<span className="brand-mark">/</span><wbr />
+            Fires
+          </h1>
         </div>
         <div className="live-summary" aria-live="polite">
           <span className={`status-dot status-${liveState.toLowerCase()}`} aria-hidden="true" />
@@ -1755,7 +1818,7 @@ export function RadarViewer() {
           className="map-column"
           style={{
             "--map-aspect": `${mapAspect}`,
-            "--map-max-width": `calc(${mapAspect * 100}vh - ${mapAspect * 155}px)`,
+            "--map-max-width": `calc(${mapAspect * 100}dvh - ${mapAspect * 58}px)`,
           } as CSSProperties}
         >
           <div className="timeline-panel">
@@ -1805,7 +1868,6 @@ export function RadarViewer() {
                       onClick={(event) => {
                         setPlaying(true);
                         setProductId(item.id);
-                        setRangeHours(Math.min(item.defaultHours, item.maxHours ?? 168));
                         setFrameIndex(NEWEST_FRAME);
                         setRegionMenuOpen(false);
                         event.currentTarget.blur();
@@ -1827,12 +1889,12 @@ export function RadarViewer() {
                   onClick={() => setRangeMenuOpen((open) => !open)}
                 >
                   <span className="selector-label">Span</span>
-                  <span>{rangeHours === 168 ? "7 d" : `${rangeHours} h`}</span>
+                  <span>{effectiveRangeHours === 168 ? "7 d" : `${effectiveRangeHours} h`}</span>
                   <span className="selector-chevron" aria-hidden="true">›</span>
                 </button>
                 <div className="selector-options range-actions" role="group" aria-label="Archive range">
                   {availableRangeOptions.map((hours) => (
-                    <button className="range-button" type="button" aria-pressed={rangeHours === hours} key={hours} onClick={(event) => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); setRangeMenuOpen(false); event.currentTarget.blur(); }}>
+                    <button className="range-button" type="button" aria-pressed={effectiveRangeHours === hours} key={hours} onClick={(event) => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); setRangeMenuOpen(false); event.currentTarget.blur(); }}>
                       {hours === 168 ? "7 d" : `${hours} h`}
                     </button>
                   ))}
@@ -1843,6 +1905,8 @@ export function RadarViewer() {
                 <span className="archive-span">{selectedArchiveSpan}</span>
               </div>
             </div>
+          </div>
+          <div className="timeline-scrubber">
             <input
               className="timeline-range"
               aria-label="Loop frame"
@@ -1874,7 +1938,7 @@ export function RadarViewer() {
                   ...cropStyle,
                   opacity: layer.opacity,
                   filter: ["Overlay", "Broad"].includes(product.group)
-                    && ["ir", "daynight", "convective", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
+                    && ["ir", "daynight", "convective", "snowfog", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
                     && (composedLayerIds.has("radar-rain") || composedLayerIds.has("ptype"))
                     ? "saturate(0.52) brightness(0.78) contrast(1.06)"
                     : undefined,

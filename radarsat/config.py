@@ -354,7 +354,7 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     # Normalized crops of the common EPSG:3005 BC grid. Reusing the same
     # aligned rasters gives regional displays without multiplying R2 storage.
     # Natural Earth BC bounds plus roughly 180 km of context on each side.
-    "small": {"left": 0.2133, "top": 0.1239, "width": 0.6534, "height": 0.7500},
+    "small": {"left": 0.2450, "top": 0.1550, "width": 0.5900, "height": 0.6800},
     "southwest": {"left": 0.3531, "top": 0.5300, "width": 0.3898, "height": 0.3438},
     "southeast": {"left": 0.5518, "top": 0.4854, "width": 0.3550, "height": 0.3473},
     "northeast": {"left": 0.4196, "top": 0.1525, "width": 0.4520, "height": 0.4422},
@@ -369,9 +369,9 @@ BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
     # Keeping the source grid intact means satellite, radar and hazards remain
     # pixel-registered while the browser devotes its space to useful terrain.
     "north-america": {"left": 0.0, "top": 0.1763, "width": 0.8272, "height": 0.8237},
-    # Retain the full Pacific western edge, but remove the high Arctic and stop
-    # at roughly 102 W (the eastern edge of Colorado).
-    "north-pacific": {"left": 0.0, "top": 0.0659, "width": 0.8118, "height": 0.9341},
+    # Retain the full Pacific western edge, remove the high Arctic above 69 N,
+    # and stop at 120 W along the straight BC–Alberta boundary.
+    "north-pacific": {"left": 0.0, "top": 0.065936, "width": 0.705882, "height": 0.934064},
 }
 
 
@@ -405,6 +405,7 @@ def _overlay_product(
             {"id": "daynight", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "convective", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "snowfog", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
@@ -433,33 +434,6 @@ def _overlay_product(
     if max_hours is not None:
         product["maxHours"] = max_hours
     return product
-
-
-def _snowfog_product(
-    product_id: str,
-    title: str,
-    short_title: str,
-    viewport: dict[str, float],
-) -> dict[str, object]:
-    return {
-        "id": product_id,
-        "title": title,
-        "shortTitle": short_title,
-        "group": "Snow / fog",
-        "domain": "bc",
-        "anchorLayer": "snowfog",
-        "defaultHours": 12,
-        "maxHours": 24,
-        "viewport": viewport,
-        "description": "Snow/fog RGB by day and night microphysics after dark, with BC Hydro watershed boundaries.",
-        "layers": [
-            {"id": "snowfog", "opacity": 1.0},
-            {"id": "watersheds", "opacity": 1.0},
-            {"id": "boundaries", "opacity": 1.0},
-        ],
-        "legends": ["watersheds"],
-        "notes": ["RGB colours are qualitative; no numerical colourbar applies."],
-    }
 
 
 def _broad_product(
@@ -528,10 +502,6 @@ PRODUCTS: list[dict[str, object]] = [
     _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"], five_minute=True, max_hours=24),
     _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"], five_minute=True, max_hours=24),
     _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"], max_hours=24),
-    _snowfog_product("bc-small-snowfog", "BC Small Snow / Fog", "BC Snow / Fog", VIEWPORTS["small"]),
-    _snowfog_product("bc-southwest-snowfog", "BC Southwest Snow / Fog", "SW Snow / Fog", VIEWPORTS["southwest"]),
-    _snowfog_product("bc-southeast-snowfog", "BC Southeast Snow / Fog", "SE Snow / Fog", VIEWPORTS["southeast"]),
-    _snowfog_product("bc-northeast-snowfog", "BC Northeast Snow / Fog", "NE Snow / Fog", VIEWPORTS["northeast"]),
     _broad_product(
         "pacific-wna-overlay",
         "Eastern Pacific / Western North America",

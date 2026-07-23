@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from .config import Domain
 from .geomet import projected_bbox
@@ -161,9 +161,13 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
         ((255, 242, 154, 210), (255, 255, 255, 120), 7),
         ((255, 224, 100, 145), (255, 255, 255, 70), 6),
     ]
-    for mask, (fill, glow, half_height) in reversed(list(zip(masks, styles))):
+    for age_index, (mask, (fill, glow, half_height)) in reversed(list(enumerate(zip(masks, styles)))):
         if mask is None:
             continue
+        bolt_layer = Image.new("RGBA", size, (0, 0, 0, 0))
+        bolt_draw = ImageDraw.Draw(bolt_layer, "RGBA")
+        arrival_glow = Image.new("RGBA", size, (0, 0, 0, 0)) if age_index == 0 else None
+        arrival_draw = ImageDraw.Draw(arrival_glow, "RGBA") if arrival_glow is not None else None
         for x, y, area in component_centres(mask):
             height = half_height + min(2, max(0, area.bit_length() - 2))
             width = max(5, round(height * 0.72))
@@ -176,9 +180,15 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
                 (x + round(width * 0.18), y - round(height * 0.18)),
             ]
             closed_bolt = bolt + [bolt[0]]
-            draw.line(closed_bolt, fill=(2, 7, 11, min(225, fill[3])), width=5, joint="curve")
-            draw.line(closed_bolt, fill=glow, width=3, joint="curve")
-            draw.polygon(bolt, fill=fill)
+            if arrival_draw is not None:
+                arrival_draw.line(closed_bolt, fill=(255, 252, 214, 170), width=7, joint="curve")
+                arrival_draw.polygon(bolt, fill=(255, 255, 244, 190))
+            bolt_draw.line(closed_bolt, fill=(2, 7, 11, min(225, fill[3])), width=5, joint="curve")
+            bolt_draw.line(closed_bolt, fill=glow, width=3, joint="curve")
+            bolt_draw.polygon(bolt, fill=fill)
+        if arrival_glow is not None:
+            canvas.alpha_composite(arrival_glow.filter(ImageFilter.GaussianBlur(radius=5)))
+        canvas.alpha_composite(bolt_layer)
     canvas.quantize(colors=32, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(
         destination,
         "PNG",
