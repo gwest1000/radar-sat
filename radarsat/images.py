@@ -156,9 +156,11 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
     # new flash wins where intervals overlap. The dark outer halo and white ring
     # remain visible over both high reflectivity and bright cloud RGBs.
     styles = [
-        ((255, 66, 214, 255), (255, 255, 255, 255), 6),
-        ((194, 106, 213, 210), (255, 255, 255, 205), 5),
-        ((128, 126, 164, 155), (255, 255, 255, 145), 4),
+        # New flashes are illuminated white; older flashes fade through
+        # yellow, never orange/coral where they could be confused with fire.
+        ((255, 255, 255, 255), (255, 239, 116, 255), 6),
+        ((255, 226, 76, 220), (255, 255, 255, 215), 5),
+        ((207, 188, 82, 150), (255, 255, 255, 145), 4),
     ]
     for mask, (fill, ring, base_radius) in reversed(list(zip(masks, styles))):
         if mask is None:

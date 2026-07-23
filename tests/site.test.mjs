@@ -28,9 +28,10 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /useState\(3\)/);
   assert.match(viewer, /\? stored\.speedIndex\s*: 3/);
   assert.match(viewer, /finalFrame \? 650 \/ speed : 220 \/ speed/);
-  assert.match(viewer, /pageActive && anchorFrames\.length > 1/);
-  assert.match(viewer, /document\.visibilityState === "visible" && document\.hasFocus\(\)/);
-  assert.match(viewer, /window\.addEventListener\("blur", updateActivity\)/);
+  assert.match(viewer, /pageVisible && anchorFrames\.length > 1/);
+  assert.match(viewer, /setPageVisible\(document\.visibilityState === "visible"\)/);
+  assert.doesNotMatch(viewer, /document\.hasFocus\(\)/);
+  assert.doesNotMatch(viewer, /window\.addEventListener\("blur"/);
   assert.match(viewer, /IMAGE_FRAME_CACHE_LIMIT = 96/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
@@ -53,6 +54,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /<FlameIcon highlighted \/>/);
   assert.match(viewer, /candidate\.pointReferences\.forEach\(\(reference\) => preloadPointFrame/);
   assert.match(viewer, /<LightningCanvas/);
+  assert.match(viewer, /RASTER_LIGHTNING_OVERLAYS = true/);
+  assert.match(viewer, /typically only[\s\S]*7–12 KB/);
   assert.match(viewer, /<FireCanvas/);
   assert.match(viewer, /data-marker-count=\{markers\.length\}/);
   assert.match(viewer, /lookaheadCount = 2/);

@@ -85,5 +85,5 @@ else
   print -u2 "Warning: observation ingest failed with status ${ingest_status}; raw spool retained."
 fi
 
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh"
+"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast
 exit "${ingest_status}"

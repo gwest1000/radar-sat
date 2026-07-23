@@ -134,6 +134,20 @@ class RetentionTests(unittest.TestCase):
             ],
         )
 
+    def test_broad_bootstrap_keeps_six_minute_radar_for_first_day(self) -> None:
+        now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
+        recent = sorted(
+            now - dt.timedelta(minutes=minute)
+            for minute in (6, 12, 18, 24, 30)
+        )
+        old_hour = now - dt.timedelta(hours=25)
+        old_off_hour = old_hour - dt.timedelta(minutes=6)
+
+        self.assertEqual(
+            retained_times([old_off_hour, old_hour, *recent], 48, False, now, "broad"),
+            [old_hour, *recent],
+        )
+
     def test_latest_only_probe_is_not_removed_by_retention(self) -> None:
         now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
         latest = now - dt.timedelta(days=8, minutes=10)
@@ -288,6 +302,42 @@ class PublisherTests(unittest.TestCase):
             )
             self.assertEqual(result["deleted"], 0)
             self.assertFalse(any(event[0] == "delete" for event in fake.events))
+
+    def test_fast_publication_uses_successful_upload_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            fake = FakeR2()
+            state = base / "state.sqlite3"
+            status = base / "publish.json"
+
+            first = publish(
+                root,
+                self.config(),
+                state,
+                status,
+                client=fake,
+                now=now,
+                fast=True,
+            )
+            fake.events.clear()
+            second = publish(
+                root,
+                self.config(),
+                state,
+                status,
+                client=fake,
+                now=now,
+                fast=True,
+            )
+
+            self.assertTrue(first["fast"])
+            self.assertEqual(first["uploaded"], 3)
+            self.assertEqual(second["uploaded"], 0)
+            self.assertEqual(fake.events, [("put", "catalog.json")])
 
 
 if __name__ == "__main__":

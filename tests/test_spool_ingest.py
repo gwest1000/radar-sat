@@ -281,20 +281,20 @@ class NativeRenderTests(unittest.TestCase):
             self.assertLess(len(x), 230)
             # Circular corners remain transparent; a square dilation would not.
             self.assertEqual(int(alpha[y.min(), x.min()]), 0)
-            white_ring = (
+            white_core = (
                 (rendered[:, :, 0] > 240)
                 & (rendered[:, :, 1] > 240)
                 & (rendered[:, :, 2] > 240)
                 & (alpha > 0)
             )
-            magenta_core = (
-                (rendered[:, :, 0] > 220)
-                & (rendered[:, :, 1] < 120)
-                & (rendered[:, :, 2] > 170)
+            yellow_ring = (
+                (rendered[:, :, 0] > 240)
+                & (rendered[:, :, 1] > 200)
+                & (rendered[:, :, 2] < 160)
                 & (alpha > 0)
             )
-            self.assertTrue(np.any(white_ring))
-            self.assertTrue(np.any(magenta_core))
+            self.assertTrue(np.any(white_core))
+            self.assertTrue(np.any(yellow_ring))
 
     def test_lightning_density_palette_is_transparent_at_zero_and_red_at_legend_ceiling(self) -> None:
         rgba = _lightning_rgba(np.asarray([[np.nan, 0.0, 0.2, 1.0, 2.0, 5.0]], dtype=np.float32))

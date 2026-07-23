@@ -46,7 +46,7 @@ from .point_frames import (
 
 
 UTC = dt.timezone.utc
-LIGHTNING_TRAIL_RENDER_VERSION = 2
+LIGHTNING_TRAIL_RENDER_VERSION = 3
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
@@ -55,7 +55,7 @@ RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 2
 GLM_LIGHTNING_RENDER_VERSION = 2
-GLM_LIGHTNING_TRAIL_RENDER_VERSION = 2
+GLM_LIGHTNING_TRAIL_RENDER_VERSION = 3
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
@@ -173,11 +173,9 @@ def retained_times(
     values = selected_times(times, hours, latest_only)
     if latest_only:
         return values
-    if tier == "broad":
-        # Broad displays are deliberately half-hourly for the first day and
-        # hourly thereafter. Avoid downloading six-minute radar frames that
-        # the requested product cadence will never use.
-        values = [value for value in values if value.minute in {0, 30}]
+    # Keep the genuine six-minute ECCC radar clock during the first day on
+    # continental/Pacific displays. ``keep_frame`` still thins broad archives
+    # older than 24 hours to hourly, so the storage increase remains small.
     return [value for value in values if keep_frame(value, now, tier)]
 
 

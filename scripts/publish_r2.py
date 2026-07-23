@@ -25,6 +25,14 @@ def parse_args() -> argparse.Namespace:
         help="Keep expired remote frame objects (the bucket lifecycle remains a backstop).",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help=(
+            "Use the durable successful-upload index instead of listing the "
+            "entire bucket; a regular archive publication still reconciles R2."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -37,6 +45,7 @@ def main() -> int:
             args.state_path,
             args.status_path,
             sync_delete=not args.no_delete,
+            fast=args.fast,
             dry_run=args.dry_run,
         )
     except Exception as error:

@@ -136,6 +136,10 @@ const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
   height: `${BC_ON_NORTH_AMERICA.height * 100}%`,
 };
 const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]);
+// The derived lightning trails are transparent indexed PNGs (typically only
+// 7–12 KB). Prefer them to downloading point JSON and repainting hundreds of
+// symbols in the browser on every animation frame.
+const RASTER_LIGHTNING_OVERLAYS = true;
 const WEB_MERCATOR_RADIUS = 6_378_137;
 const WGS84_ECCENTRICITY = 0.08181919084262149;
 const NORTH_AMERICA_BOUNDS = [-21_051_700.011, 557_305.257, -4_551_782.871, 12_932_243.112] as const;
@@ -602,7 +606,11 @@ function composeLayers(
   return product.layers.flatMap((recipe) => {
     if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
     const pointsId = pointLayerId(recipe.id);
-    if (pointsId && domain.layers[pointsId]?.frames?.length) return [];
+    if (
+      pointsId
+      && domain.layers[pointsId]?.frames?.length
+      && !LIGHTNING_CONTROLLERS.has(recipe.id)
+    ) return [];
     const staticLayer = domain.staticLayers[recipe.id];
     if (staticLayer) {
       return [{
@@ -1188,7 +1196,7 @@ export function RadarViewer() {
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [pageActive, setPageActive] = useState(true);
+  const [pageVisible, setPageVisible] = useState(true);
   const preferencesRef = useRef<ViewerPreferences>({
     productId: "bc-large-overlay",
     speedIndex: 3,
@@ -1321,21 +1329,15 @@ export function RadarViewer() {
   }, []);
 
   useEffect(() => {
-    // Pausing on blur matters on desktop: a visible Radar-Sat window on a
-    // second monitor should not keep decoding imagery while another app is in
-    // use. Playback resumes from the same frame when focus returns.
-    const updateActivity = () => {
-      setPageActive(document.visibilityState === "visible" && document.hasFocus());
+    // A visible loop keeps playing on a second monitor even while another
+    // browser window or application has focus. Only a genuinely hidden tab is
+    // paused to avoid spending decode work on an image nobody can see.
+    const updateVisibility = () => {
+      setPageVisible(document.visibilityState === "visible");
     };
-    updateActivity();
-    document.addEventListener("visibilitychange", updateActivity);
-    window.addEventListener("focus", updateActivity);
-    window.addEventListener("blur", updateActivity);
-    return () => {
-      document.removeEventListener("visibilitychange", updateActivity);
-      window.removeEventListener("focus", updateActivity);
-      window.removeEventListener("blur", updateActivity);
-    };
+    updateVisibility();
+    document.addEventListener("visibilitychange", updateVisibility);
+    return () => document.removeEventListener("visibilitychange", updateVisibility);
   }, []);
 
   const availableProducts = useMemo(
@@ -1373,7 +1375,7 @@ export function RadarViewer() {
   const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
 
   const currentFrameIndex = Math.min(frameIndex, Math.max(0, anchorFrames.length - 1));
-  const isAnimating = playing && pageActive && anchorFrames.length > 1;
+  const isAnimating = playing && pageVisible && anchorFrames.length > 1;
   const anchor = anchorFrames[currentFrameIndex];
   const lightningController = product?.layers.find((recipe) => LIGHTNING_CONTROLLERS.has(recipe.id));
   const lightningPointsId = lightningController ? pointLayerId(lightningController.id) : undefined;
@@ -1386,7 +1388,8 @@ export function RadarViewer() {
     : domain;
   const lightningPointReferences = useMemo(() => {
     if (
-      !product
+      RASTER_LIGHTNING_OVERLAYS
+      || !product
       || !lightningPointDomain
       || !anchor
       || !catalogBase
@@ -1404,7 +1407,8 @@ export function RadarViewer() {
   }, [anchor, catalogBase, lightningController, lightningPointDomain, lightningPointsId, optionalLayers, product]);
   const ecccFallbackPointReferences = useMemo(() => {
     if (
-      !catalog
+      RASTER_LIGHTNING_OVERLAYS
+      || !catalog
       || !product
       || domain?.id !== "north-america"
       || !anchor
@@ -1530,6 +1534,7 @@ export function RadarViewer() {
     const pointReferencesFor = (candidate: Frame): PointFrameReference[] => {
       const references = product.layers.flatMap((recipe) => {
         if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
+        if (RASTER_LIGHTNING_OVERLAYS && LIGHTNING_CONTROLLERS.has(recipe.id)) return [];
         const pointsId = pointLayerId(recipe.id);
         if (!pointsId) return [];
         const nativePointDomain = domain.layers[pointsId]?.frames?.length ? domain : undefined;
@@ -1566,7 +1571,8 @@ export function RadarViewer() {
         ));
       }
       if (
-        product.domain === "north-america"
+        !RASTER_LIGHTNING_OVERLAYS
+        && product.domain === "north-america"
         && product.layers.some((recipe) => (
           LIGHTNING_CONTROLLERS.has(recipe.id)
           && isProductLayerEnabled(recipe, optionalLayers, product.layers)

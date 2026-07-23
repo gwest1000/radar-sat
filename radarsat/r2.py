@@ -198,6 +198,15 @@ class PublishState:
         )
         self.connection.commit()
 
+    def known_sizes(self) -> dict[str, int]:
+        """Return sizes of objects confirmed by successful prior uploads."""
+        return {
+            str(row["object_key"]): int(row["size_bytes"])
+            for row in self.connection.execute(
+                "SELECT object_key, size_bytes FROM objects"
+            )
+        }
+
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -464,16 +473,21 @@ def publish(
     *,
     client: Any | None = None,
     sync_delete: bool = True,
+    fast: bool = False,
     dry_run: bool = False,
     now: dt.datetime | None = None,
 ) -> dict[str, object]:
     now = (now or dt.datetime.now(UTC)).astimezone(UTC)
     objects, catalog_bytes = discover_objects(root)
     client = client or boto3_client(config)
-    remote = list_remote_objects(client, config.bucket)
-    sizes = size_guard(objects, catalog_bytes, remote, config)
     state = PublishState(state_path, f"{config.account_id}/{config.bucket}")
     try:
+        # Rapid satellite/observation commits trust the durable record of
+        # successful uploads and avoid a paginated 10k-object bucket listing.
+        # The half-hour archive worker still performs a full reconciliation
+        # and expiry deletion, repairing any externally removed object.
+        remote = state.known_sizes() if fast else list_remote_objects(client, config.bucket)
+        sizes = size_guard(objects, catalog_bytes, remote, config)
         pending = [
             item
             for item in objects
@@ -486,7 +500,7 @@ def publish(
                 for key in expired_remote_keys(remote, now)
                 if key not in desired_keys
             ]
-            if sync_delete
+            if sync_delete and not fast
             else []
         )
         if dry_run:
@@ -497,6 +511,7 @@ def publish(
                 "objects": len(objects),
                 "pending": len(pending),
                 "expired": len(expired),
+                "fast": fast,
                 **sizes,
             }
             write_status(status_path, result)
@@ -527,6 +542,7 @@ def publish(
             "unchanged": len(objects) - uploaded,
             "deleted": deleted,
             "catalogLast": True,
+            "fast": fast,
             **sizes,
         }
         if config.public_base_url:

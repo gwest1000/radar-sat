@@ -177,6 +177,9 @@ class OpsScriptTests(unittest.TestCase):
         observations = (PROJECT / "scripts" / "ops" / "run_observation_cycle.zsh").read_text()
         archive = (PROJECT / "scripts" / "ops" / "run_archive_cycle.zsh").read_text()
         heavy_lock = (PROJECT / "scripts" / "ops" / "heavy_satellite_lock.zsh").read_text()
+        observation_plist = (
+            PROJECT / "ops" / "com.greg.radar-sat.observations.plist.template"
+        ).read_text()
         install = (PROJECT / "scripts" / "ops" / "install_launchd.zsh").read_text()
 
         self.assertIn("backfill_westwx_satellite.py", satellite)
@@ -184,11 +187,14 @@ class OpsScriptTests(unittest.TestCase):
         self.assertNotIn("backfill_native_bc_satellite.py", satellite)
         self.assertNotIn("scripts/run_ingest.py", satellite)
         self.assertIn("publish_locked.zsh", satellite)
+        self.assertIn("publish_locked.zsh\" --fast", satellite)
         self.assertIn("try_acquire_heavy_satellite_lock", satellite)
 
         self.assertIn("RADARSAT_RAW_SAT_ENABLED=0", observations)
         self.assertIn("--spool-mode only", observations)
         self.assertIn("publish_locked.zsh", observations)
+        self.assertIn("publish_locked.zsh\" --fast", observations)
+        self.assertIn("<string>10</string>", observation_plist)
 
         self.assertIn("--domain north-pacific", archive)
         self.assertIn("--latest-only", archive)

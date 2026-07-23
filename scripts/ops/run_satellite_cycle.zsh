@@ -90,10 +90,11 @@ if [[ "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_ENABLED:-${RADARSAT_WESTWX_SATELLITE_
     --output-root "${OUTPUT_ROOT}" \
     --cache-root "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/five-minute-bc-satellite}" \
     --hours "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_HOURS:-3}" \
-    --max-frames "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_FRAMES:-2}" \
+    --max-frames "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_FRAMES:-1}" \
     --max-download-gb "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_DOWNLOAD_GB:-0.15}" \
     --max-source-mb "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_SOURCE_MB:-100}" \
     --apply || print -u2 "Warning: five-minute BC satellite refresh failed; continuing to publication."
 fi
 
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh"
+release_heavy_satellite_lock
+"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast

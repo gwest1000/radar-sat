@@ -2,6 +2,11 @@
 
 Radar-Sat uses ECCC's AMQPS notification service for systematic real-time acquisition. Sarracenia receives a notification as each product is published, downloads the announced file over HTTPS, and atomically renames it into a local raw spool. Separate NOAA public-S3 paths read ten-minute GOES-18 ABI imagery for North America, half-hourly GOES-18/19 ABI and Himawari-9 AHI imagery for the legacy blended products, and ten-minute GOES-18 smoke and total-lightning products.
 
+The ECCC `RADAR_1KM_RRAI` North American composite and its dynamic coverage
+mask are archived on their genuine six-minute source clock for the first
+24 hours, including the continental and Pacific/West Coast displays. Broad
+radar archives are thinned to hourly after day one.
+
 The rendered BC composites and precipitation-type layers still come from GeoMet WMS because no equivalent gridded Datamart file is published. The raw feeds here supply the satellite, lightning, and four site-radar diagnostic loops.
 
 ## What is subscribed

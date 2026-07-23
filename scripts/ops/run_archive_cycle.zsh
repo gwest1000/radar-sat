@@ -95,4 +95,5 @@ done
   --spool-mode off \
   --spool-hours "${RADARSAT_SPOOL_INGEST_HOURS:-12}"
 
+release_heavy_satellite_lock
 "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh"

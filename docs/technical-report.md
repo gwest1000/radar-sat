@@ -183,9 +183,12 @@ require adding a raw NOAA ABI radiance/Cloud-and-Moisture-Imagery decoder.
 Lightning-density transparency beyond 250 km of Canadian land or sea borders is
 outside the CLDN mask and must not be read as confirmed zero lightning. Positive
 2.5-km density cells are grouped into compact circular markers, not labelled as
-individual strikes. New flashes use a magenta core, white ring and dark halo;
-the core, ring and marker size fade through the 10–20 and 20–30-minute bins so
-they remain visible over strong radar echoes.
+individual strikes. The browser uses small transparent server-rendered trail
+PNGs rather than rebuilding the symbols from JSON every frame. New flashes use
+an illuminated white core with a pale-yellow ring and dark halo; the core,
+ring and marker size fade through yellow in the 10–20 and 20–30-minute bins so
+they remain visible over strong radar echoes without resembling coral fire
+symbols.
 
 ### Satellite parallax
 

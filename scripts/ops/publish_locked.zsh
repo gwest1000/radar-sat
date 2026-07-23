@@ -61,4 +61,5 @@ trap 'release_lock; exit 143' TERM
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/publish_r2.py" \
   --root "${OUTPUT_ROOT}" \
   --state-path "${STATE_ROOT}/state/r2-publish.sqlite3" \
-  --status-path "${STATE_ROOT}/status/publish.json"
+  --status-path "${STATE_ROOT}/status/publish.json" \
+  "$@"

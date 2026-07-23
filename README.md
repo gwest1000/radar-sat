@@ -64,6 +64,10 @@ GitHub Pages static viewer ◀────────────────�
 - North America satellite target: 10 minutes for 24 hours, then hourly through
   day 7. The Himawari-9/GOES-18 North Pacific blend remains 30 minutes for 24
   hours, then hourly; GOES-18 smoke and total lightning use a 10-minute clock.
+- The ECCC 1 km North American radar composite is retained at its genuine
+  six-minute clock for 24 hours, then hourly through day 7.
+- The viewer uses server-rendered transparent lightning-trail PNGs (normally
+  6–12 KB) instead of rebuilding hundreds of flash symbols in the browser.
 - Dynamic clients can use `glm-lightning-points` and `hotspot-points` instead
   of the legacy symbol PNGs. Each compact JSON frame uses normalized top-left
   coordinates and tuple schemas `[x,y,ageMinutes,count]` for GLM or
@@ -82,7 +86,9 @@ GitHub Pages static viewer ◀────────────────�
   transparent; the renderer does not synthesize weather into those gaps.
 - Raw NOAA source files are handled sequentially under a 900 MB hard cache
   cap for multiband imagery or a 100 MB per-object hazard cap, then deleted
-  after compact display rasters are written.
+  after compact display rasters are written. Fixed geostationary-to-map
+  neighbour lookups are cached separately so each scan does not rebuild the
+  same multi-million-point resampling tree.
 - R2 publication is transactional: assets first, `catalog.json` last.
 - The publisher warns at 4 GB and refuses storage growth above 5 GB.
 - The R2 `frames/` lifecycle expires at 9 days as a failure backstop.

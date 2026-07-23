@@ -308,7 +308,16 @@ def render_satpy_domain(
         shape=(domain.height, domain.width),
         units="m",
     )
-    local = scene.resample(area, resampler="nearest")
+    # GOES/AHI scan geometry and our target grids are fixed. Persist nearest-
+    # neighbour lookup information so every new scan does not spend minutes
+    # rebuilding the same multi-million-point k-d tree.
+    resample_cache = work_root / "resample-cache"
+    resample_cache.mkdir(parents=True, exist_ok=True)
+    local = scene.resample(
+        area,
+        resampler="nearest",
+        cache_dir=str(resample_cache),
+    )
     if reader == "ahi_hsd":
         _ahi_visible_image(
             np.asarray(local["B03"].values),

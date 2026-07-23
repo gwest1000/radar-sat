@@ -8,6 +8,9 @@
   <string>__PROJECT_ROOT__</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/usr/bin/nice</string>
+    <string>-n</string>
+    <string>10</string>
     <string>/bin/zsh</string>
     <string>__PROJECT_ROOT__/scripts/ops/run_observation_cycle.zsh</string>
   </array>
