@@ -289,14 +289,14 @@ input:focus-visible {
 }
 
 .active-fire-marker.fire-notable svg {
-  width: clamp(12px, 1.5vw, 19px);
-  height: clamp(12px, 1.5vw, 19px);
+  width: clamp(14px, 1.65vw, 21px);
+  height: clamp(14px, 1.65vw, 21px);
 }
 
 .flame-highlight {
   fill: none;
   stroke: #ffe45b;
-  stroke-width: 3;
+  stroke-width: 2;
 }
 
 .fire-count {
