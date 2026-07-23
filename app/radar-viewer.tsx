@@ -1437,7 +1437,7 @@ export function RadarViewer() {
               <div className="transport-actions">
                 <button className="control-button" type="button" aria-label="Previous frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(-1); }}>‹</button>
                 <button className="control-button primary play-control" type="button" aria-label={isAnimating ? "Pause animation" : "Play animation"} aria-pressed={isAnimating} disabled={anchorFrames.length < 2} onClick={() => setPlaying((value) => !value)}>
-                  <span aria-hidden="true">{isAnimating ? "❚❚" : "▶"}</span>
+                  <span className={isAnimating ? "pause-icon" : "play-icon"} aria-hidden="true" />
                 </button>
                 <button className="control-button" type="button" aria-label="Next frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(1); }}>›</button>
               </div>
@@ -1476,12 +1476,13 @@ export function RadarViewer() {
                       type="button"
                       aria-pressed={item.id === product.id}
                       key={item.id}
-                      onClick={() => {
+                      onClick={(event) => {
                         setPlaying(true);
                         setProductId(item.id);
                         setRangeHours(Math.min(item.defaultHours, item.maxHours ?? 168));
                         setFrameIndex(NEWEST_FRAME);
                         setRegionMenuOpen(false);
+                        event.currentTarget.blur();
                       }}
                     >
                       {item.shortTitle}
@@ -1505,7 +1506,7 @@ export function RadarViewer() {
                 </button>
                 <div className="selector-options range-actions" role="group" aria-label="Archive range">
                   {availableRangeOptions.map((hours) => (
-                    <button className="range-button" type="button" aria-pressed={rangeHours === hours} key={hours} onClick={() => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); setRangeMenuOpen(false); }}>
+                    <button className="range-button" type="button" aria-pressed={rangeHours === hours} key={hours} onClick={(event) => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); setRangeMenuOpen(false); event.currentTarget.blur(); }}>
                       {hours === 168 ? "7 d" : `${hours} h`}
                     </button>
                   ))}

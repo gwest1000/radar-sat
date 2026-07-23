@@ -166,10 +166,10 @@ input:focus-visible {
   flex-wrap: nowrap;
   gap: 5px;
   width: max-content;
-  max-width: 0;
+  max-width: min(1040px, calc(100vw - 470px));
   min-height: 35px;
   overflow: hidden;
-  padding: 0;
+  padding: 4px;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: rgba(9, 15, 19, 0.97);
@@ -177,11 +177,10 @@ input:focus-visible {
   backdrop-filter: blur(8px);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-10px);
+  transform: translateX(-10px) scaleX(0);
+  transform-origin: left center;
   visibility: hidden;
   transition:
-    max-width 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 280ms ease,
     opacity 180ms ease,
     transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
     visibility 0s linear 360ms;
@@ -191,12 +190,10 @@ input:focus-visible {
 .expanding-selector:hover .selector-options,
 .expanding-selector:focus-within .selector-options,
 .expanding-selector.is-open .selector-options {
-  max-width: min(1040px, calc(100vw - 470px));
   overflow-x: auto;
-  padding: 4px;
   opacity: 1;
   pointer-events: auto;
-  transform: translateX(0);
+  transform: translateX(0) scaleX(1);
   visibility: visible;
   transition-delay: 0s;
 }
@@ -208,12 +205,6 @@ input:focus-visible {
 }
 
 .range-selector .selector-options {
-  max-width: 0;
-}
-
-.range-selector:hover .selector-options,
-.range-selector:focus-within .selector-options,
-.range-selector.is-open .selector-options {
   max-width: 310px;
 }
 
@@ -509,9 +500,33 @@ input:focus-visible {
 }
 
 .play-control {
-  font-size: 0.82rem;
-  letter-spacing: -0.16em;
-  text-indent: -0.16em;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.play-icon {
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 10px solid currentColor;
+}
+
+.pause-icon {
+  display: flex;
+  gap: 3px;
+  width: 9px;
+  height: 12px;
+}
+
+.pause-icon::before,
+.pause-icon::after {
+  flex: 1;
+  border-radius: 1px;
+  background: currentColor;
+  content: "";
 }
 
 .frame-count {
@@ -914,12 +929,12 @@ input:focus-visible {
   .selector-options {
     top: calc(100% + 3px);
     left: 0;
+    max-width: calc(100vw - 18px);
   }
 
   .expanding-selector:hover .selector-options,
   .expanding-selector:focus-within .selector-options,
   .expanding-selector.is-open .selector-options {
-    max-width: calc(100vw - 18px);
     flex-wrap: wrap;
   }
 
