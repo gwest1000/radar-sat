@@ -203,9 +203,19 @@ class PublishState:
     def known_sizes(self) -> dict[str, int]:
         """Return sizes of objects confirmed by successful prior uploads."""
         return {
-            str(row["object_key"]): int(row["size_bytes"])
+            key: values[0]
+            for key, values in self.known_objects().items()
+        }
+
+    def known_objects(self) -> dict[str, tuple[int, int]]:
+        """Load successful-upload size/mtime state in one SQLite query."""
+        return {
+            str(row["object_key"]): (
+                int(row["size_bytes"]),
+                int(row["mtime_ns"]),
+            )
             for row in self.connection.execute(
-                "SELECT object_key, size_bytes FROM objects"
+                "SELECT object_key, size_bytes, mtime_ns FROM objects"
             )
         }
 
@@ -509,16 +519,24 @@ def publish(
     client = client or boto3_client(config)
     state = PublishState(state_path, f"{config.account_id}/{config.bucket}")
     try:
+        known_objects = state.known_objects()
         # Rapid satellite/observation commits trust the durable record of
         # successful uploads and avoid a paginated 10k-object bucket listing.
         # The half-hour archive worker still performs a full reconciliation
         # and expiry deletion, repairing any externally removed object.
-        remote = state.known_sizes() if fast else list_remote_objects(client, config.bucket)
+        remote = (
+            {key: values[0] for key, values in known_objects.items()}
+            if fast
+            else list_remote_objects(client, config.bucket)
+        )
         sizes = size_guard(objects, catalog_bytes, remote, config)
         pending = [
             item
             for item in objects
-            if item.key not in remote or not state.unchanged(item)
+            if (
+                item.key not in remote
+                or known_objects.get(item.key) != (item.size, item.mtime_ns)
+            )
         ]
         desired_keys = {item.key for item in objects}
         expired = (
