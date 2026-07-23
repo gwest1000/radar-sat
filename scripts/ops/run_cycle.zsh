@@ -83,7 +83,7 @@ if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
     --output-root "${OUTPUT_ROOT}" \
     --cache-root "${RADARSAT_WESTWX_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/westwx-satellite}" \
     --hours "${RADARSAT_WESTWX_SATELLITE_HOURS:-3}" \
-    --max-frames "${RADARSAT_WESTWX_SATELLITE_MAX_FRAMES:-2}" \
+    --max-frames "${RADARSAT_WESTWX_SATELLITE_MAX_FRAMES:-1}" \
     --max-download-gb "${RADARSAT_WESTWX_SATELLITE_MAX_DOWNLOAD_GB:-0.8}" \
     --max-source-mb "${RADARSAT_WESTWX_SATELLITE_MAX_SOURCE_MB:-400}" \
     --apply; then

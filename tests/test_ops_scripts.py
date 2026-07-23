@@ -97,7 +97,7 @@ class OpsScriptTests(unittest.TestCase):
             calls = log.read_text().splitlines()
             self.assertEqual(len(calls), 6)
             self.assertIn("scripts/backfill_westwx_satellite.py", calls[0])
-            self.assertIn("--max-frames 2", calls[0])
+            self.assertIn("--max-frames 1", calls[0])
             self.assertIn("--max-download-gb 0.8", calls[0])
             self.assertIn("--max-source-mb 400", calls[0])
             self.assertTrue(calls[0].endswith("--apply"))
