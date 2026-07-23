@@ -75,7 +75,13 @@ export RADARSAT_GOES_HAZARDS_ENABLED=0
 # rapid path claim the shared Satpy slot first, then wait for a quiet interval.
 sleep "${RADARSAT_ARCHIVE_START_DELAY_SECONDS:-30}"
 archive_wait_seconds=0
-until try_acquire_heavy_satellite_lock; do
+rapid_cycle_active() {
+  local rapid_owner_file="${STATE_ROOT}/run/satellite-cycle.lock/pid"
+  local rapid_owner_pid=""
+  [[ -r "${rapid_owner_file}" ]] && IFS= read -r rapid_owner_pid < "${rapid_owner_file}"
+  [[ "${rapid_owner_pid}" =~ '^[0-9]+$' ]] && kill -0 "${rapid_owner_pid}" 2>/dev/null
+}
+until ! rapid_cycle_active && try_acquire_heavy_satellite_lock; do
   if (( archive_wait_seconds >= 150 )); then
     print "Rapid satellite work stayed busy; deferring this archive cycle."
     exit 0

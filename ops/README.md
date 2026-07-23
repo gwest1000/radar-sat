@@ -1,13 +1,14 @@
 # Radar-Sat operations
 
-The scheduled cycle runs every three minutes. It ingests native/GeoMet frames,
-atomically rebuilds `catalog.json`, prunes raw spool files beyond the local
-recovery window, publishes all referenced assets to R2, then publishes
-`catalog.json` last. Raw pruning runs only after rendering; any rejected source
-files are explicitly preserved for retry and surfaced by health checks. Expired
-remote objects are deleted only after the catalog commit and only when their
-timestamps independently violate the local retention policy. A 9-day R2
-lifecycle rule is the final backstop.
+Independent three-minute full-disk and five-minute-BC satellite workers, a
+five-minute observation worker, and a half-hour Pacific archive worker each use
+PID locks. Each completed run atomically rebuilds `catalog.json`, publishes its
+referenced assets through the shared R2 lock, then commits `catalog.json` last.
+Raw pruning runs only after observation rendering; any rejected source files
+are explicitly preserved for retry and surfaced by health checks. Expired remote
+objects are deleted only after the catalog commit and only when their timestamps
+independently violate the local retention policy. A 9-day R2 lifecycle rule is
+the final backstop.
 
 ## Credentials
 
@@ -94,16 +95,16 @@ does not prevent normal Forecast Graphics publication. The environment knobs
 them without reviewing a dry-run plan.
 
 When the ten-minute path is enabled, the southern-BC PACUS path defaults on as
-well. It processes at most two roughly 53 MB files per cycle, deletes each raw
-file after rendering, and retains only the compact `raw-visir-5min` finals for
-24 hours. The observed final is about 0.61 MB, or roughly 0.18 GB for all 288
-five-minute frames. PACUS ends near 53.5°N; the renderer uses the newest
+well. Its separate worker processes one roughly 53 MB file per run, deletes the
+raw file after rendering, and retains only the compact `raw-visir-5min` finals
+for 24 hours. The observed final is about 0.61 MB, or roughly 0.18 GB for all
+288 five-minute frames. PACUS ends near 53.5°N; the renderer uses the newest
 ten-minute full-disk frame farther north and feathers inward from the curved
 scan edge so the footprint is not drawn across the map. It can be controlled
 independently with:
 
 ```text
 RADARSAT_FIVE_MINUTE_BC_SATELLITE_ENABLED=1
-RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_FRAMES=2
+RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_FRAMES=1
 RADARSAT_FIVE_MINUTE_BC_SATELLITE_MAX_DOWNLOAD_GB=0.15
 ```

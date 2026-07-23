@@ -391,6 +391,8 @@ def execute_backfill(
     root: Path,
     plan: PlannedBackfill,
     processor: Callable[[FiveMinuteScan], ScanResult],
+    *,
+    rebuild_catalog: bool = True,
 ) -> BackfillResult:
     result = BackfillResult(plan)
     for scan in plan.scans:
@@ -406,6 +408,6 @@ def execute_backfill(
                     error=f"{type(error).__name__}: {error}",
                 )
             )
-    if result.scans:
+    if rebuild_catalog and result.scans:
         write_catalog(root)
     return result

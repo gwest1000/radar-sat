@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -247,6 +248,7 @@ class WestWxRenderTests(unittest.TestCase):
             value = dt.datetime(2026, 7, 21, 20, 20, 21, tzinfo=UTC)
             source = scan(value, 32)
             client = DownloadClient()
+            domain_render_barrier = threading.Barrier(2)
 
             def fake_render(
                 source_paths: object,
@@ -257,6 +259,7 @@ class WestWxRenderTests(unittest.TestCase):
                 stem: str,
             ) -> RenderedSatellite:
                 self.assertTrue(list(source_paths)[0].is_file())  # type: ignore[arg-type]
+                domain_render_barrier.wait(timeout=1)
                 render_root = work_root / "renders"
                 render_root.mkdir(parents=True, exist_ok=True)
                 visible = render_root / f"{stem}-visible.webp"

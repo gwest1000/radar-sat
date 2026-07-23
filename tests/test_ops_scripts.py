@@ -174,6 +174,9 @@ class OpsScriptTests(unittest.TestCase):
 
     def test_split_workers_keep_rapid_satellite_isolated_from_slow_renderers(self) -> None:
         satellite = (PROJECT / "scripts" / "ops" / "run_satellite_cycle.zsh").read_text()
+        five_minute = (
+            PROJECT / "scripts" / "ops" / "run_five_minute_satellite_cycle.zsh"
+        ).read_text()
         observations = (PROJECT / "scripts" / "ops" / "run_observation_cycle.zsh").read_text()
         archive = (PROJECT / "scripts" / "ops" / "run_archive_cycle.zsh").read_text()
         heavy_lock = (PROJECT / "scripts" / "ops" / "heavy_satellite_lock.zsh").read_text()
@@ -183,12 +186,17 @@ class OpsScriptTests(unittest.TestCase):
         install = (PROJECT / "scripts" / "ops" / "install_launchd.zsh").read_text()
 
         self.assertIn("backfill_westwx_satellite.py", satellite)
-        self.assertIn("backfill_five_minute_bc_satellite.py", satellite)
+        self.assertNotIn("backfill_five_minute_bc_satellite.py", satellite)
         self.assertNotIn("backfill_native_bc_satellite.py", satellite)
         self.assertNotIn("scripts/run_ingest.py", satellite)
         self.assertIn("publish_locked.zsh", satellite)
         self.assertIn("publish_locked.zsh\" --fast", satellite)
         self.assertIn("try_acquire_heavy_satellite_lock", satellite)
+
+        self.assertIn("backfill_five_minute_bc_satellite.py", five_minute)
+        self.assertIn("publish_locked.zsh\" --fast", five_minute)
+        self.assertIn("five-minute-satellite-cycle.lock", five_minute)
+        self.assertNotIn("try_acquire_heavy_satellite_lock", five_minute)
 
         self.assertIn("RADARSAT_RAW_SAT_ENABLED=0", observations)
         self.assertIn("--spool-mode only", observations)
@@ -202,7 +210,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("RADARSAT_ARCHIVE_START_DELAY_SECONDS", archive)
         self.assertIn("try_acquire_heavy_satellite_lock", archive)
         self.assertIn("heavy-satellite.lock", heavy_lock)
-        self.assertIn("for name in ingest observations archive health", install)
+        self.assertIn("for name in ingest five-minute observations archive health", install)
 
     def test_setup_installs_renderer_and_feed_requirements(self) -> None:
         setup = (PROJECT / "scripts" / "ops" / "setup_local.zsh").read_text()

@@ -38,11 +38,13 @@ matching Google public-data mirror when available. NOAA/AWS remains an automatic
 fallback if that mirror fails. This keeps discovery independent while avoiding
 the materially slower AWS route observed from the production host.
 
-The scheduled production cycle permits at most two scans and 0.8 GB of source
-downloads. That lets it recover the occasional scan left behind by a long
-radar/Pacific cycle without starting an unbounded catch-up. Source files are
-still processed one at a time and deleted after the compact display rasters
-are installed.
+The scheduled full-disk worker permits one scan and 0.8 GB of source downloads.
+North America and BC render concurrently from that single scan, using persistent
+nearest-neighbour lookup caches. The smaller five-minute PACUS path has its own
+bounded worker so its roughly 3.5-minute processing time is not added to the
+roughly 6.5-minute full-disk scan. Both use PID locks, one catalog rebuild per
+run, serialized manifest-last R2 commits, and delete source scans after the
+compact display rasters are installed.
 
 ## Five-minute and higher-resolution limits
 

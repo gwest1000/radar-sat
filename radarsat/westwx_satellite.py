@@ -12,6 +12,7 @@ import datetime as dt
 import json
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
@@ -332,7 +333,7 @@ def render_westwx_scan(
         source_path = client.download(scan, cache_root, max_source_bytes)
         download_seconds = time.perf_counter() - download_started
         render_started = time.perf_counter()
-        for selected_domain in pending_domains:
+        def render_domain(selected_domain: Domain) -> None:
             stem = f"westwx-g18-{selected_domain.id}-{scan.valid_time:%Y%m%dT%H%M%S}"
             rendered = render_source(
                 [source_path],
@@ -396,6 +397,12 @@ def render_westwx_scan(
                 source_layer=f"{WESTWX_SOURCE_LAYER} C13",
                 extra=common_extra,
             )
+        # North America and BC use the same downloaded full-disk scan but
+        # independent output grids and render subprocesses. Running them
+        # concurrently keeps one ten-minute source scan from consuming the
+        # sum of both resampling times.
+        with ThreadPoolExecutor(max_workers=len(pending_domains)) as executor:
+            list(executor.map(render_domain, pending_domains))
         render_seconds = time.perf_counter() - render_started
         return ScanResult(
             scan.valid_time,

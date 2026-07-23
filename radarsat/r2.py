@@ -12,6 +12,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -517,11 +518,16 @@ def publish(
             write_status(status_path, result)
             return result
 
+        def upload(item: LocalObject) -> tuple[LocalObject, str]:
+            return item, upload_object(client, config, item)
+
         uploaded = 0
-        for item in pending:
-            sha256 = upload_object(client, config, item)
-            state.record(item, sha256)
-            uploaded += 1
+        with ThreadPoolExecutor(max_workers=min(4, max(1, len(pending)))) as executor:
+            for item, sha256 in executor.map(upload, pending):
+                # Keep SQLite writes on the publishing thread. Only the
+                # independent network transfers run concurrently.
+                state.record(item, sha256)
+                uploaded += 1
 
         # This is the commit point: browsers cannot observe references to an
         # object until every referenced asset has uploaded successfully.

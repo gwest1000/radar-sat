@@ -59,6 +59,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument(
+        "--defer-catalog",
+        action="store_true",
+        help="Defer catalog.json construction so a coordinating cycle can rebuild it once.",
+    )
+    parser.add_argument(
         "--benchmark",
         action="store_true",
         help="Require a one-frame plan and report download/render timing.",
@@ -172,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_source_bytes=maximum_source,
                 overwrite=args.overwrite,
             ),
+            rebuild_catalog=not args.defer_catalog,
         )
 
     payload = {**plan_payload, **result.as_dict()}

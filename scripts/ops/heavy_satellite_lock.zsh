@@ -1,9 +1,9 @@
 #!/bin/zsh
 
 # Sourced by the rapid and archive satellite workers after STATE_ROOT is set.
-# Satpy can use roughly 2 GB per full-disk render, so two simultaneous renders
-# are substantially slower than running them sequentially and can make the
-# workstation unresponsive.
+# A full-disk scan can use several GB while it is decoded. This lock prevents
+# independent rapid and archival scans from competing; the rapid worker itself
+# may still run its bounded North America/BC domain pair concurrently.
 
 HEAVY_SATELLITE_LOCK_DIR="${STATE_ROOT}/run/heavy-satellite.lock"
 HEAVY_SATELLITE_LOCK_OWNER="${HEAVY_SATELLITE_LOCK_DIR}/pid"

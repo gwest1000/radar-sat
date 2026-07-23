@@ -41,8 +41,10 @@ CWFIS satellite thermal detections; they are not fire perimeters or confirmation
 of an active wildfire.
 
 The browser refreshes its catalog every minute and performs a visibility-aware
-page reload every five minutes. The reload preserves the selected product,
-layers, range and playback speed, then resumes at the newest frame.
+page reload every five minutes. A visible window keeps looping when another
+window or application has focus; only a genuinely hidden tab pauses playback.
+The reload preserves the selected product, layers, range and playback speed,
+then resumes at the newest frame.
 
 ## Architecture
 
@@ -84,12 +86,14 @@ GitHub Pages static viewer ◀────────────────�
   softens the GOES-18/19 colour seam.
 - Geostationary scan-edge pixels missing from both visible and infrared are
   transparent; the renderer does not synthesize weather into those gaps.
-- Raw NOAA source files are handled sequentially under a 900 MB hard cache
+- Raw NOAA source scans are handled one at a time under a 900 MB hard cache
   cap for multiband imagery or a 100 MB per-object hazard cap, then deleted
-  after compact display rasters are written. Fixed geostationary-to-map
-  neighbour lookups are cached separately so each scan does not rebuild the
-  same multi-million-point resampling tree.
-- R2 publication is transactional: assets first, `catalog.json` last.
+  after compact display rasters are written. The rapid North America and BC
+  target grids render concurrently from that one download. Fixed
+  geostationary-to-map neighbour lookups are cached separately so each scan
+  does not rebuild the same multi-million-point resampling tree.
+- R2 publication is transactional: up to four assets upload concurrently,
+  then `catalog.json` is committed last.
 - The publisher warns at 4 GB and refuses storage growth above 5 GB.
 - The R2 `frames/` lifecycle expires at 9 days as a failure backstop.
 - Allow roughly 8–10 GB free on the ingest host for processed output plus the

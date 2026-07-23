@@ -35,6 +35,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_MAX_SOURCE_BYTES / 1_000_000,
     )
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--defer-catalog",
+        action="store_true",
+        help="Defer catalog.json construction so a coordinating cycle can rebuild it once.",
+    )
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
     if args.hours <= 0 or args.max_frames <= 0 or args.max_download_gb <= 0 or args.max_source_mb <= 0:
@@ -89,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
                     max_source_bytes=int(args.max_source_mb * 1_000_000),
                     overwrite=args.overwrite,
                 ),
+                rebuild_catalog=not args.defer_catalog,
             )
             payload.update(result.as_dict())
     if args.apply:
