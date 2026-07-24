@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -250,6 +251,37 @@ class NativeRenderTests(unittest.TestCase):
             with Image.open(broad_destination) as broad_image:
                 self.assertEqual(broad_image.size, (480, 400))
 
+            notable_row = [[0.55, 0.55, None, 250.0, 1, 1]]
+            bc_notable_destination = root / "fire-overlay-bc-notable.png"
+            render_fire_overlay(
+                [],
+                notable_row,
+                domain,
+                bc_notable_destination,
+                output_width=480,
+                symbol_reference_width=360,
+                blur_glow=False,
+            )
+            overview_domain = replace(domain, id="north-america")
+            overview_destination = root / "fire-overlay-overview.png"
+            render_fire_overlay(
+                [],
+                notable_row,
+                overview_domain,
+                overview_destination,
+                output_width=480,
+                symbol_reference_width=360,
+                blur_glow=False,
+            )
+            broad_bbox = Image.open(bc_notable_destination).convert("RGBA").getbbox()
+            overview_bbox = Image.open(overview_destination).convert("RGBA").getbbox()
+            self.assertIsNotNone(broad_bbox)
+            self.assertIsNotNone(overview_bbox)
+            assert broad_bbox is not None and overview_bbox is not None
+            broad_height = broad_bbox[3] - broad_bbox[1]
+            overview_height = overview_bbox[3] - overview_bbox[1]
+            self.assertLessEqual(overview_height, round(broad_height * 0.60))
+
     @mock.patch("radarsat.pipeline.fetch_hotspots")
     def test_hotspot_snapshot_uses_ten_minute_archive_clock(self, fetch: mock.Mock) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -345,8 +377,8 @@ class NativeRenderTests(unittest.TestCase):
             rendered = np.asarray(Image.open(destination).convert("RGBA"))
             alpha = rendered[:, :, 3]
             y, x = np.where(alpha > 0)
-            self.assertGreater(len(x), 230)
-            self.assertLess(len(x), 800)
+            self.assertGreater(len(x), 150)
+            self.assertLess(len(x), 500)
             # The asymmetric lightning silhouette is taller than it is wide.
             self.assertGreater(y.max() - y.min(), x.max() - x.min())
             white_core = (
@@ -356,7 +388,6 @@ class NativeRenderTests(unittest.TestCase):
                 & (alpha > 0)
             )
             self.assertTrue(np.any(white_core))
-            self.assertTrue(np.any((alpha > 0) & (alpha < 120)))
 
             hires_destination = root / "trail-hires.png"
             lightning_trail([source, None, None], hires_destination, scale=2)
@@ -383,10 +414,18 @@ class NativeRenderTests(unittest.TestCase):
             flash_alpha = np.asarray(
                 Image.open(flash_destination).convert("RGBA")
             )[:, :, 3]
-            self.assertGreater(
-                np.count_nonzero(flash_alpha > 8),
-                np.count_nonzero(alpha > 8),
+            halo_pixels = np.count_nonzero(flash_alpha > 8)
+            self.assertGreater(halo_pixels, 60)
+            self.assertLess(
+                halo_pixels,
+                round(np.count_nonzero(alpha > 8) * 1.25),
             )
+            self.assertTrue(np.any((flash_alpha > 0) & (flash_alpha < 120)))
+            self.assertEqual(np.count_nonzero(flash_alpha >= 120), 0)
+            flash_rendered = np.asarray(
+                Image.open(flash_destination).convert("RGBA")
+            )
+            self.assertTrue(np.all(flash_rendered[flash_alpha > 0, :3] >= 230))
 
             regional_destination = root / "trail-region-small.png"
             lightning_trail(
@@ -491,6 +530,16 @@ class NativeRenderTests(unittest.TestCase):
                 & (rendered[:, :, 2] > 235)
                 & (rendered[:, :, 3] > 0)
             ))
+
+            high_resolution = root / "transmission-lines-2x.png"
+            render_transmission_overlay(
+                domain,
+                high_resolution,
+                source,
+                output_width=240,
+            )
+            with Image.open(high_resolution) as high_resolution_image:
+                self.assertEqual(high_resolution_image.size, (240, 200))
 
     def test_lightning_density_palette_is_transparent_at_zero_and_red_at_legend_ceiling(self) -> None:
         rgba = _lightning_rgba(np.asarray([[np.nan, 0.0, 0.2, 1.0, 2.0, 5.0]], dtype=np.float32))

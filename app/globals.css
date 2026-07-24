@@ -294,19 +294,7 @@ input:focus-visible {
 
 .lightning-arrival-layer {
   z-index: 13;
-  opacity: 0;
   mix-blend-mode: screen;
-  will-change: opacity;
-  animation: lightning-raster-arrival 130ms steps(1, end) both;
-}
-
-@keyframes lightning-raster-arrival {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
 }
 
 .point-symbol-layer {

@@ -779,9 +779,15 @@ function atOrBeforeSourceTime(
   let selectedSourceTime = -Infinity;
   let selectedSourceCount = -1;
   for (const frame of frames) {
+    const frameTime = Date.parse(frame.validTime);
     const sourceTime = Date.parse(actualSourceTime(layerId, frame));
     const sourceCount = Object.keys(frame.sourceTimes ?? {}).length;
-    if (!Number.isFinite(sourceTime) || sourceTime > targetTime) continue;
+    if (
+      !Number.isFinite(frameTime)
+      || frameTime > targetTime
+      || !Number.isFinite(sourceTime)
+      || sourceTime > targetTime
+    ) continue;
     if (
       sourceTime > selectedSourceTime
       || (sourceTime === selectedSourceTime && sourceCount > selectedSourceCount)
@@ -846,6 +852,22 @@ function archiveSpan(frames: Frame[]): string {
     ? `${(spanHours / 24).toFixed(1)} d available`
     : `${spanHours.toFixed(1)} h available`;
   return `${span} · ${utcClock(first.validTime)}–${utcClock(last.validTime)} UTC`;
+}
+
+function playbackCadenceFactor(frames: Frame[]): number {
+  const recent = frames.slice(-24);
+  const intervals = recent.slice(1).flatMap((frame, index) => {
+    const minutes = (
+      Date.parse(frame.validTime) - Date.parse(recent[index].validTime)
+    ) / 60_000;
+    return Number.isFinite(minutes) && minutes > 0 && minutes <= 30 ? [minutes] : [];
+  }).sort((left, right) => left - right);
+  if (!intervals.length) return 1;
+  const middle = Math.floor(intervals.length / 2);
+  const median = intervals.length % 2
+    ? intervals[middle]
+    : (intervals[middle - 1] + intervals[middle]) / 2;
+  return Math.max(1, Math.min(2, median / 5));
 }
 
 function ageLabel(minutes: number): string {
@@ -1475,6 +1497,10 @@ export function RadarViewer() {
   );
 
   const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
+  const cadenceFactor = useMemo(
+    () => playbackCadenceFactor(anchorFrames),
+    [anchorFrames],
+  );
 
   const currentFrameIndex = Math.min(frameIndex, Math.max(0, anchorFrames.length - 1));
   const isAnimating = playing && pageVisible && anchorFrames.length > 1;
@@ -1727,9 +1753,13 @@ export function RadarViewer() {
     void Promise.all(loads).then(() => {
       if (cancelled) return;
       const finalFrame = currentFrameIndex === anchorFrames.length - 1;
-      // Four to five frames per second is smooth for meteorological loops
-      // without monopolizing the main thread or GPU decode queue.
-      const delay = finalFrame ? 325 / speed : 110 / speed;
+      // A ten-minute frame is held twice as long as a five-minute frame, so an
+      // hour of weather takes the same playback time at a given speed. The
+      // loop-end pause stays fixed instead of being doubled with the cadence.
+      const delay = (
+        110 * cadenceFactor
+        + (finalFrame ? 215 : 0)
+      ) / speed;
       timer = window.setTimeout(() => advance(1), delay);
     });
 
@@ -1742,6 +1772,7 @@ export function RadarViewer() {
     anchorFrames,
     catalog,
     catalogBase,
+    cadenceFactor,
     currentFrameIndex,
     domain,
     isAnimating,

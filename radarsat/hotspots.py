@@ -412,7 +412,7 @@ def render_fire_overlay(
     ]
 
     for marker in markers:
-        desired_size = 21 if marker.notable else 13
+        desired_size = 11 if overview and marker.notable else 21 if marker.notable else 13
         size = max(8, round(desired_size * symbol_scale))
         centre_x = marker.x * (canvas_size[0] - 1)
         centre_y = marker.y * (canvas_size[1] - 1)
@@ -437,7 +437,7 @@ def render_fire_overlay(
         else glow
     )
     for marker in markers:
-        desired_size = 21 if marker.notable else 13
+        desired_size = 11 if overview and marker.notable else 21 if marker.notable else 13
         size = max(8, round(desired_size * symbol_scale))
         centre_x = marker.x * (canvas_size[0] - 1)
         centre_y = marker.y * (canvas_size[1] - 1)
@@ -450,7 +450,7 @@ def render_fire_overlay(
             symbol_draw.line(
                 closed,
                 fill=(255, 228, 91, 255),
-                width=max(4, round(size * 0.20)),
+                width=max(2 if overview else 4, round(size * 0.20)),
                 joint="curve",
             )
         if marker.kind == "active":
@@ -477,7 +477,7 @@ def render_fire_overlay(
                 joint="curve",
             )
         if marker.count > 1:
-            font_size = max(8, round(size * 0.43))
+            font_size = max(6 if overview else 8, round(size * 0.43))
             try:
                 font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
             except OSError:

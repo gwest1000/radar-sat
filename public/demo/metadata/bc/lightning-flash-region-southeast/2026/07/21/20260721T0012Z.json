@@ -3,11 +3,11 @@
   "path": "frames/bc/lightning-flash-region-southeast/2026/07/21/20260721T0012Z.png",
   "source": "ECCC GeoMet",
   "sourceLayer": "derived",
-  "fetchedAt": "2026-07-24T15:40:22Z",
+  "fetchedAt": "2026-07-24T17:12:23Z",
   "sourceTimes": {
     "age0": "2026-07-21T00:10:00Z"
   },
-  "renderVersion": 3,
+  "renderVersion": 7,
   "arrivalOnly": true,
   "regionalViewport": {
     "left": 0.5518,

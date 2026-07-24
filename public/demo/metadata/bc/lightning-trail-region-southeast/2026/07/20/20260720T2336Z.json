@@ -3,13 +3,13 @@
   "path": "frames/bc/lightning-trail-region-southeast/2026/07/20/20260720T2336Z.png",
   "source": "ECCC GeoMet",
   "sourceLayer": "derived",
-  "fetchedAt": "2026-07-24T15:40:17Z",
+  "fetchedAt": "2026-07-24T17:00:51Z",
   "sourceTimes": {
     "age0": "2026-07-20T23:30:00Z",
     "age10": "2026-07-20T23:20:00Z",
     "age20": "2026-07-20T23:10:00Z"
   },
-  "renderVersion": 2,
+  "renderVersion": 3,
   "arrivalOnly": false,
   "regionalViewport": {
     "left": 0.5518,

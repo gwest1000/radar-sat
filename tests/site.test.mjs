@@ -27,7 +27,8 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.25, 0\.5, 0\.75, 1, 1\.5, 2, 3, 4\]/);
   assert.match(viewer, /useState\(3\)/);
   assert.match(viewer, /\? stored\.speedIndex\s*: 3/);
-  assert.match(viewer, /finalFrame \? 325 \/ speed : 110 \/ speed/);
+  assert.match(viewer, /110 \* cadenceFactor/);
+  assert.match(viewer, /\+ \(finalFrame \? 215 : 0\)/);
   assert.match(viewer, /pageVisible && anchorFrames\.length > 1/);
   assert.match(viewer, /setPageVisible\(document\.visibilityState === "visible"\)/);
   assert.doesNotMatch(viewer, /document\.hasFocus\(\)/);
@@ -96,9 +97,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(styles, /\.fire-count/);
   assert.match(styles, /\.hotspot-fire-marker svg/);
   assert.match(styles, /\.eccc-north-fallback/);
-  assert.match(styles, /@keyframes lightning-raster-arrival/);
   assert.match(styles, /\.lightning-arrival-layer/);
-  assert.match(styles, /animation: lightning-raster-arrival 130ms steps\(1, end\) both/);
+  assert.doesNotMatch(styles, /lightning-raster-arrival/);
   assert.match(styles, /\.transmission-symbol[\s\S]*?border-top: 2px solid #fff/);
   assert.match(styles, /\.lightning-marker\.age-3 \{ color: #f6d451/);
 });

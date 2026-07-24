@@ -53,22 +53,23 @@ from .point_frames import (
 
 
 UTC = dt.timezone.utc
-LIGHTNING_TRAIL_RENDER_VERSION = 5
-LIGHTNING_FLASH_RENDER_VERSION = 2
-LIGHTNING_REGIONAL_RENDER_VERSION = 2
-LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 3
+LIGHTNING_TRAIL_RENDER_VERSION = 6
+LIGHTNING_FLASH_RENDER_VERSION = 6
+LIGHTNING_REGIONAL_RENDER_VERSION = 3
+LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 7
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
 ACTIVE_FIRE_POINT_RENDER_VERSION = 3
 FIRE_OVERLAY_RENDER_VERSION = 2
+FIRE_BROAD_OVERLAY_RENDER_VERSION = 3
 FIRE_REGIONAL_RENDER_VERSION = 3
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
 GLM_LIGHTNING_RENDER_VERSION = 2
-GLM_LIGHTNING_TRAIL_RENDER_VERSION = 6
-GLM_LIGHTNING_FLASH_RENDER_VERSION = 3
+GLM_LIGHTNING_TRAIL_RENDER_VERSION = 7
+GLM_LIGHTNING_FLASH_RENDER_VERSION = 7
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 2
 REGIONAL_HAZARD_WIDTH = 1920
@@ -76,6 +77,8 @@ DETAILED_REGIONAL_HAZARD_WIDTH = 3840
 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH = 1440
 BROAD_HAZARD_SCALE = 2
 BROAD_FIRE_SYMBOL_REFERENCE_WIDTH = 1920
+STATIC_BOUNDARY_RENDER_VERSION = 2
+STATIC_TRANSMISSION_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
     "ir",
@@ -450,16 +453,41 @@ def ingest_active_fire_snapshot(
 
 
 def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> None:
+    version_path = root / "static" / domain.id / ".render-versions.json"
+    try:
+        static_versions = json.loads(version_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        static_versions = {}
     base = root / "static" / domain.id / "base-dark.png"
     boundaries = root / "static" / domain.id / "boundaries.png"
-    if not base.exists() or not boundaries.exists():
+    if (
+        not base.exists()
+        or not boundaries.exists()
+        or static_versions.get("boundaries") != STATIC_BOUNDARY_RENDER_VERSION
+    ):
         render_static_maps(domain, base, boundaries)
+        static_versions["boundaries"] = STATIC_BOUNDARY_RENDER_VERSION
     watersheds = root / "static" / domain.id / "bch-watersheds.png"
     if domain.id == "bc" and not watersheds.exists():
         render_watershed_overlay(domain, watersheds)
     transmission_lines = root / "static" / domain.id / "transmission-lines.png"
-    if not transmission_lines.exists():
-        render_transmission_overlay(domain, transmission_lines)
+    if (
+        not transmission_lines.exists()
+        or static_versions.get("transmissionLines") != STATIC_TRANSMISSION_RENDER_VERSION
+    ):
+        render_transmission_overlay(
+            domain,
+            transmission_lines,
+            output_width=domain.width * 2,
+        )
+        static_versions["transmissionLines"] = STATIC_TRANSMISSION_RENDER_VERSION
+    version_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_versions = version_path.with_suffix(".tmp")
+    try:
+        temporary_versions.write_text(json.dumps(static_versions, indent=2) + "\n")
+        temporary_versions.replace(version_path)
+    finally:
+        temporary_versions.unlink(missing_ok=True)
 
     legend_specs = {
         "legend-radar-rain.png": LAYERS["radar-rain"],
@@ -848,6 +876,11 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
                 metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
             continue
+        fresh_arrival = (
+            existing[0] is not None
+            and source_times[0] is not None
+            and dt.timedelta(0) <= anchor - source_times[0] < dt.timedelta(minutes=5)
+        )
         write_derived(
             output_layer,
             anchor,
@@ -855,7 +888,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             source_times,
             render_version=LIGHTNING_TRAIL_RENDER_VERSION,
         )
-        if existing[0] is not None:
+        if fresh_arrival:
             flash_sources = [source_times[0], None, None]
             flash_paths = [existing[0], None, None]
             write_derived(
@@ -896,7 +929,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 blur_glow=not detailed_region,
             )
             regional_flash_layer = regional_flash_layers[region_id]
-            if existing[0] is not None:
+            if fresh_arrival:
                 write_derived(
                     regional_flash_layer,
                     anchor,
@@ -1034,8 +1067,13 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
         source_times = {"hotspots": anchor}
         if selected_active_time is not None:
             source_times["active fires"] = selected_active_time
+        standard_fire_version = (
+            FIRE_BROAD_OVERLAY_RENDER_VERSION
+            if domain.tier == "broad"
+            else FIRE_OVERLAY_RENDER_VERSION
+        )
         outputs: list[tuple[Layer, dict[str, float] | None, int, str | None]] = [
-            (output_layer, None, FIRE_OVERLAY_RENDER_VERSION, None)
+            (output_layer, None, standard_fire_version, None)
         ]
         if domain.id == "bc":
             outputs.extend(

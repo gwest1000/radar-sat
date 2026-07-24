@@ -234,8 +234,11 @@ def lightning_trail(
             continue
         bolt_layer = Image.new("RGBA", size, (0, 0, 0, 0))
         bolt_draw = ImageDraw.Draw(bolt_layer, "RGBA")
-        arrival_glow = Image.new("RGBA", size, (0, 0, 0, 0)) if age_index == 0 else None
-        arrival_draw = ImageDraw.Draw(arrival_glow, "RGBA") if arrival_glow is not None else None
+        arrival_glow = (
+            Image.new("RGBA", size, (0, 0, 0, 0))
+            if arrival_only and age_index == 0
+            else None
+        )
         for source_x, source_y, area in component_centres(mask):
             point = output_point(source_x, source_y)
             if point is None:
@@ -254,28 +257,56 @@ def lightning_trail(
                 (x + round(width * 0.18), y - round(height * 0.18)),
             ]
             closed_bolt = bolt + [bolt[0]]
-            if arrival_only and arrival_draw is not None:
-                radius = max(10, round(15 * symbol_scale))
-                arrival_draw.ellipse(
-                    (x - radius, y - radius, x + radius, y + radius),
-                    fill=(255, 253, 224, 185),
+            if arrival_only and arrival_glow is not None:
+                # Blur only a small patch around each new strike. This keeps
+                # the raster cheap to generate while producing a genuinely
+                # diffuse halo rather than visible concentric rings or a
+                # translucent white disk.
+                radius = max(6, round(8 * symbol_scale))
+                padding = radius * 3
+                patch_size = padding * 2 + 1
+                patch_alpha = Image.new("L", (patch_size, patch_size), 0)
+                patch_draw = ImageDraw.Draw(patch_alpha)
+                centre = padding
+                core = max(1, round(1.6 * symbol_scale))
+                patch_draw.ellipse(
+                    (
+                        centre - core,
+                        centre - core,
+                        centre + core,
+                        centre + core,
+                    ),
+                    fill=180,
                 )
-                arrival_draw.line(
-                    closed_bolt,
-                    fill=(255, 255, 255, 255),
-                    width=max(4, round(4 * symbol_scale)),
-                    joint="curve",
+                patch_alpha = patch_alpha.filter(
+                    ImageFilter.GaussianBlur(radius=max(2.2, radius * 0.52))
                 )
-                arrival_draw.polygon(bolt, fill=(255, 255, 255, 255))
+                patch = Image.new(
+                    "RGBA",
+                    (patch_size, patch_size),
+                    (255, 254, 235, 0),
+                )
+                patch.putalpha(patch_alpha)
+                destination_left = x - padding
+                destination_top = y - padding
+                destination_right = destination_left + patch_size
+                destination_bottom = destination_top + patch_size
+                clipped_left = max(0, destination_left)
+                clipped_top = max(0, destination_top)
+                clipped_right = min(size[0], destination_right)
+                clipped_bottom = min(size[1], destination_bottom)
+                if clipped_left < clipped_right and clipped_top < clipped_bottom:
+                    source_box = (
+                        clipped_left - destination_left,
+                        clipped_top - destination_top,
+                        clipped_right - destination_left,
+                        clipped_bottom - destination_top,
+                    )
+                    arrival_glow.alpha_composite(
+                        patch.crop(source_box),
+                        (clipped_left, clipped_top),
+                    )
                 continue
-            if arrival_draw is not None:
-                arrival_draw.line(
-                    closed_bolt,
-                    fill=(255, 252, 214, 170),
-                    width=max(3, round(7 * symbol_scale)),
-                    joint="curve",
-                )
-                arrival_draw.polygon(bolt, fill=(255, 255, 244, 190))
             bolt_draw.line(
                 closed_bolt,
                 fill=(2, 7, 11, min(225, fill[3])),
@@ -290,30 +321,23 @@ def lightning_trail(
             )
             bolt_draw.polygon(bolt, fill=fill)
         if arrival_glow is not None:
-            if blur_glow:
-                blur_radius = (10 if arrival_only else 5) * symbol_scale
-                canvas.alpha_composite(
-                    arrival_glow.filter(ImageFilter.GaussianBlur(radius=blur_radius))
-                )
-                if arrival_only:
-                    canvas.alpha_composite(
-                        arrival_glow.filter(ImageFilter.GaussianBlur(radius=2 * symbol_scale))
-                    )
-            else:
-                # A high-resolution regional raster is downsampled by the
-                # browser, which provides the soft edge without filtering the
-                # entire 3840 px transparent canvas for every archive frame.
-                canvas.alpha_composite(arrival_glow)
+            canvas.alpha_composite(arrival_glow)
         canvas.alpha_composite(bolt_layer)
-    canvas.quantize(
-        colors=64 if arrival_only else 32,
-        method=Image.Quantize.FASTOCTREE,
-        dither=Image.Dither.NONE,
-    ).save(
-        destination,
-        "PNG",
-        optimize=True,
-    )
+    if arrival_only:
+        # Preserve straight-alpha white RGB values. FASTOCTREE premultiplies
+        # these very translucent pixels and turns the halo into a dark disk
+        # when the browser composites it over satellite imagery.
+        canvas.save(destination, "PNG", optimize=True)
+    else:
+        canvas.quantize(
+            colors=32,
+            method=Image.Quantize.FASTOCTREE,
+            dither=Image.Dither.NONE,
+        ).save(
+            destination,
+            "PNG",
+            optimize=True,
+        )
 
 
 def render_watershed_overlay(
@@ -396,6 +420,8 @@ def render_transmission_overlay(
     domain: Domain,
     destination: Path,
     source_path: Path | None = None,
+    *,
+    output_width: int | None = None,
 ) -> None:
     """Render the GeoBC transmission network onto the aligned map grid."""
     from pyproj import Transformer
@@ -459,13 +485,25 @@ def render_transmission_overlay(
     if not pixel_lines:
         raise RuntimeError("BC transmission-line source does not intersect the map domain")
 
-    image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+    render_width = output_width or domain.width
+    if render_width < 1:
+        raise ValueError("Transmission overlay output width must be positive")
+    render_scale = render_width / domain.width
+    render_size = (
+        render_width,
+        max(1, round(render_width * domain.height / domain.width)),
+    )
+    scaled_lines = [
+        [(x * render_scale, y * render_scale) for x, y in line]
+        for line in pixel_lines
+    ]
+    image = Image.new("RGBA", render_size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
-    halo_width = 4 if domain.tier == "bc" else 3
-    core_width = 2 if domain.tier == "bc" else 1
-    for line in pixel_lines:
+    core_width = max(2, round(render_width / 960))
+    halo_width = core_width + max(2, round(render_width / 960))
+    for line in scaled_lines:
         draw.line(line, fill=(2, 7, 11, 235), width=halo_width, joint="curve")
-    for line in pixel_lines:
+    for line in scaled_lines:
         draw.line(line, fill=(255, 255, 255, 242), width=core_width, joint="curve")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
@@ -480,7 +518,13 @@ def render_transmission_overlay(
         temporary.unlink(missing_ok=True)
 
 
-def render_static_maps(domain: Domain, base_destination: Path, boundary_destination: Path) -> None:
+def render_static_maps(
+    domain: Domain,
+    base_destination: Path,
+    boundary_destination: Path,
+    *,
+    boundary_scale: int = 2,
+) -> None:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -493,6 +537,8 @@ def render_static_maps(domain: Domain, base_destination: Path, boundary_destinat
     bbox = projected_bbox(domain)
     dpi = 120
     figsize = (domain.width / dpi, domain.height / dpi)
+    if boundary_scale < 1:
+        raise ValueError("Boundary render scale must be at least one")
 
     def configure_axes(ax: object) -> None:
         ax.set_xlim(bbox[0], bbox[2])
@@ -521,21 +567,37 @@ def render_static_maps(domain: Domain, base_destination: Path, boundary_destinat
     figure.savefig(base_destination, dpi=dpi, transparent=False, pad_inches=0)
     plt.close(figure)
 
-    figure = plt.figure(figsize=figsize, dpi=dpi, facecolor="none")
+    boundary_figsize = (
+        domain.width * boundary_scale / dpi,
+        domain.height * boundary_scale / dpi,
+    )
+    figure = plt.figure(figsize=boundary_figsize, dpi=dpi, facecolor="none")
     axis = figure.add_axes([0, 0, 1, 1], projection=projection)
     configure_axes(axis)
     provinces = cfeature.NaturalEarthFeature(
         "cultural",
-        "admin_1_states_provinces_lines",
+        "admin_1_states_provinces",
         "10m",
         facecolor="none",
     )
     borders = cfeature.BORDERS.with_scale("10m")
     coastline = cfeature.COASTLINE.with_scale("10m")
     for feature, width in ((coastline, 2.8), (borders, 2.6), (provinces, 2.4)):
-        axis.add_feature(feature, edgecolor="#071018", linewidth=width, alpha=0.86, zorder=5)
+        axis.add_feature(
+            feature,
+            edgecolor="#071018",
+            linewidth=width * boundary_scale,
+            alpha=0.86,
+            zorder=5,
+        )
     for feature, width, alpha in ((coastline, 1.15, 0.96), (borders, 1.05, 0.94), (provinces, 0.72, 0.78)):
-        axis.add_feature(feature, edgecolor="#f4f7f8", linewidth=width, alpha=alpha, zorder=6)
+        axis.add_feature(
+            feature,
+            edgecolor="#f4f7f8",
+            linewidth=width * boundary_scale,
+            alpha=alpha,
+            zorder=6,
+        )
 
     cities = [
         ("Victoria", -123.37, 48.43),
@@ -550,17 +612,33 @@ def render_static_maps(domain: Domain, base_destination: Path, boundary_destinat
         ("Cranbrook", -115.77, 49.51),
     ]
     for name, lon, lat in cities if domain.id == "bc" else []:
-        axis.plot(lon, lat, marker="o", markersize=2.8, color="#ffffff", markeredgecolor="#071018", markeredgewidth=0.9, transform=ccrs.PlateCarree(), zorder=8)
+        axis.plot(
+            lon,
+            lat,
+            marker="o",
+            markersize=2.8 * boundary_scale,
+            color="#ffffff",
+            markeredgecolor="#071018",
+            markeredgewidth=0.9 * boundary_scale,
+            transform=ccrs.PlateCarree(),
+            zorder=8,
+        )
         text = axis.text(
             lon + 0.18,
             lat + 0.10,
             name,
             transform=ccrs.PlateCarree(),
             color="#ffffff",
-            fontsize=7.3,
+            fontsize=7.3 * boundary_scale,
             weight="medium",
             zorder=9,
         )
-        text.set_path_effects([path_effects.Stroke(linewidth=2.1, foreground="#071018"), path_effects.Normal()])
+        text.set_path_effects([
+            path_effects.Stroke(
+                linewidth=2.1 * boundary_scale,
+                foreground="#071018",
+            ),
+            path_effects.Normal(),
+        ])
     figure.savefig(boundary_destination, dpi=dpi, transparent=True, pad_inches=0)
     plt.close(figure)
