@@ -61,19 +61,21 @@ LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
 ACTIVE_FIRE_POINT_RENDER_VERSION = 3
-FIRE_OVERLAY_RENDER_VERSION = 1
+FIRE_OVERLAY_RENDER_VERSION = 2
 FIRE_REGIONAL_RENDER_VERSION = 3
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
 GLM_LIGHTNING_RENDER_VERSION = 2
-GLM_LIGHTNING_TRAIL_RENDER_VERSION = 5
-GLM_LIGHTNING_FLASH_RENDER_VERSION = 2
+GLM_LIGHTNING_TRAIL_RENDER_VERSION = 6
+GLM_LIGHTNING_FLASH_RENDER_VERSION = 3
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 2
 REGIONAL_HAZARD_WIDTH = 1920
 DETAILED_REGIONAL_HAZARD_WIDTH = 3840
 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH = 1440
+BROAD_HAZARD_SCALE = 2
+BROAD_FIRE_SYMBOL_REFERENCE_WIDTH = 1920
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
     "ir",
@@ -1048,6 +1050,7 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
         rendered_anchor = False
         for layer, viewport, render_version, region_id in outputs:
             detailed_region = region_id is not None and region_id != "small"
+            broad_view = viewport is None and domain.tier == "broad"
             regional_output_width = (
                 DETAILED_REGIONAL_HAZARD_WIDTH
                 if detailed_region
@@ -1058,6 +1061,17 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                 if detailed_region
                 else 960
             )
+            render_output_width = (
+                domain.width * BROAD_HAZARD_SCALE
+                if broad_view
+                else regional_output_width if viewport is not None else None
+            )
+            render_symbol_reference_width = (
+                BROAD_FIRE_SYMBOL_REFERENCE_WIDTH
+                if broad_view
+                else regional_symbol_reference_width
+            )
+            render_blur_glow = not (detailed_region or broad_view)
             destination = frame_path(root, domain, layer, anchor)
             existing_metadata = metadata(layer, anchor)
             version_key = (
@@ -1078,10 +1092,10 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                 domain,
                 destination,
                 viewport=viewport,
-                output_width=regional_output_width if viewport is not None else None,
-                symbol_reference_width=regional_symbol_reference_width,
+                output_width=render_output_width,
+                symbol_reference_width=render_symbol_reference_width,
                 supersample=1,
-                blur_glow=not detailed_region,
+                blur_glow=render_blur_glow,
             )
             extra = {
                 key: value
@@ -1108,12 +1122,12 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                 "regionalViewport": viewport,
                 **(
                     {
-                        "outputWidth": regional_output_width,
-                        "symbolReferenceWidth": regional_symbol_reference_width,
+                        "outputWidth": render_output_width,
+                        "symbolReferenceWidth": render_symbol_reference_width,
                         "supersample": 1,
-                        "blurGlow": not detailed_region,
+                        "blurGlow": render_blur_glow,
                     }
-                    if viewport is not None
+                    if viewport is not None or broad_view
                     else {}
                 ),
             })
@@ -1151,6 +1165,10 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
     cutoff = max(source_times) - dt.timedelta(hours=hours)
     anchors = [value for value in source_times if value >= cutoff]
     source_set = set(source_times)
+    broad_view = domain.tier == "broad"
+    render_output_width = domain.width * BROAD_HAZARD_SCALE if broad_view else None
+    render_symbol_reference_width = round(domain.width * 1.5) if broad_view else 960
+    render_blur_glow = not broad_view
     for anchor in anchors:
         selected = [
             value if value in source_set else None
@@ -1186,7 +1204,13 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
         ):
             pass
         else:
-            lightning_trail(existing, destination)
+            lightning_trail(
+                existing,
+                destination,
+                output_width=render_output_width,
+                symbol_reference_width=render_symbol_reference_width,
+                blur_glow=render_blur_glow,
+            )
             write_metadata(
                 root,
                 domain,
@@ -1200,7 +1224,18 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
                 },
                 source="NOAA GOES-18",
                 source_layer="GLM-L2-LCFA 30-minute age trail",
-                extra={"renderVersion": GLM_LIGHTNING_TRAIL_RENDER_VERSION},
+                extra={
+                    "renderVersion": GLM_LIGHTNING_TRAIL_RENDER_VERSION,
+                    **(
+                        {
+                            "outputWidth": render_output_width,
+                            "symbolReferenceWidth": render_symbol_reference_width,
+                            "blurGlow": render_blur_glow,
+                        }
+                        if broad_view
+                        else {}
+                    ),
+                },
             )
         if existing[0] is None or selected[0] is None:
             frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
@@ -1227,6 +1262,9 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
         lightning_trail(
             [existing[0], None, None],
             flash_destination,
+            output_width=render_output_width,
+            symbol_reference_width=render_symbol_reference_width,
+            blur_glow=render_blur_glow,
             arrival_only=True,
         )
         write_metadata(
@@ -1238,7 +1276,18 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
             {"age0": selected[0]},
             source="NOAA GOES-18",
             source_layer="GLM-L2-LCFA newest-flash arrival overlay",
-            extra={"renderVersion": GLM_LIGHTNING_FLASH_RENDER_VERSION},
+            extra={
+                "renderVersion": GLM_LIGHTNING_FLASH_RENDER_VERSION,
+                **(
+                    {
+                        "outputWidth": render_output_width,
+                        "symbolReferenceWidth": render_symbol_reference_width,
+                        "blurGlow": render_blur_glow,
+                    }
+                    if broad_view
+                    else {}
+                ),
+            },
         )
 
 

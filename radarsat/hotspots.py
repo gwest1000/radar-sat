@@ -293,8 +293,8 @@ def render_fire_overlay(
     blur_glow: bool = True,
 ) -> dict[str, int]:
     """Render browser-equivalent wildfire flames into a transparent PNG."""
-    if (viewport is None) != (output_width is None):
-        raise ValueError("Regional fire renders require both viewport and output width")
+    if viewport is not None and output_width is None:
+        raise ValueError("Regional fire renders require an output width")
     if supersample < 1:
         raise ValueError("Fire-overlay supersampling must be at least one")
     if symbol_reference_width < 1:
@@ -380,6 +380,16 @@ def render_fire_overlay(
         final_size = (
             output_width,
             max(1, round(output_width * crop_height / crop_width)),
+        )
+        canvas_size = (
+            final_size[0] * supersample,
+            final_size[1] * supersample,
+        )
+        symbol_scale = output_width / symbol_reference_width * supersample
+    elif output_width is not None:
+        final_size = (
+            output_width,
+            max(1, round(output_width * domain.height / domain.width)),
         )
         canvas_size = (
             final_size[0] * supersample,

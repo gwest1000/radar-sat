@@ -237,6 +237,19 @@ class NativeRenderTests(unittest.TestCase):
             # marker, so its centre remains transparent.
             self.assertEqual(alpha[round(0.20 * 199) + 1, round(0.20 * 239)], 0)
 
+            broad_destination = root / "fire-overlay-broad.png"
+            render_fire_overlay(
+                [],
+                [[0.55, 0.55, None, 25.0, 1, 1]],
+                domain,
+                broad_destination,
+                output_width=480,
+                symbol_reference_width=360,
+                blur_glow=False,
+            )
+            with Image.open(broad_destination) as broad_image:
+                self.assertEqual(broad_image.size, (480, 400))
+
     @mock.patch("radarsat.pipeline.fetch_hotspots")
     def test_hotspot_snapshot_uses_ten_minute_archive_clock(self, fetch: mock.Mock) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -349,6 +362,17 @@ class NativeRenderTests(unittest.TestCase):
             lightning_trail([source, None, None], hires_destination, scale=2)
             with Image.open(hires_destination) as hires_image:
                 self.assertEqual(hires_image.size, (160, 120))
+
+            broad_destination = root / "trail-broad.png"
+            lightning_trail(
+                [source, None, None],
+                broad_destination,
+                output_width=160,
+                symbol_reference_width=120,
+                blur_glow=False,
+            )
+            with Image.open(broad_destination) as broad_image:
+                self.assertEqual(broad_image.size, (160, 120))
 
             flash_destination = root / "arrival-flash.png"
             lightning_trail(

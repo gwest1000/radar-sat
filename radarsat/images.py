@@ -136,8 +136,8 @@ def lightning_trail(
         raise ValueError("Lightning raster scale must be at least one")
     if symbol_reference_width < 1:
         raise ValueError("Lightning symbol reference width must be positive")
-    if (viewport is None) != (output_width is None):
-        raise ValueError("Regional lightning renders require both viewport and output width")
+    if viewport is not None and output_width is None:
+        raise ValueError("Regional lightning renders require an output width")
     destination.parent.mkdir(parents=True, exist_ok=True)
     source_size: tuple[int, int] | None = None
     masks: list[np.ndarray | None] = []
@@ -158,6 +158,12 @@ def lightning_trail(
         crop_width = source_size[0] * viewport["width"]
         crop_height = source_size[1] * viewport["height"]
         size = (output_width, max(1, round(output_width * crop_height / crop_width)))
+        symbol_scale = output_width / symbol_reference_width
+    elif output_width is not None:
+        size = (
+            output_width,
+            max(1, round(output_width * source_size[1] / source_size[0])),
+        )
         symbol_scale = output_width / symbol_reference_width
     else:
         size = (source_size[0] * scale, source_size[1] * scale)
@@ -192,6 +198,11 @@ def lightning_trail(
 
     def output_point(source_x: int, source_y: int) -> tuple[int, int] | None:
         if viewport is None:
+            if output_width is not None:
+                return (
+                    round(source_x / max(1, source_size[0] - 1) * (size[0] - 1)),
+                    round(source_y / max(1, source_size[1] - 1) * (size[1] - 1)),
+                )
             return (
                 round(source_x * scale + (scale - 1) / 2),
                 round(source_y * scale + (scale - 1) / 2),
