@@ -176,6 +176,7 @@ const MARKER_CACHE_LIMIT = 96;
 const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA GOES-18": "Calibrated ABI satellite imagery, GLM total lightning and smoke-detection products.",
   "NOAA Open Data": "Public cloud distribution for GOES ABI Level-2 satellite source files.",
+  "NOAA/NESDIS/STAR": "Full-resolution CIRA GeoColor imagery distributed by NOAA/NESDIS/STAR; the raw NOAA feed remains the automatic fallback.",
   "ECCC GeoMet": "Canadian radar, precipitation type and ECCC-rendered satellite products.",
   "ECCC Datamart": "Canadian Lightning Detection Network gridded lightning-density observations.",
   "NRCan CWFIS": "Timestamped satellite thermal detections and Canadian active-fire records.",

@@ -67,6 +67,19 @@ fi
 export PYTHONPATH="${PROJECT_ROOT}"
 export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
 
+if [[ "${RADARSAT_NOAA_STAR_GEOCOLOR_ENABLED:-${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}}" == "1" ]]; then
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_noaa_star_geocolor.py" \
+    --sector pacus \
+    --output-root "${OUTPUT_ROOT}" \
+    --cache-root "${RADARSAT_NOAA_STAR_GEOCOLOR_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/noaa-star-geocolor}" \
+    --hours "${RADARSAT_NOAA_STAR_GEOCOLOR_HOURS:-3}" \
+    --max-frames "${RADARSAT_NOAA_STAR_PACUS_MAX_FRAMES:-1}" \
+    --max-download-gb "${RADARSAT_NOAA_STAR_PACUS_MAX_DOWNLOAD_GB:-0.06}" \
+    --max-source-mb "${RADARSAT_NOAA_STAR_MAX_SOURCE_MB:-100}" \
+    --defer-catalog \
+    --apply || print -u2 "Warning: NOAA STAR PACUS GeoColor refresh failed; retaining raw NOAA fallback."
+fi
+
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_five_minute_bc_satellite.py" \
   --output-root "${OUTPUT_ROOT}" \
   --cache-root "${RADARSAT_FIVE_MINUTE_BC_SATELLITE_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/five-minute-bc-satellite}" \

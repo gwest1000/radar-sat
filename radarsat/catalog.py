@@ -193,6 +193,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
             "NIFC WFIGS": "https://www.arcgis.com/home/item.html?id=4181a117dc9e43db8598533e29972015",
             "NOAA Open Data": "https://www.ncei.noaa.gov/products/ncei-data-noaa-open-dissemination-program",
             "NOAA GOES-18": "https://www.ncei.noaa.gov/products/satellite/goes-r-series",
+            "NOAA/NESDIS/STAR": "https://www.goes.noaa.gov/",
             "GeoBC": "https://catalogue.data.gov.bc.ca/dataset/transmission-lines",
         },
     }

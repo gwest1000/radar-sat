@@ -74,6 +74,19 @@ if ! try_acquire_heavy_satellite_lock; then
   exit 0
 fi
 
+if [[ "${RADARSAT_NOAA_STAR_GEOCOLOR_ENABLED:-${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}}" == "1" ]]; then
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_noaa_star_geocolor.py" \
+    --sector full-disk \
+    --output-root "${OUTPUT_ROOT}" \
+    --cache-root "${RADARSAT_NOAA_STAR_GEOCOLOR_CACHE_ROOT:-${PROJECT_ROOT}/var/cache/noaa-star-geocolor}" \
+    --hours "${RADARSAT_NOAA_STAR_GEOCOLOR_HOURS:-3}" \
+    --max-frames "${RADARSAT_NOAA_STAR_FULL_DISK_MAX_FRAMES:-1}" \
+    --max-download-gb "${RADARSAT_NOAA_STAR_FULL_DISK_MAX_DOWNLOAD_GB:-0.1}" \
+    --max-source-mb "${RADARSAT_NOAA_STAR_MAX_SOURCE_MB:-100}" \
+    --defer-catalog \
+    --apply || print -u2 "Warning: NOAA STAR full-disk GeoColor refresh failed; retaining raw NOAA fallback."
+fi
+
 if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
   "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_westwx_satellite.py" \
     --output-root "${OUTPUT_ROOT}" \

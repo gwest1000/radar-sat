@@ -186,6 +186,11 @@ def scan_ready(root: Path, scan: FiveMinuteScan) -> bool:
         payload = json.loads(metadata.read_text())
     except (OSError, json.JSONDecodeError):
         return False
+    # The NOAA/NESDIS/STAR CIRA GeoColor render is the preferred
+    # full-resolution product for this clock.  Preserve it when the raw NODD
+    # fallback worker runs immediately afterward.
+    if payload.get("source") == "NOAA/NESDIS/STAR":
+        return True
     return (
         payload.get("renderVersion") == RENDER_VERSION
         and payload.get("sourceFile") == Path(scan.source.key).name

@@ -18,6 +18,7 @@ from radarsat.five_minute_bc_satellite import (
     discover_scans,
     plan_backfill,
     render_scan,
+    scan_ready,
 )
 from radarsat.pipeline import frame_path, metadata_path, write_metadata
 from radarsat.raw_satellite import PublicObject, RenderedSatellite
@@ -66,6 +67,39 @@ class DownloadClient:
 
 
 class FiveMinuteSatelliteTests(unittest.TestCase):
+    def test_raw_fallback_worker_preserves_preferred_star_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = tiny_domain()
+            source_time = dt.datetime(2026, 7, 23, 1, 36, 17, tzinfo=UTC)
+            scan = FiveMinuteScan(
+                dt.datetime(2026, 7, 23, 1, 35, tzinfo=UTC),
+                source_time,
+                PublicObject("noaa-goes18", key(source_time), 10, source_time),
+            )
+            destination = frame_path(root, domain, LAYERS["raw-visir-5min"], scan.valid_time)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (domain.width, domain.height), "black").save(
+                destination,
+                "WEBP",
+            )
+            write_metadata(
+                root,
+                domain,
+                LAYERS["raw-visir-5min"],
+                scan.valid_time,
+                destination,
+                {"NOAA STAR GOES-18 PACUS GeoColor": source_time},
+                source="NOAA/NESDIS/STAR",
+            )
+
+            with mock.patch.dict(
+                "radarsat.five_minute_bc_satellite.DOMAINS",
+                {"bc": domain},
+                clear=True,
+            ):
+                self.assertTrue(scan_ready(root, scan))
+
     def test_fallback_allows_one_delayed_full_disk_cycle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

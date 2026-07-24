@@ -621,25 +621,22 @@ def render_static_maps(
                 segments.extend(geometry_segments(clipped))
             return segments
 
-        linework = (
+        # Coastlines, international borders and state/province borders use
+        # one deliberately subdued hierarchy.  A dark casing keeps every line
+        # legible over bright cloud, while the narrower gray centre avoids the
+        # stark white country/coast emphasis used by the earlier render.
+        linework = tuple(
             (
-                natural_earth_segments("physical", "coastline"),
-                2.8,
-                1.15,
-                0.96,
-            ),
-            (
-                natural_earth_segments("cultural", "admin_0_boundary_lines_land"),
-                2.6,
-                1.05,
-                0.94,
-            ),
-            (
-                natural_earth_segments("cultural", "admin_1_states_provinces_lines"),
+                natural_earth_segments(category, name),
                 2.4,
                 0.72,
                 0.78,
-            ),
+            )
+            for category, name in (
+                ("physical", "coastline"),
+                ("cultural", "admin_0_boundary_lines_land"),
+                ("cultural", "admin_1_states_provinces_lines"),
+            )
         )
         for segments, dark_width, light_width, light_alpha in linework:
             axis.add_collection(LineCollection(
@@ -667,20 +664,20 @@ def render_static_maps(
         )
         borders = cfeature.BORDERS.with_scale("10m")
         coastline = cfeature.COASTLINE.with_scale("10m")
-        for feature, width in ((coastline, 2.8), (borders, 2.6), (provinces, 2.4)):
+        for feature in (coastline, borders, provinces):
             axis.add_feature(
                 feature,
                 edgecolor="#071018",
-                linewidth=width * boundary_scale,
+                linewidth=2.4 * boundary_scale,
                 alpha=0.86,
                 zorder=5,
             )
-        for feature, width, alpha in ((coastline, 1.15, 0.96), (borders, 1.05, 0.94), (provinces, 0.72, 0.78)):
+        for feature in (coastline, borders, provinces):
             axis.add_feature(
                 feature,
                 edgecolor="#f4f7f8",
-                linewidth=width * boundary_scale,
-                alpha=alpha,
+                linewidth=0.72 * boundary_scale,
+                alpha=0.78,
                 zorder=6,
             )
 

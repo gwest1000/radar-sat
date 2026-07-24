@@ -11,10 +11,25 @@ seconds from the NOAA filename, downloads each scan once, and writes:
 - `raw-visir` and `raw-ir`: the matching BC
   renderings from the same source download.
 
-A second, daylight-only BC path reads the separate native C01/C02/C03/C13
-files, renders one 3000×2300 composite, and retains it for 24 hours. Its source
-set is deleted after each render; the standard 2 km blend remains the night and
-failure fallback.
+The preferred BC display now reads CIRA GeoColor JPEGs distributed by
+NOAA/NESDIS/STAR. The ten-minute full-disk product is 21,696×21,696 on the
+0.5 km ABI fixed grid. South of the PACUS northern limit, the five-minute
+10,000×6,000 sector is feathered over a full-disk frame. Both are reprojected
+once to a 3840×2944 BC raster and retained for 24 hours. The compressed source
+is deleted immediately after rendering.
+
+This is the same GeoColor product family used by CIRA SLIDER and is materially
+sharper than the 2 km multiband composite. It does not make every spectral
+input physically 0.5 km: ABI C02 is 0.5 km, C01/C03 are 1 km and C13 infrared
+is 2 km at nadir. CIRA's variance encoding preserves much of the high-resolution
+visible texture in the colour product; nighttime detail remains constrained by
+the 2 km infrared channel.
+
+STAR distribution is a display service rather than an operationally guaranteed
+feed. The calibrated NOAA Open Data full-disk/PACUS render therefore remains an
+automatic fallback. The rapid compositor also constrains its northern
+full-disk source time between adjacent frames, preventing a five-minute frame
+from reverting to an older cloud field after a newer one has already appeared.
 
 Radar-Sat and WestWX share the compact North America renderings. When this path
 is enabled, the legacy raw ingest no longer writes duplicate half-hour BC frames;
@@ -64,14 +79,29 @@ current WebP sizes, changing three BC satellite layers from ten to five minutes
 for day one would add only about 0.21 GB to R2; source availability and transfer,
 not retained bucket space, are the limiting factors.
 
-The current multiband full-disk file places its true-colour composite on a 2 km
-grid. Native C01/C02/C03 visible-channel files can support a roughly 1 km
-composite (C02 is 0.5 km at nadir), but the measured files totalled about
-603 MB per scan versus 366 MB for the present all-channel multiband source.
-An all-day ten-minute high-resolution visible ingest would be about 87 GB/day
-of source transfer before rendering. A daylight-only BC/regional proof is the
-reasonable next experiment; merely enlarging the current raster would smooth
-pixels without adding meteorological detail.
+The older multiband full-disk file places its true-colour composite on a 2 km
+grid and is the source of the visibly blocky regional plots. Downloading the
+separate native C01/C02/C03/C13 NetCDF files would total roughly 630 MB per
+scan. The processed NOAA STAR route preserves the CIRA visible detail with
+measured source objects of roughly 56 MB per ten-minute full disk and 29 MB per
+five-minute PACUS frame. A retained 3840×2944 WebP is about 1.1–1.3 MB, so a
+complete six-hour repair adds roughly 0.1 GB locally/R2 after transient source
+files are deleted.
+
+The bounded high-resolution backfill commands are:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/backfill_noaa_star_geocolor.py \
+  --sector full-disk --output-root data/output --hours 6 \
+  --max-frames 36 --max-download-gb 2.5 --apply
+
+PYTHONPATH=. .venv/bin/python scripts/backfill_noaa_star_geocolor.py \
+  --sector pacus --output-root data/output --hours 6 \
+  --max-frames 72 --max-download-gb 2.5 --apply
+```
+
+The normal workers are capped at one 56 MB full-disk source per ten-minute
+cycle and one 29 MB PACUS source per five-minute cycle.
 
 Inspect a one-frame benchmark plan, then download and time only that scan:
 

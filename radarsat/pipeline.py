@@ -78,7 +78,7 @@ DETAILED_REGIONAL_HAZARD_WIDTH = 3840
 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH = 1440
 BROAD_HAZARD_SCALE = 2
 BROAD_FIRE_SYMBOL_REFERENCE_WIDTH = 1920
-STATIC_BOUNDARY_RENDER_VERSION = 3
+STATIC_BOUNDARY_RENDER_VERSION = 4
 STATIC_TRANSMISSION_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
@@ -193,7 +193,11 @@ def write_metadata(
         if protected:
             raise ValueError(f"Extra metadata cannot replace standard fields: {sorted(protected)}")
         payload.update(extra)
-    temporary = destination.with_suffix(".json.tmp")
+    # Independent rapid workers can legitimately complete the same timestamp
+    # at once (for example a repair overlapping the scheduled edge refresh).
+    # A process-specific staging name keeps one atomic replace from removing
+    # another writer's temporary file.
+    temporary = destination.with_name(f"{destination.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(payload, indent=2) + "\n")
     temporary.replace(destination)
 

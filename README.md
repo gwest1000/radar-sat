@@ -178,7 +178,7 @@ the latest timestamp before deciding whether a raw NOAA download is necessary.
 ## Data sources
 
 Radar-Sat uses public Environment and Climate Change Canada, NOAA GOES/AHI,
-and NRCan CWFIS data. Source
+NOAA/NESDIS/STAR CIRA GeoColor, and NRCan CWFIS data. Source
 limitations and fallback options are documented in the
 [technical assessment](docs/technical-report.md). The interface is an
 independent meteorological display and is not an official warning service.

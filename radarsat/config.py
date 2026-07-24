@@ -335,14 +335,13 @@ LAYERS: dict[str, Layer] = {
     ),
     "raw-visir-native": Layer(
         id="raw-visir-native",
-        title="Higher-resolution GOES-18 true-colour / neutral infrared satellite imagery",
+        title="Full-resolution NOAA/CIRA GOES-18 GeoColor satellite imagery",
         source_layer=None,
         image_format="image/webp",
         extension="webp",
         role="background",
-        source="NOAA GOES-18",
-        max_age_minutes=15,
-        daylight_only=True,
+        source="NOAA/NESDIS/STAR",
+        max_age_minutes=25,
     ),
     "raw-ir": Layer(
         id="raw-ir",
