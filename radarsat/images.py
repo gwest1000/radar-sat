@@ -125,13 +125,17 @@ def lightning_trail(
     destination: Path,
     *,
     scale: int = 1,
+    viewport: dict[str, float] | None = None,
+    output_width: int | None = None,
+    arrival_only: bool = False,
 ) -> None:
-    """Render age-fading lightning clusters as haloed bolt markers."""
+    """Render age-fading lightning clusters or a dedicated arrival flash."""
     if scale < 1:
         raise ValueError("Lightning raster scale must be at least one")
+    if (viewport is None) != (output_width is None):
+        raise ValueError("Regional lightning renders require both viewport and output width")
     destination.parent.mkdir(parents=True, exist_ok=True)
     source_size: tuple[int, int] | None = None
-    size: tuple[int, int] | None = None
     masks: list[np.ndarray | None] = []
     for path in source_paths:
         if path is None or not path.exists():
@@ -142,11 +146,18 @@ def lightning_trail(
         if source_size is not None and current_source_size != source_size:
             raise ValueError("Lightning source frames do not share a common grid")
         source_size = current_source_size
-        size = (current_source_size[0] * scale, current_source_size[1] * scale)
         mask = np.asarray(source.getchannel("A")) > 20
         masks.append(mask)
-    if size is None:
+    if source_size is None:
         raise ValueError("At least one lightning source frame is required")
+    if viewport is not None and output_width is not None:
+        crop_width = source_size[0] * viewport["width"]
+        crop_height = source_size[1] * viewport["height"]
+        size = (output_width, max(1, round(output_width * crop_height / crop_width)))
+        symbol_scale = output_width / 960
+    else:
+        size = (source_size[0] * scale, source_size[1] * scale)
+        symbol_scale = float(scale)
 
     def component_centres(mask: np.ndarray) -> list[tuple[int, int, int]]:
         active = {(int(y), int(x)) for y, x in np.argwhere(mask)}
@@ -175,29 +186,50 @@ def lightning_trail(
             )
         return centres
 
+    def output_point(source_x: int, source_y: int) -> tuple[int, int] | None:
+        if viewport is None:
+            return (
+                round(source_x * scale + (scale - 1) / 2),
+                round(source_y * scale + (scale - 1) / 2),
+            )
+        normalized_x = source_x / max(1, source_size[0] - 1)
+        normalized_y = source_y / max(1, source_size[1] - 1)
+        relative_x = (normalized_x - viewport["left"]) / viewport["width"]
+        relative_y = (normalized_y - viewport["top"]) / viewport["height"]
+        margin = 0.025
+        if not (-margin <= relative_x <= 1 + margin and -margin <= relative_y <= 1 + margin):
+            return None
+        return (
+            round(relative_x * (size[0] - 1)),
+            round(relative_y * (size[1] - 1)),
+        )
+
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(canvas, "RGBA")
     # Source order is current, 10–20 and 20–30 minutes. Draw oldest first so a
     # new flash wins where intervals overlap. These are the same illuminated
     # white-to-yellow bolt symbols used before lightning moved to a lightweight
     # transparent raster; the dark outline remains visible over bright cloud.
     styles = [
-        ((255, 254, 240, 255), (255, 255, 255, 180), 8 * scale),
-        ((255, 242, 154, 210), (255, 255, 255, 120), 7 * scale),
-        ((255, 224, 100, 145), (255, 255, 255, 70), 6 * scale),
+        ((255, 254, 240, 255), (255, 255, 255, 180), round(8 * symbol_scale)),
+        ((255, 242, 154, 210), (255, 255, 255, 120), round(7 * symbol_scale)),
+        ((255, 224, 100, 145), (255, 255, 255, 70), round(6 * symbol_scale)),
     ]
     for age_index, (mask, (fill, glow, half_height)) in reversed(list(enumerate(zip(masks, styles)))):
-        if mask is None:
+        if mask is None or (arrival_only and age_index != 0):
             continue
         bolt_layer = Image.new("RGBA", size, (0, 0, 0, 0))
         bolt_draw = ImageDraw.Draw(bolt_layer, "RGBA")
         arrival_glow = Image.new("RGBA", size, (0, 0, 0, 0)) if age_index == 0 else None
         arrival_draw = ImageDraw.Draw(arrival_glow, "RGBA") if arrival_glow is not None else None
         for source_x, source_y, area in component_centres(mask):
-            x = round(source_x * scale + (scale - 1) / 2)
-            y = round(source_y * scale + (scale - 1) / 2)
-            height = half_height + min(2 * scale, max(0, area.bit_length() - 2) * scale)
-            width = max(5 * scale, round(height * 0.72))
+            point = output_point(source_x, source_y)
+            if point is None:
+                continue
+            x, y = point
+            height = half_height + round(
+                min(2 * symbol_scale, max(0, area.bit_length() - 2) * symbol_scale)
+            )
+            width = max(round(5 * symbol_scale), round(height * 0.72))
             bolt = [
                 (x + round(width * 0.18), y - height),
                 (x - width, y + round(height * 0.08)),
@@ -207,28 +239,56 @@ def lightning_trail(
                 (x + round(width * 0.18), y - round(height * 0.18)),
             ]
             closed_bolt = bolt + [bolt[0]]
+            if arrival_only and arrival_draw is not None:
+                radius = max(10, round(15 * symbol_scale))
+                arrival_draw.ellipse(
+                    (x - radius, y - radius, x + radius, y + radius),
+                    fill=(255, 253, 224, 185),
+                )
+                arrival_draw.line(
+                    closed_bolt,
+                    fill=(255, 255, 255, 255),
+                    width=max(4, round(4 * symbol_scale)),
+                    joint="curve",
+                )
+                arrival_draw.polygon(bolt, fill=(255, 255, 255, 255))
+                continue
             if arrival_draw is not None:
                 arrival_draw.line(
                     closed_bolt,
                     fill=(255, 252, 214, 170),
-                    width=7 * scale,
+                    width=max(3, round(7 * symbol_scale)),
                     joint="curve",
                 )
                 arrival_draw.polygon(bolt, fill=(255, 255, 244, 190))
             bolt_draw.line(
                 closed_bolt,
                 fill=(2, 7, 11, min(225, fill[3])),
-                width=5 * scale,
+                width=max(3, round(5 * symbol_scale)),
                 joint="curve",
             )
-            bolt_draw.line(closed_bolt, fill=glow, width=3 * scale, joint="curve")
+            bolt_draw.line(
+                closed_bolt,
+                fill=glow,
+                width=max(2, round(3 * symbol_scale)),
+                joint="curve",
+            )
             bolt_draw.polygon(bolt, fill=fill)
         if arrival_glow is not None:
+            blur_radius = (10 if arrival_only else 5) * symbol_scale
             canvas.alpha_composite(
-                arrival_glow.filter(ImageFilter.GaussianBlur(radius=5 * scale))
+                arrival_glow.filter(ImageFilter.GaussianBlur(radius=blur_radius))
             )
+            if arrival_only:
+                canvas.alpha_composite(
+                    arrival_glow.filter(ImageFilter.GaussianBlur(radius=2 * symbol_scale))
+                )
         canvas.alpha_composite(bolt_layer)
-    canvas.quantize(colors=32, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(
+    canvas.quantize(
+        colors=64 if arrival_only else 32,
+        method=Image.Quantize.FASTOCTREE,
+        dither=Image.Dither.NONE,
+    ).save(
         destination,
         "PNG",
         optimize=True,

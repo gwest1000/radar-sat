@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from PIL import Image
+
 from radarsat.active_fires import (
     CANADA_WILDFIRE_OF_NOTE_CODE,
     CANADA_SOURCE_CODE,
@@ -17,7 +19,7 @@ from radarsat.active_fires import (
     fetch_canadian_active_fires,
     project_active_fires,
 )
-from radarsat.config import DOMAINS, LAYERS, Domain
+from radarsat.config import DOMAINS, LAYERS, VIEWPORTS, Domain, regional_layer_id
 from radarsat.pipeline import (
     FIRE_OVERLAY_RENDER_VERSION,
     derive_fire_overlays,
@@ -367,6 +369,21 @@ class ActiveFireTests(unittest.TestCase):
             self.assertEqual(overlay_metadata["activeFireDisplayCount"], 1)
             self.assertEqual(overlay_metadata["hotspotDisplayCount"], 1)
             self.assertEqual(overlay_metadata["activeFireValidTime"], "2026-07-22T19:10:00Z")
+            regional_layer = LAYERS[regional_layer_id("hotspots", "small")]
+            regional_path = frame_path(root, domain, regional_layer, valid_time)
+            regional_metadata = json.loads(
+                metadata_path(root, domain, regional_layer, valid_time).read_text()
+            )
+            self.assertTrue(regional_path.exists())
+            with Image.open(regional_path) as regional_image:
+                expected_height = round(
+                    1920
+                    * (domain.height * VIEWPORTS["small"]["height"])
+                    / (domain.width * VIEWPORTS["small"]["width"])
+                )
+                self.assertEqual(regional_image.size, (1920, expected_height))
+            self.assertEqual(regional_metadata["activeFireDisplayCount"], 1)
+            self.assertEqual(regional_metadata["hotspotDisplayCount"], 1)
 
 
 if __name__ == "__main__":

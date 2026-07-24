@@ -295,19 +295,26 @@ input:focus-visible {
 .lightning-arrival-layer {
   z-index: 13;
   opacity: 0;
+  mix-blend-mode: screen;
   will-change: opacity;
-  animation: lightning-raster-arrival 560ms ease-out both;
+  animation: lightning-raster-arrival 720ms linear both;
 }
 
 @keyframes lightning-raster-arrival {
   0% {
     opacity: 0;
   }
-  14% {
+  7% {
     opacity: 1;
   }
-  42% {
-    opacity: 0.76;
+  23% {
+    opacity: 0.08;
+  }
+  34% {
+    opacity: 0.82;
+  }
+  52% {
+    opacity: 0.10;
   }
   100% {
     opacity: 0;

@@ -3,9 +3,10 @@
   "path": "frames/bc/lightning-flash/2026/07/21/20260721T0048Z.png",
   "source": "ECCC GeoMet",
   "sourceLayer": "derived",
-  "fetchedAt": "2026-07-24T04:05:12Z",
+  "fetchedAt": "2026-07-24T06:58:14Z",
   "sourceTimes": {
     "age0": "2026-07-21T00:40:00Z"
   },
-  "renderVersion": 1
+  "renderVersion": 2,
+  "arrivalOnly": true
 }

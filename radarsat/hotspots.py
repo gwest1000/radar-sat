@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -286,8 +286,15 @@ def render_fire_overlay(
     destination: Path,
     *,
     hotspot_age_offset_minutes: float = 0,
+    viewport: dict[str, float] | None = None,
+    output_width: int | None = None,
+    supersample: int = 1,
 ) -> dict[str, int]:
     """Render browser-equivalent wildfire flames into a transparent PNG."""
+    if (viewport is None) != (output_width is None):
+        raise ValueError("Regional fire renders require both viewport and output width")
+    if supersample < 1:
+        raise ValueError("Fire-overlay supersampling must be at least one")
     overview = domain.id in {"north-america", "north-pacific"}
     active_markers: list[FireDisplayPoint] = []
     for row in active_rows:
@@ -355,11 +362,35 @@ def render_fire_overlay(
         [*hotspot_markers, *active_markers],
         key=lambda marker: (marker.notable, marker.signal),
     )
-    canvas = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+    if viewport is not None and output_width is not None:
+        regional_markers: list[FireDisplayPoint] = []
+        margin = 0.025
+        for marker in markers:
+            relative_x = (marker.x - viewport["left"]) / viewport["width"]
+            relative_y = (marker.y - viewport["top"]) / viewport["height"]
+            if -margin <= relative_x <= 1 + margin and -margin <= relative_y <= 1 + margin:
+                regional_markers.append(replace(marker, x=relative_x, y=relative_y))
+        markers = regional_markers
+        crop_width = domain.width * viewport["width"]
+        crop_height = domain.height * viewport["height"]
+        final_size = (
+            output_width,
+            max(1, round(output_width * crop_height / crop_width)),
+        )
+        canvas_size = (
+            final_size[0] * supersample,
+            final_size[1] * supersample,
+        )
+        symbol_scale = output_width / 960 * supersample
+    else:
+        final_size = (domain.width, domain.height)
+        canvas_size = final_size
+        symbol_scale = domain.width / 1280
+
+    canvas = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
     glow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow, "RGBA")
     symbol_draw = ImageDraw.Draw(canvas, "RGBA")
-    domain_scale = domain.width / 1280
     hotspot_colours = [
         (255, 176, 93, 255),
         (240, 141, 67, 184),
@@ -368,9 +399,9 @@ def render_fire_overlay(
 
     for marker in markers:
         desired_size = 21 if marker.notable else 13
-        size = max(8, round(desired_size * domain_scale))
-        centre_x = marker.x * (domain.width - 1)
-        centre_y = marker.y * (domain.height - 1)
+        size = max(8, round(desired_size * symbol_scale))
+        centre_x = marker.x * (canvas_size[0] - 1)
+        centre_y = marker.y * (canvas_size[1] - 1)
         outline = [
             (round(centre_x + x), round(centre_y + y))
             for x, y in _flame_outline(size)
@@ -386,12 +417,14 @@ def render_fire_overlay(
             )
             glow_draw.polygon(outline, fill=(255, 188, 141, 95))
 
-    canvas.alpha_composite(glow.filter(ImageFilter.GaussianBlur(radius=max(1.5, domain_scale * 1.6))))
+    canvas.alpha_composite(
+        glow.filter(ImageFilter.GaussianBlur(radius=max(1.5, symbol_scale * 1.6)))
+    )
     for marker in markers:
         desired_size = 21 if marker.notable else 13
-        size = max(8, round(desired_size * domain_scale))
-        centre_x = marker.x * (domain.width - 1)
-        centre_y = marker.y * (domain.height - 1)
+        size = max(8, round(desired_size * symbol_scale))
+        centre_x = marker.x * (canvas_size[0] - 1)
+        centre_y = marker.y * (canvas_size[1] - 1)
         outline = [
             (round(centre_x + x), round(centre_y + y))
             for x, y in _flame_outline(size)
@@ -447,7 +480,12 @@ def render_fire_overlay(
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:
-        canvas.quantize(
+        final_canvas = (
+            canvas.resize(final_size, Image.Resampling.LANCZOS)
+            if canvas.size != final_size
+            else canvas
+        )
+        final_canvas.quantize(
             colors=64,
             method=Image.Quantize.FASTOCTREE,
             dither=Image.Dither.NONE,
@@ -456,6 +494,6 @@ def render_fire_overlay(
     finally:
         temporary.unlink(missing_ok=True)
     return {
-        "activeFireDisplayCount": len(active_markers),
-        "hotspotDisplayCount": len(hotspot_markers),
+        "activeFireDisplayCount": sum(marker.kind == "active" for marker in markers),
+        "hotspotDisplayCount": sum(marker.kind == "hotspot" for marker in markers),
     }

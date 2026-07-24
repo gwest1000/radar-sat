@@ -194,18 +194,6 @@ LAYERS: dict[str, Layer] = {
         source_layer=None,
         max_age_minutes=6,
     ),
-    "lightning-trail-hires": Layer(
-        id="lightning-trail-hires",
-        title="CLDN high-resolution 30-minute age trail",
-        source_layer=None,
-        max_age_minutes=6,
-    ),
-    "lightning-flash-hires": Layer(
-        id="lightning-flash-hires",
-        title="CLDN high-resolution newest-lightning arrival flash",
-        source_layer=None,
-        max_age_minutes=6,
-    ),
     "glm-lightning": Layer(
         id="glm-lightning",
         title="GOES-18 GLM 10-minute total-lightning flashes",
@@ -384,6 +372,26 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     "southeast": {"left": 0.5518, "top": 0.4854, "width": 0.3550, "height": 0.3473},
     "northeast": {"left": 0.4196, "top": 0.1525, "width": 0.4520, "height": 0.4422},
 }
+
+
+def regional_layer_id(base_layer_id: str, region_id: str) -> str:
+    return f"{base_layer_id}-region-{region_id}"
+
+
+for _region_id in VIEWPORTS:
+    for _base_layer_id, _title, _max_age in (
+        ("lightning-trail", "CLDN 30-minute age trail", 6),
+        ("lightning-flash", "CLDN newest-lightning arrival flash", 6),
+        ("hotspots", "Active-wildfire and thermal-hotspot overlay", 30),
+    ):
+        _layer_id = regional_layer_id(_base_layer_id, _region_id)
+        LAYERS[_layer_id] = Layer(
+            id=_layer_id,
+            title=f"{_title} · {_region_id} crop",
+            source_layer=None,
+            source="NRCan CWFIS" if _base_layer_id == "hotspots" else "ECCC GeoMet",
+            max_age_minutes=_max_age,
+        )
 
 
 BROAD_VIEWPORTS: dict[str, dict[str, float]] = {

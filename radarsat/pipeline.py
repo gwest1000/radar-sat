@@ -22,7 +22,7 @@ from .active_fires import (
     project_active_fires,
 )
 from .catalog import write_catalog
-from .config import DOMAINS, LAYERS, Domain, Layer
+from .config import DOMAINS, LAYERS, VIEWPORTS, Domain, Layer, regional_layer_id
 from .geomet import GeoMetClient, at_or_before, format_utc, frame_stamp
 from .hotspots import (
     CWFIS_HOTSPOT_LAYER,
@@ -54,21 +54,24 @@ from .point_frames import (
 
 UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 5
-LIGHTNING_FLASH_RENDER_VERSION = 1
-LIGHTNING_HIRES_RENDER_VERSION = 1
+LIGHTNING_FLASH_RENDER_VERSION = 2
+LIGHTNING_REGIONAL_RENDER_VERSION = 1
+LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 2
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
 ACTIVE_FIRE_POINT_RENDER_VERSION = 3
 FIRE_OVERLAY_RENDER_VERSION = 1
+FIRE_REGIONAL_RENDER_VERSION = 2
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
 GLM_LIGHTNING_RENDER_VERSION = 2
 GLM_LIGHTNING_TRAIL_RENDER_VERSION = 5
-GLM_LIGHTNING_FLASH_RENDER_VERSION = 1
+GLM_LIGHTNING_FLASH_RENDER_VERSION = 2
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 2
+REGIONAL_HAZARD_WIDTH = 1920
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
     "ir",
@@ -680,20 +683,47 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
     anchors = sorted(value for value in all_anchors if value >= cutoff)
     output_layer = LAYERS["lightning-trail"]
     flash_layer = LAYERS["lightning-flash"]
-    hires_layer = LAYERS["lightning-trail-hires"]
-    hires_flash_layer = LAYERS["lightning-flash-hires"]
+    regional_trail_layers = {
+        region_id: LAYERS[regional_layer_id("lightning-trail", region_id)]
+        for region_id in VIEWPORTS
+    }
+    regional_flash_layers = {
+        region_id: LAYERS[regional_layer_id("lightning-flash", region_id)]
+        for region_id in VIEWPORTS
+    }
     source_layer = LAYERS["lightning"]
+    regional_cutoff = max(lightning_times) - dt.timedelta(hours=24)
 
     # A previous capability-timeline implementation could manufacture derived
     # frames for anchors whose source radar frame was never downloaded.  Keep
     # only anchors represented in the local archive.  Older, legitimately
     # retained anchors remain valid because ``all_anchors`` is not hour-limited.
     valid_anchor_stamps = {frame_stamp(value) for value in all_anchors}
-    for derived_layer in (output_layer, flash_layer, hires_layer, hires_flash_layer):
+    regional_anchor_stamps = {
+        frame_stamp(value)
+        for value in all_anchors
+        if value >= regional_cutoff
+    }
+    regional_layer_ids = {
+        layer.id
+        for layer in (*regional_trail_layers.values(), *regional_flash_layers.values())
+    }
+    derived_layers = (
+        output_layer,
+        flash_layer,
+        *regional_trail_layers.values(),
+        *regional_flash_layers.values(),
+    )
+    for derived_layer in derived_layers:
+        allowed_stamps = (
+            regional_anchor_stamps
+            if derived_layer.id in regional_layer_ids
+            else valid_anchor_stamps
+        )
         output_metadata_root = root / "metadata" / domain.id / derived_layer.id
         if output_metadata_root.exists():
             for path in output_metadata_root.rglob("*.json"):
-                if path.stem in valid_anchor_stamps:
+                if path.stem in allowed_stamps:
                     continue
                 try:
                     payload = json.loads(path.read_text())
@@ -706,7 +736,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         output_frame_root = root / "frames" / domain.id / derived_layer.id
         if output_frame_root.exists():
             for path in output_frame_root.rglob(f"*.{derived_layer.extension}"):
-                if path.stem not in valid_anchor_stamps:
+                if path.stem not in allowed_stamps:
                     path.unlink(missing_ok=True)
 
     def write_derived(
@@ -716,7 +746,8 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         source_times: list[dt.datetime | None],
         *,
         render_version: int,
-        scale: int = 1,
+        viewport: dict[str, float] | None = None,
+        arrival_only: bool = False,
     ) -> None:
         destination = frame_path(root, domain, layer, anchor)
         meta = metadata_path(root, domain, layer, anchor)
@@ -727,20 +758,32 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         }
         current_sources: dict[str, str] = {}
         current_render_version: int | None = None
+        current_region: dict[str, float] | None = None
+        current_arrival_only: bool | None = None
         if meta.exists():
             try:
                 current_metadata = json.loads(meta.read_text())
                 current_sources = current_metadata.get("sourceTimes", {})
                 current_render_version = current_metadata.get("renderVersion")
+                current_region = current_metadata.get("regionalViewport")
+                current_arrival_only = current_metadata.get("arrivalOnly", False)
             except (OSError, json.JSONDecodeError):
                 pass
         if (
             destination.exists()
             and current_sources == expected_sources
             and current_render_version == render_version
+            and current_region == viewport
+            and current_arrival_only == arrival_only
         ):
             return
-        lightning_trail(existing, destination, scale=scale)
+        lightning_trail(
+            existing,
+            destination,
+            viewport=viewport,
+            output_width=REGIONAL_HAZARD_WIDTH if viewport is not None else None,
+            arrival_only=arrival_only,
+        )
         write_metadata(
             root,
             domain,
@@ -754,7 +797,15 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             },
             extra={
                 "renderVersion": render_version,
-                **({"rasterScale": scale} if scale > 1 else {}),
+                "arrivalOnly": arrival_only,
+                **(
+                    {
+                        "regionalViewport": viewport,
+                        "outputWidth": REGIONAL_HAZARD_WIDTH,
+                    }
+                    if viewport is not None
+                    else {}
+                ),
             },
         )
 
@@ -774,7 +825,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         paths = [frame_path(root, domain, source_layer, value) if value else None for value in source_times]
         existing = [path if path and path.exists() else None for path in paths]
         if not any(existing):
-            for layer in (output_layer, flash_layer, hires_layer, hires_flash_layer):
+            for layer in derived_layers:
                 frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
                 metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
             continue
@@ -794,27 +845,36 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 flash_paths,
                 flash_sources,
                 render_version=LIGHTNING_FLASH_RENDER_VERSION,
-            )
-            write_derived(
-                hires_flash_layer,
-                anchor,
-                flash_paths,
-                flash_sources,
-                render_version=LIGHTNING_HIRES_RENDER_VERSION,
-                scale=2,
+                arrival_only=True,
             )
         else:
-            for layer in (flash_layer, hires_flash_layer):
-                frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
-                metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
-        write_derived(
-            hires_layer,
-            anchor,
-            existing,
-            source_times,
-            render_version=LIGHTNING_HIRES_RENDER_VERSION,
-            scale=2,
-        )
+            frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
+            metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
+        if anchor < regional_cutoff:
+            continue
+        for region_id, viewport in VIEWPORTS.items():
+            write_derived(
+                regional_trail_layers[region_id],
+                anchor,
+                existing,
+                source_times,
+                render_version=LIGHTNING_REGIONAL_RENDER_VERSION,
+                viewport=viewport,
+            )
+            regional_flash_layer = regional_flash_layers[region_id]
+            if existing[0] is not None:
+                write_derived(
+                    regional_flash_layer,
+                    anchor,
+                    [existing[0], None, None],
+                    [source_times[0], None, None],
+                    render_version=LIGHTNING_REGIONAL_FLASH_RENDER_VERSION,
+                    viewport=viewport,
+                    arrival_only=True,
+                )
+            else:
+                frame_path(root, domain, regional_flash_layer, anchor).unlink(missing_ok=True)
+                metadata_path(root, domain, regional_flash_layer, anchor).unlink(missing_ok=True)
 
 
 def _rendered_frame_ready(
@@ -860,6 +920,22 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
     cutoff = max(hotspot_times) - dt.timedelta(hours=hours)
     anchors = [value for value in hotspot_times if value >= cutoff]
     rendered = 0
+    if domain.id == "bc":
+        retained_stamps = {frame_stamp(value) for value in anchors}
+        for region_id in VIEWPORTS:
+            regional_layer = LAYERS[regional_layer_id("hotspots", region_id)]
+            regional_metadata_root = root / "metadata" / domain.id / regional_layer.id
+            if regional_metadata_root.exists():
+                for path in regional_metadata_root.rglob("*.json"):
+                    if path.stem in retained_stamps:
+                        continue
+                    try:
+                        archived = json.loads(path.read_text())
+                        image_path = safe_archive_path(root, str(archived.get("path", "")))
+                        image_path.unlink(missing_ok=True)
+                    except (OSError, ValueError, json.JSONDecodeError):
+                        pass
+                    path.unlink(missing_ok=True)
 
     def payload(layer: Layer, valid_time: dt.datetime) -> dict[str, object] | None:
         path = frame_path(root, domain, layer, valid_time)
@@ -908,70 +984,108 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
             if selected_active_time is not None
             else None
         )
-        destination = frame_path(root, domain, output_layer, anchor)
-        existing_metadata = metadata(output_layer, anchor)
         expected_active_time = (
             format_utc(selected_active_time)
             if selected_active_time is not None
             else None
-        )
-        if (
-            destination.is_file()
-            and existing_metadata.get("fireOverlayRenderVersion") == FIRE_OVERLAY_RENDER_VERSION
-            and existing_metadata.get("activeFireValidTime") == expected_active_time
-        ):
-            continue
-        summary = render_fire_overlay(
-            hotspot_payload.get("points", []),
-            active_payload.get("points", []) if active_payload else [],
-            domain,
-            destination,
         )
         active_metadata = (
             metadata(active_layer, selected_active_time)
             if selected_active_time is not None
             else {}
         )
-        extra = {
-            key: value
-            for key, value in existing_metadata.items()
-            if key not in {
-                "validTime",
-                "path",
-                "source",
-                "sourceLayer",
-                "fetchedAt",
-                "sourceTimes",
-            }
-        }
-        extra.update({
-            **summary,
-            "renderVersion": HOTSPOT_RENDER_VERSION,
-            "fireOverlayRenderVersion": FIRE_OVERLAY_RENDER_VERSION,
-            "activeFireValidTime": expected_active_time,
-            "activeFirePointCount": int(active_metadata.get("pointCount", 0)),
-            "canadianFeatureCount": int(active_metadata.get("canadianFeatureCount", 0)),
-            "bcwsFeatureCount": int(active_metadata.get("bcwsFeatureCount", 0)),
-            "usFeatureCount": int(active_metadata.get("usFeatureCount", 0)),
-            "sourceErrors": active_metadata.get("sourceErrors", []),
-        })
         source_times = {"hotspots": anchor}
         if selected_active_time is not None:
             source_times["active fires"] = selected_active_time
-        write_metadata(
-            root,
-            domain,
-            output_layer,
-            anchor,
-            destination,
-            source_times,
-            source="NRCan CWFIS + BCWS + NIFC WFIGS",
-            source_layer=(
-                f"{CWFIS_HOTSPOT_LAYER} + agency-reported active-fire point frames"
-            ),
-            extra=extra,
-        )
-        rendered += 1
+        outputs: list[tuple[Layer, dict[str, float] | None, int]] = [
+            (output_layer, None, FIRE_OVERLAY_RENDER_VERSION)
+        ]
+        if domain.id == "bc":
+            outputs.extend(
+                (
+                    LAYERS[regional_layer_id("hotspots", region_id)],
+                    viewport,
+                    FIRE_REGIONAL_RENDER_VERSION,
+                )
+                for region_id, viewport in VIEWPORTS.items()
+            )
+        rendered_anchor = False
+        for layer, viewport, render_version in outputs:
+            destination = frame_path(root, domain, layer, anchor)
+            existing_metadata = metadata(layer, anchor)
+            version_key = (
+                "fireOverlayRegionalRenderVersion"
+                if viewport is not None
+                else "fireOverlayRenderVersion"
+            )
+            if (
+                destination.is_file()
+                and existing_metadata.get(version_key) == render_version
+                and existing_metadata.get("activeFireValidTime") == expected_active_time
+                and existing_metadata.get("regionalViewport") == viewport
+            ):
+                continue
+            summary = render_fire_overlay(
+                hotspot_payload.get("points", []),
+                active_payload.get("points", []) if active_payload else [],
+                domain,
+                destination,
+                viewport=viewport,
+                output_width=REGIONAL_HAZARD_WIDTH if viewport is not None else None,
+                # The crop-native canvas is already more than twice the typical
+                # browser display width. Drawing directly at 1920 px keeps flame
+                # edges sharp after browser downsampling without a costly 3840 px
+                # intermediate for every ten-minute archive frame.
+                supersample=1,
+            )
+            extra = {
+                key: value
+                for key, value in existing_metadata.items()
+                if key not in {
+                    "validTime",
+                    "path",
+                    "source",
+                    "sourceLayer",
+                    "fetchedAt",
+                    "sourceTimes",
+                }
+            }
+            extra.update({
+                **summary,
+                "renderVersion": HOTSPOT_RENDER_VERSION,
+                version_key: render_version,
+                "activeFireValidTime": expected_active_time,
+                "activeFirePointCount": int(active_metadata.get("pointCount", 0)),
+                "canadianFeatureCount": int(active_metadata.get("canadianFeatureCount", 0)),
+                "bcwsFeatureCount": int(active_metadata.get("bcwsFeatureCount", 0)),
+                "usFeatureCount": int(active_metadata.get("usFeatureCount", 0)),
+                "sourceErrors": active_metadata.get("sourceErrors", []),
+                "regionalViewport": viewport,
+                **(
+                    {
+                        "outputWidth": REGIONAL_HAZARD_WIDTH,
+                        "supersample": 2,
+                    }
+                    if viewport is not None
+                    else {}
+                ),
+            })
+            write_metadata(
+                root,
+                domain,
+                layer,
+                anchor,
+                destination,
+                source_times,
+                source="NRCan CWFIS + BCWS + NIFC WFIGS",
+                source_layer=(
+                    f"{CWFIS_HOTSPOT_LAYER} + agency-reported active-fire point frames"
+                ),
+                extra=extra,
+            )
+            rendered_anchor = True
+        if rendered_anchor:
+            rendered += 1
     return {
         "status": "rendered" if rendered else "unchanged",
         "rendered": rendered,
@@ -1063,7 +1177,11 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
             and current_flash_version == GLM_LIGHTNING_FLASH_RENDER_VERSION
         ):
             continue
-        lightning_trail([existing[0], None, None], flash_destination)
+        lightning_trail(
+            [existing[0], None, None],
+            flash_destination,
+            arrival_only=True,
+        )
         write_metadata(
             root,
             domain,

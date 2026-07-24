@@ -14,7 +14,7 @@ from pyproj import CRS, Transformer
 from rasterio.transform import from_bounds
 import shapefile
 
-from radarsat.config import LAYERS, Domain
+from radarsat.config import LAYERS, VIEWPORTS, Domain, regional_layer_id
 from radarsat.hotspots import render_fire_overlay, render_hotspots
 from radarsat.images import lightning_trail, render_transmission_overlay, render_watershed_overlay
 from radarsat.pipeline import (
@@ -350,6 +350,35 @@ class NativeRenderTests(unittest.TestCase):
             with Image.open(hires_destination) as hires_image:
                 self.assertEqual(hires_image.size, (160, 120))
 
+            flash_destination = root / "arrival-flash.png"
+            lightning_trail(
+                [source, None, None],
+                flash_destination,
+                arrival_only=True,
+            )
+            flash_alpha = np.asarray(
+                Image.open(flash_destination).convert("RGBA")
+            )[:, :, 3]
+            self.assertGreater(
+                np.count_nonzero(flash_alpha > 8),
+                np.count_nonzero(alpha > 8),
+            )
+
+            regional_destination = root / "trail-region-small.png"
+            lightning_trail(
+                [source, None, None],
+                regional_destination,
+                viewport=VIEWPORTS["small"],
+                output_width=1920,
+            )
+            expected_height = round(
+                1920
+                * (image.height * VIEWPORTS["small"]["height"])
+                / (image.width * VIEWPORTS["small"]["width"])
+            )
+            with Image.open(regional_destination) as regional_image:
+                self.assertEqual(regional_image.size, (1920, expected_height))
+
     def test_transmission_overlay_uses_haloed_geobc_lines(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -439,7 +468,7 @@ class NativeRenderTests(unittest.TestCase):
                 source = frame_path(output, domain, LAYERS["lightning"], valid)
                 source.parent.mkdir(parents=True, exist_ok=True)
                 image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
-                image.putpixel((10, 10), (0, 45, 255, 255))
+                image.putpixel((60, 45), (0, 45, 255, 255))
                 image.save(source, "PNG")
                 write_metadata(output, domain, LAYERS["lightning"], valid, source)
             radar = frame_path(output, domain, LAYERS["radar-rain"], VALID)
@@ -455,10 +484,18 @@ class NativeRenderTests(unittest.TestCase):
             self.assertTrue(
                 frame_path(output, domain, LAYERS["lightning-flash"], old).exists()
             )
-            hires = frame_path(output, domain, LAYERS["lightning-trail-hires"], old)
-            self.assertTrue(hires.exists())
-            with Image.open(hires) as hires_image:
-                self.assertEqual(hires_image.size, (domain.width * 2, domain.height * 2))
+            regional_layer = LAYERS[
+                regional_layer_id("lightning-trail", "small")
+            ]
+            regional = frame_path(output, domain, regional_layer, old)
+            self.assertTrue(regional.exists())
+            with Image.open(regional) as regional_image:
+                expected_height = round(
+                    1920
+                    * (domain.height * VIEWPORTS["small"]["height"])
+                    / (domain.width * VIEWPORTS["small"]["width"])
+                )
+                self.assertEqual(regional_image.size, (1920, expected_height))
 
     def test_native_recovery_window_renders_backlog_older_than_geomet_window(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

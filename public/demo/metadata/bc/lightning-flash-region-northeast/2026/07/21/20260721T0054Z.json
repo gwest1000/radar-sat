@@ -1,0 +1,19 @@
+{
+  "validTime": "2026-07-21T00:54:00Z",
+  "path": "frames/bc/lightning-flash-region-northeast/2026/07/21/20260721T0054Z.png",
+  "source": "ECCC GeoMet",
+  "sourceLayer": "derived",
+  "fetchedAt": "2026-07-24T06:58:16Z",
+  "sourceTimes": {
+    "age0": "2026-07-21T00:50:00Z"
+  },
+  "renderVersion": 2,
+  "arrivalOnly": true,
+  "regionalViewport": {
+    "left": 0.4196,
+    "top": 0.1525,
+    "width": 0.452,
+    "height": 0.4422
+  },
+  "outputWidth": 1920
+}

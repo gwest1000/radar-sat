@@ -82,8 +82,9 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /resilientActiveFireFrameReferences/);
   assert.match(viewer, /usesRasterLightning\(product\)/);
   assert.match(viewer, /usesRasterFire\(product\)/);
-  assert.match(viewer, /"lightning-trail-hires"/);
-  assert.match(viewer, /"lightning-flash-hires"/);
+  assert.match(viewer, /`\$\{recipeId\}-region-\$\{regionKey\}`/);
+  assert.match(viewer, /`lightning-flash-region-\$\{regionKey\}`/);
+  assert.match(viewer, /stageAligned: renderedLayerId\.includes\("-region-"\)/);
   assert.match(viewer, /lightning-arrival-layer/);
   assert.match(viewer, /usesRasterFire\(product\) && recipe\.id === "hotspots"/);
   assert.match(viewer, /createRadialGradient/);

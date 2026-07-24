@@ -131,6 +131,20 @@ const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
+const FULL_LAYER_STYLE: CSSProperties = {
+  left: "0",
+  top: "0",
+  right: "auto",
+  bottom: "auto",
+  width: "100%",
+  height: "100%",
+};
+const REGIONAL_PRODUCT_KEYS: Record<string, string> = {
+  "bc-small-overlay": "small",
+  "bc-southwest-overlay": "southwest",
+  "bc-southeast-overlay": "southeast",
+  "bc-northeast-overlay": "northeast",
+};
 const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
 const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
   left: `${BC_ON_NORTH_AMERICA.left * 100}%`,
@@ -584,21 +598,24 @@ type ComposedLayer = {
   opacity: number;
   frame?: Frame;
   arrival?: boolean;
+  stageAligned?: boolean;
 };
 
 function rasterLayerId(recipeId: string, product: Product, domain: Domain): string {
-  if (product.domain === "bc" && product.viewport) {
-    if (recipeId === "lightning-trail" && domain.layers["lightning-trail-hires"]?.frames?.length) {
-      return "lightning-trail-hires";
-    }
+  const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
+  if (product.domain === "bc" && regionKey && ["lightning-trail", "hotspots"].includes(recipeId)) {
+    const candidate = `${recipeId}-region-${regionKey}`;
+    if (domain.layers[candidate]?.frames?.length) return candidate;
   }
   return recipeId;
 }
 
-function lightningFlashLayerId(recipeId: string, product: Product): string | undefined {
+function lightningFlashLayerId(recipeId: string, product: Product, domain: Domain): string | undefined {
   if (recipeId === "lightning-trail") {
-    return product.domain === "bc" && product.viewport
-      ? "lightning-flash-hires"
+    const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
+    const regionalId = regionKey ? `lightning-flash-region-${regionKey}` : undefined;
+    return regionalId && domain.layers[regionalId]?.frames?.length
+      ? regionalId
       : "lightning-flash";
   }
   if (recipeId === "glm-lightning-trail") return "glm-lightning-flash";
@@ -694,8 +711,9 @@ function composeLayers(
       url: frameUrl(frame, catalogBase),
       opacity: recipe.opacity,
       frame,
+      stageAligned: renderedLayerId.includes("-region-"),
     }];
-    const flashLayerId = lightningFlashLayerId(recipe.id, product);
+    const flashLayerId = lightningFlashLayerId(recipe.id, product, domain);
     const flashFrame = flashLayerId
       ? domain.layers[flashLayerId]?.frames.find((candidate) => candidate.validTime === frame.validTime)
       : undefined;
@@ -711,6 +729,7 @@ function composeLayers(
         opacity: 1,
         frame: flashFrame,
         arrival: true,
+        stageAligned: flashLayerId.includes("-region-"),
       });
     }
     return layers;
@@ -2007,7 +2026,7 @@ export function RadarViewer() {
                   ? `${layer.id}-${layer.frame ? actualSourceTime(layer.id, layer.frame) : layer.url}`
                   : layer.id}
                 style={{
-                  ...cropStyle,
+                  ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
                   opacity: layer.opacity,
                   filter: ["Overlay", "Broad"].includes(product.group)
                     && ["ir", "daynight", "convective", "snowfog", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)

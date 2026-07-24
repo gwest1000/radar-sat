@@ -1,0 +1,21 @@
+{
+  "validTime": "2026-07-20T23:24:00Z",
+  "path": "frames/bc/lightning-trail-region-southeast/2026/07/20/20260720T2324Z.png",
+  "source": "ECCC GeoMet",
+  "sourceLayer": "derived",
+  "fetchedAt": "2026-07-24T06:58:00Z",
+  "sourceTimes": {
+    "age0": "2026-07-20T23:20:00Z",
+    "age10": "2026-07-20T23:10:00Z",
+    "age20": "2026-07-20T23:00:00Z"
+  },
+  "renderVersion": 1,
+  "arrivalOnly": false,
+  "regionalViewport": {
+    "left": 0.5518,
+    "top": 0.4854,
+    "width": 0.355,
+    "height": 0.3473
+  },
+  "outputWidth": 1920
+}

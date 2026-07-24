@@ -1,0 +1,19 @@
+{
+  "validTime": "2026-07-20T23:48:00Z",
+  "path": "frames/bc/lightning-flash-region-southwest/2026/07/20/20260720T2348Z.png",
+  "source": "ECCC GeoMet",
+  "sourceLayer": "derived",
+  "fetchedAt": "2026-07-24T06:58:04Z",
+  "sourceTimes": {
+    "age0": "2026-07-20T23:40:00Z"
+  },
+  "renderVersion": 2,
+  "arrivalOnly": true,
+  "regionalViewport": {
+    "left": 0.3531,
+    "top": 0.53,
+    "width": 0.3898,
+    "height": 0.3438
+  },
+  "outputWidth": 1920
+}
