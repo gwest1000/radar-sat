@@ -127,11 +127,15 @@ def lightning_trail(
     scale: int = 1,
     viewport: dict[str, float] | None = None,
     output_width: int | None = None,
+    symbol_reference_width: int = 960,
+    blur_glow: bool = True,
     arrival_only: bool = False,
 ) -> None:
     """Render age-fading lightning clusters or a dedicated arrival flash."""
     if scale < 1:
         raise ValueError("Lightning raster scale must be at least one")
+    if symbol_reference_width < 1:
+        raise ValueError("Lightning symbol reference width must be positive")
     if (viewport is None) != (output_width is None):
         raise ValueError("Regional lightning renders require both viewport and output width")
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -154,7 +158,7 @@ def lightning_trail(
         crop_width = source_size[0] * viewport["width"]
         crop_height = source_size[1] * viewport["height"]
         size = (output_width, max(1, round(output_width * crop_height / crop_width)))
-        symbol_scale = output_width / 960
+        symbol_scale = output_width / symbol_reference_width
     else:
         size = (source_size[0] * scale, source_size[1] * scale)
         symbol_scale = float(scale)
@@ -275,14 +279,20 @@ def lightning_trail(
             )
             bolt_draw.polygon(bolt, fill=fill)
         if arrival_glow is not None:
-            blur_radius = (10 if arrival_only else 5) * symbol_scale
-            canvas.alpha_composite(
-                arrival_glow.filter(ImageFilter.GaussianBlur(radius=blur_radius))
-            )
-            if arrival_only:
+            if blur_glow:
+                blur_radius = (10 if arrival_only else 5) * symbol_scale
                 canvas.alpha_composite(
-                    arrival_glow.filter(ImageFilter.GaussianBlur(radius=2 * symbol_scale))
+                    arrival_glow.filter(ImageFilter.GaussianBlur(radius=blur_radius))
                 )
+                if arrival_only:
+                    canvas.alpha_composite(
+                        arrival_glow.filter(ImageFilter.GaussianBlur(radius=2 * symbol_scale))
+                    )
+            else:
+                # A high-resolution regional raster is downsampled by the
+                # browser, which provides the soft edge without filtering the
+                # entire 3840 px transparent canvas for every archive frame.
+                canvas.alpha_composite(arrival_glow)
         canvas.alpha_composite(bolt_layer)
     canvas.quantize(
         colors=64 if arrival_only else 32,
@@ -440,12 +450,12 @@ def render_transmission_overlay(
 
     image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
-    halo_width = 3 if domain.tier == "bc" else 2
+    halo_width = 4 if domain.tier == "bc" else 3
     core_width = 2 if domain.tier == "bc" else 1
     for line in pixel_lines:
-        draw.line(line, fill=(255, 255, 255, 225), width=halo_width, joint="curve")
+        draw.line(line, fill=(2, 7, 11, 235), width=halo_width, joint="curve")
     for line in pixel_lines:
-        draw.line(line, fill=(98, 103, 109, 230), width=core_width, joint="curve")
+        draw.line(line, fill=(255, 255, 255, 242), width=core_width, joint="curve")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:

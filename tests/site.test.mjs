@@ -98,6 +98,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(styles, /\.eccc-north-fallback/);
   assert.match(styles, /@keyframes lightning-raster-arrival/);
   assert.match(styles, /\.lightning-arrival-layer/);
+  assert.match(styles, /animation: lightning-raster-arrival 130ms steps\(1, end\) both/);
+  assert.match(styles, /\.transmission-symbol[\s\S]*?border-top: 2px solid #fff/);
   assert.match(styles, /\.lightning-marker\.age-3 \{ color: #f6d451/);
 });
 

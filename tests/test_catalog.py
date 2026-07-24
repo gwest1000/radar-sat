@@ -69,6 +69,23 @@ class CatalogTests(unittest.TestCase):
                 frame,
             )
 
+    def test_catalog_omits_metadata_for_a_missing_frame_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = DOMAINS["bc"]
+            layer = LAYERS["radar-rain"]
+            valid_time = dt.datetime(2026, 7, 22, 12, tzinfo=UTC)
+            image = frame_path(root, domain, layer, valid_time)
+            image.parent.mkdir(parents=True, exist_ok=True)
+            image.write_bytes(b"frame")
+            write_metadata(root, domain, layer, valid_time, image)
+            write_catalog(root)
+
+            image.unlink()
+            rebuilt = build_catalog(root)
+
+            self.assertNotIn("radar-rain", rebuilt["domains"]["bc"]["layers"])
+
 
 if __name__ == "__main__":
     unittest.main()

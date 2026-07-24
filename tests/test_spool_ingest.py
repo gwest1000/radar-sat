@@ -379,6 +379,44 @@ class NativeRenderTests(unittest.TestCase):
             with Image.open(regional_destination) as regional_image:
                 self.assertEqual(regional_image.size, (1920, expected_height))
 
+            detailed_destination = root / "trail-region-detailed.png"
+            lightning_trail(
+                [source, None, None],
+                detailed_destination,
+                viewport=VIEWPORTS["small"],
+                output_width=3840,
+                symbol_reference_width=1440,
+                blur_glow=False,
+            )
+            with Image.open(detailed_destination) as detailed_image:
+                self.assertEqual(
+                    detailed_image.size,
+                    (
+                        3840,
+                        round(
+                            3840
+                            * (image.height * VIEWPORTS["small"]["height"])
+                            / (image.width * VIEWPORTS["small"]["width"])
+                        ),
+                    ),
+                )
+                detailed_alpha = np.asarray(
+                    detailed_image.convert("RGBA")
+                )[:, :, 3]
+            regional_alpha = np.asarray(
+                Image.open(regional_destination).convert("RGBA")
+            )[:, :, 3]
+            regional_y, regional_x = np.where(regional_alpha > 20)
+            detailed_y, detailed_x = np.where(detailed_alpha > 20)
+            self.assertGreater(
+                detailed_y.max() - detailed_y.min(),
+                regional_y.max() - regional_y.min(),
+            )
+            self.assertLess(
+                (detailed_y.max() - detailed_y.min()) / 3840,
+                (regional_y.max() - regional_y.min()) / 1920,
+            )
+
     def test_transmission_overlay_uses_haloed_geobc_lines(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -421,6 +459,12 @@ class NativeRenderTests(unittest.TestCase):
                 (rendered[:, :, 0] < 130)
                 & (rendered[:, :, 1] < 130)
                 & (rendered[:, :, 2] < 130)
+                & (rendered[:, :, 3] > 0)
+            ))
+            self.assertTrue(np.any(
+                (rendered[:, :, 0] > 235)
+                & (rendered[:, :, 1] > 235)
+                & (rendered[:, :, 2] > 235)
                 & (rendered[:, :, 3] > 0)
             ))
 
@@ -484,18 +528,8 @@ class NativeRenderTests(unittest.TestCase):
             self.assertTrue(
                 frame_path(output, domain, LAYERS["lightning-flash"], old).exists()
             )
-            regional_layer = LAYERS[
-                regional_layer_id("lightning-trail", "small")
-            ]
-            regional = frame_path(output, domain, regional_layer, old)
-            self.assertTrue(regional.exists())
-            with Image.open(regional) as regional_image:
-                expected_height = round(
-                    1920
-                    * (domain.height * VIEWPORTS["small"]["height"])
-                    / (domain.width * VIEWPORTS["small"]["width"])
-                )
-                self.assertEqual(regional_image.size, (1920, expected_height))
+            regional_layer = LAYERS[regional_layer_id("lightning-trail", "small")]
+            self.assertFalse(frame_path(output, domain, regional_layer, old).exists())
 
     def test_native_recovery_window_renders_backlog_older_than_geomet_window(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

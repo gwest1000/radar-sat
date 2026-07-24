@@ -384,6 +384,20 @@ class ActiveFireTests(unittest.TestCase):
                 self.assertEqual(regional_image.size, (1920, expected_height))
             self.assertEqual(regional_metadata["activeFireDisplayCount"], 1)
             self.assertEqual(regional_metadata["hotspotDisplayCount"], 1)
+            detailed_layer = LAYERS[regional_layer_id("hotspots", "southwest")]
+            detailed_path = frame_path(root, domain, detailed_layer, valid_time)
+            detailed_metadata = json.loads(
+                metadata_path(root, domain, detailed_layer, valid_time).read_text()
+            )
+            with Image.open(detailed_path) as detailed_image:
+                expected_height = round(
+                    3840
+                    * (domain.height * VIEWPORTS["southwest"]["height"])
+                    / (domain.width * VIEWPORTS["southwest"]["width"])
+                )
+                self.assertEqual(detailed_image.size, (3840, expected_height))
+            self.assertEqual(detailed_metadata["symbolReferenceWidth"], 1440)
+            self.assertFalse(detailed_metadata["blurGlow"])
 
 
 if __name__ == "__main__":

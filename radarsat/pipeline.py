@@ -55,14 +55,14 @@ from .point_frames import (
 UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 5
 LIGHTNING_FLASH_RENDER_VERSION = 2
-LIGHTNING_REGIONAL_RENDER_VERSION = 1
-LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 2
+LIGHTNING_REGIONAL_RENDER_VERSION = 2
+LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 3
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
 ACTIVE_FIRE_POINT_RENDER_VERSION = 3
 FIRE_OVERLAY_RENDER_VERSION = 1
-FIRE_REGIONAL_RENDER_VERSION = 2
+FIRE_REGIONAL_RENDER_VERSION = 3
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
@@ -72,6 +72,8 @@ GLM_LIGHTNING_FLASH_RENDER_VERSION = 2
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 2
 REGIONAL_HAZARD_WIDTH = 1920
+DETAILED_REGIONAL_HAZARD_WIDTH = 3840
+DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH = 1440
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
     "ir",
@@ -683,14 +685,22 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
     anchors = sorted(value for value in all_anchors if value >= cutoff)
     output_layer = LAYERS["lightning-trail"]
     flash_layer = LAYERS["lightning-flash"]
-    regional_trail_layers = {
-        region_id: LAYERS[regional_layer_id("lightning-trail", region_id)]
-        for region_id in VIEWPORTS
-    }
-    regional_flash_layers = {
-        region_id: LAYERS[regional_layer_id("lightning-flash", region_id)]
-        for region_id in VIEWPORTS
-    }
+    regional_trail_layers = (
+        {
+            region_id: LAYERS[regional_layer_id("lightning-trail", region_id)]
+            for region_id in VIEWPORTS
+        }
+        if domain.id == "bc"
+        else {}
+    )
+    regional_flash_layers = (
+        {
+            region_id: LAYERS[regional_layer_id("lightning-flash", region_id)]
+            for region_id in VIEWPORTS
+        }
+        if domain.id == "bc"
+        else {}
+    )
     source_layer = LAYERS["lightning"]
     regional_cutoff = max(lightning_times) - dt.timedelta(hours=24)
 
@@ -747,6 +757,9 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         *,
         render_version: int,
         viewport: dict[str, float] | None = None,
+        output_width: int | None = None,
+        symbol_reference_width: int = 960,
+        blur_glow: bool = True,
         arrival_only: bool = False,
     ) -> None:
         destination = frame_path(root, domain, layer, anchor)
@@ -781,7 +794,9 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             existing,
             destination,
             viewport=viewport,
-            output_width=REGIONAL_HAZARD_WIDTH if viewport is not None else None,
+            output_width=output_width,
+            symbol_reference_width=symbol_reference_width,
+            blur_glow=blur_glow,
             arrival_only=arrival_only,
         )
         write_metadata(
@@ -801,7 +816,9 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 **(
                     {
                         "regionalViewport": viewport,
-                        "outputWidth": REGIONAL_HAZARD_WIDTH,
+                        "outputWidth": output_width,
+                        "symbolReferenceWidth": symbol_reference_width,
+                        "blurGlow": blur_glow,
                     }
                     if viewport is not None
                     else {}
@@ -852,7 +869,19 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
         if anchor < regional_cutoff:
             continue
-        for region_id, viewport in VIEWPORTS.items():
+        for region_id in regional_trail_layers:
+            viewport = VIEWPORTS[region_id]
+            detailed_region = region_id != "small"
+            regional_output_width = (
+                DETAILED_REGIONAL_HAZARD_WIDTH
+                if detailed_region
+                else REGIONAL_HAZARD_WIDTH
+            )
+            regional_symbol_reference_width = (
+                DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
+                if detailed_region
+                else 960
+            )
             write_derived(
                 regional_trail_layers[region_id],
                 anchor,
@@ -860,6 +889,9 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 source_times,
                 render_version=LIGHTNING_REGIONAL_RENDER_VERSION,
                 viewport=viewport,
+                output_width=regional_output_width,
+                symbol_reference_width=regional_symbol_reference_width,
+                blur_glow=not detailed_region,
             )
             regional_flash_layer = regional_flash_layers[region_id]
             if existing[0] is not None:
@@ -870,6 +902,9 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                     [source_times[0], None, None],
                     render_version=LIGHTNING_REGIONAL_FLASH_RENDER_VERSION,
                     viewport=viewport,
+                    output_width=regional_output_width,
+                    symbol_reference_width=regional_symbol_reference_width,
+                    blur_glow=not detailed_region,
                     arrival_only=True,
                 )
             else:
@@ -997,8 +1032,8 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
         source_times = {"hotspots": anchor}
         if selected_active_time is not None:
             source_times["active fires"] = selected_active_time
-        outputs: list[tuple[Layer, dict[str, float] | None, int]] = [
-            (output_layer, None, FIRE_OVERLAY_RENDER_VERSION)
+        outputs: list[tuple[Layer, dict[str, float] | None, int, str | None]] = [
+            (output_layer, None, FIRE_OVERLAY_RENDER_VERSION, None)
         ]
         if domain.id == "bc":
             outputs.extend(
@@ -1006,11 +1041,23 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                     LAYERS[regional_layer_id("hotspots", region_id)],
                     viewport,
                     FIRE_REGIONAL_RENDER_VERSION,
+                    region_id,
                 )
                 for region_id, viewport in VIEWPORTS.items()
             )
         rendered_anchor = False
-        for layer, viewport, render_version in outputs:
+        for layer, viewport, render_version, region_id in outputs:
+            detailed_region = region_id is not None and region_id != "small"
+            regional_output_width = (
+                DETAILED_REGIONAL_HAZARD_WIDTH
+                if detailed_region
+                else REGIONAL_HAZARD_WIDTH
+            )
+            regional_symbol_reference_width = (
+                DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
+                if detailed_region
+                else 960
+            )
             destination = frame_path(root, domain, layer, anchor)
             existing_metadata = metadata(layer, anchor)
             version_key = (
@@ -1031,12 +1078,10 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                 domain,
                 destination,
                 viewport=viewport,
-                output_width=REGIONAL_HAZARD_WIDTH if viewport is not None else None,
-                # The crop-native canvas is already more than twice the typical
-                # browser display width. Drawing directly at 1920 px keeps flame
-                # edges sharp after browser downsampling without a costly 3840 px
-                # intermediate for every ten-minute archive frame.
+                output_width=regional_output_width if viewport is not None else None,
+                symbol_reference_width=regional_symbol_reference_width,
                 supersample=1,
+                blur_glow=not detailed_region,
             )
             extra = {
                 key: value
@@ -1063,8 +1108,10 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                 "regionalViewport": viewport,
                 **(
                     {
-                        "outputWidth": REGIONAL_HAZARD_WIDTH,
-                        "supersample": 2,
+                        "outputWidth": regional_output_width,
+                        "symbolReferenceWidth": regional_symbol_reference_width,
+                        "supersample": 1,
+                        "blurGlow": not detailed_region,
                     }
                     if viewport is not None
                     else {}

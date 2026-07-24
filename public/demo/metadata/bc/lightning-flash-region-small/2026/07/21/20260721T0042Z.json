@@ -3,11 +3,11 @@
   "path": "frames/bc/lightning-flash-region-small/2026/07/21/20260721T0042Z.png",
   "source": "ECCC GeoMet",
   "sourceLayer": "derived",
-  "fetchedAt": "2026-07-24T06:58:13Z",
+  "fetchedAt": "2026-07-24T15:40:26Z",
   "sourceTimes": {
     "age0": "2026-07-21T00:40:00Z"
   },
-  "renderVersion": 2,
+  "renderVersion": 3,
   "arrivalOnly": true,
   "regionalViewport": {
     "left": 0.245,
@@ -15,5 +15,7 @@
     "width": 0.59,
     "height": 0.68
   },
-  "outputWidth": 1920
+  "outputWidth": 1920,
+  "symbolReferenceWidth": 960,
+  "blurGlow": true
 }

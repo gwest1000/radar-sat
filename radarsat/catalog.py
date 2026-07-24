@@ -36,6 +36,16 @@ def _metadata_key_for_frame(frame: dict[str, Any]) -> str | None:
     return Path("metadata", *parts[1:]).with_suffix(".json").as_posix()
 
 
+def _frame_asset_exists(root: Path, frame: dict[str, Any]) -> bool:
+    relative = Path(str(frame.get("path", "")))
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        return False
+    try:
+        return (root / relative).is_file()
+    except OSError:
+        return False
+
+
 def _previous_metadata(root: Path) -> tuple[int | None, dict[str, dict[str, Any]]]:
     catalog_path = root / "catalog.json"
     try:
@@ -95,7 +105,15 @@ def read_metadata(
     for path, frame in zip(pending, loaded, strict=True):
         if frame is not None:
             frames_by_path[path] = frame
-    frames = list(frames_by_path.values())
+    # Independent ingest and retention workers can rotate a frame immediately
+    # after its metadata directory was judged unchanged. Revalidate every
+    # referenced asset, including incrementally reused entries, so a catalog
+    # can never publish a path that has already disappeared.
+    frames = [
+        frame
+        for frame in frames_by_path.values()
+        if _frame_asset_exists(root, frame)
+    ]
     frames.sort(key=lambda item: item["validTime"])
     return frames
 

@@ -288,13 +288,17 @@ def render_fire_overlay(
     hotspot_age_offset_minutes: float = 0,
     viewport: dict[str, float] | None = None,
     output_width: int | None = None,
+    symbol_reference_width: int = 960,
     supersample: int = 1,
+    blur_glow: bool = True,
 ) -> dict[str, int]:
     """Render browser-equivalent wildfire flames into a transparent PNG."""
     if (viewport is None) != (output_width is None):
         raise ValueError("Regional fire renders require both viewport and output width")
     if supersample < 1:
         raise ValueError("Fire-overlay supersampling must be at least one")
+    if symbol_reference_width < 1:
+        raise ValueError("Fire-overlay symbol reference width must be positive")
     overview = domain.id in {"north-america", "north-pacific"}
     active_markers: list[FireDisplayPoint] = []
     for row in active_rows:
@@ -381,7 +385,7 @@ def render_fire_overlay(
             final_size[0] * supersample,
             final_size[1] * supersample,
         )
-        symbol_scale = output_width / 960 * supersample
+        symbol_scale = output_width / symbol_reference_width * supersample
     else:
         final_size = (domain.width, domain.height)
         canvas_size = final_size
@@ -419,6 +423,8 @@ def render_fire_overlay(
 
     canvas.alpha_composite(
         glow.filter(ImageFilter.GaussianBlur(radius=max(1.5, symbol_scale * 1.6)))
+        if blur_glow
+        else glow
     )
     for marker in markers:
         desired_size = 21 if marker.notable else 13
