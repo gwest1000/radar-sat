@@ -53,10 +53,10 @@ from .point_frames import (
 
 
 UTC = dt.timezone.utc
-LIGHTNING_TRAIL_RENDER_VERSION = 6
-LIGHTNING_FLASH_RENDER_VERSION = 6
-LIGHTNING_REGIONAL_RENDER_VERSION = 3
-LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 7
+LIGHTNING_TRAIL_RENDER_VERSION = 7
+LIGHTNING_FLASH_RENDER_VERSION = 9
+LIGHTNING_REGIONAL_RENDER_VERSION = 4
+LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 10
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
@@ -68,10 +68,11 @@ RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
 GLM_LIGHTNING_RENDER_VERSION = 2
-GLM_LIGHTNING_TRAIL_RENDER_VERSION = 7
-GLM_LIGHTNING_FLASH_RENDER_VERSION = 7
+GLM_LIGHTNING_TRAIL_RENDER_VERSION = 8
+GLM_LIGHTNING_FLASH_RENDER_VERSION = 10
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
-COVERAGE_RENDER_VERSION = 2
+COVERAGE_RENDER_VERSION = 3
+PRECIP_OVERLAY_RENDER_VERSION = 1
 REGIONAL_HAZARD_WIDTH = 1920
 DETAILED_REGIONAL_HAZARD_WIDTH = 3840
 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH = 1440
@@ -91,6 +92,36 @@ DEFAULT_SOURCE_LAYERS = (
     "ptype-coverage",
     "lightning",
 )
+HIGH_RESOLUTION_PRECIP_LAYERS = frozenset(
+    {"radar-rain", "radar-snow", "radar-coverage", "ptype", "ptype-coverage"}
+)
+
+
+def precipitation_render_domain(domain: Domain) -> Domain:
+    """Return a screen-sharp grid without exceeding useful source detail."""
+    render_width = 3000 if domain.id == "bc" else domain.width * 2
+    render_height = max(1, round(render_width * domain.height / domain.width))
+    return Domain(
+        id=f"{domain.id}-precip-hires",
+        title=domain.title,
+        west=domain.west,
+        south=domain.south,
+        east=domain.east,
+        north=domain.north,
+        crs=domain.crs,
+        width=render_width,
+        height=render_height,
+        tier=domain.tier,
+        projected_bounds=domain.projected_bounds,
+    )
+
+
+def geomet_render_version(layer_id: str) -> int | None:
+    if layer_id.endswith("coverage"):
+        return COVERAGE_RENDER_VERSION
+    if layer_id in HIGH_RESOLUTION_PRECIP_LAYERS:
+        return PRECIP_OVERLAY_RENDER_VERSION
+    return None
 
 def safe_archive_path(root: Path, relative: str) -> Path:
     candidate = (root / relative).resolve()
@@ -620,18 +651,26 @@ def ingest_geomet(
         for valid_time in times:
             destination = frame_path(root, domain, layer, valid_time)
             meta = metadata_path(root, domain, layer, valid_time)
+            expected_render_version = geomet_render_version(layer_id)
             if destination.exists() and meta.exists():
-                if not layer_id.endswith("coverage"):
-                    if layer_id == "lightning":
-                        derive_eccc_lightning_points(root, domain, valid_time)
-                    continue
                 try:
-                    if json.loads(meta.read_text()).get("renderVersion") == COVERAGE_RENDER_VERSION:
+                    current_render_version = json.loads(meta.read_text()).get("renderVersion")
+                    if (
+                        expected_render_version is None
+                        or current_render_version == expected_render_version
+                    ):
+                        if layer_id == "lightning":
+                            derive_eccc_lightning_points(root, domain, valid_time)
                         continue
                 except (OSError, json.JSONDecodeError):
                     pass
             try:
-                request_domain = domain
+                render_domain = (
+                    precipitation_render_domain(domain)
+                    if layer_id in HIGH_RESOLUTION_PRECIP_LAYERS
+                    else domain
+                )
+                request_domain = render_domain
                 if domain.id == "north-pacific":
                     request_domain = Domain(
                         id="north-pacific-radar-source",
@@ -641,16 +680,16 @@ def ingest_geomet(
                         east=-50.0,
                         north=75.0,
                         crs="EPSG:3857",
-                        width=1000,
-                        height=900,
+                        width=2000 if layer_id in HIGH_RESOLUTION_PRECIP_LAYERS else 1000,
+                        height=1800 if layer_id in HIGH_RESOLUTION_PRECIP_LAYERS else 900,
                         tier="broad",
                     )
                 content = client.get_map(layer, request_domain, valid_time)
-                if request_domain is not domain:
+                if request_domain is not render_domain:
                     content = reproject_overlay(
                         content,
                         request_domain,
-                        domain,
+                        render_domain,
                         outside_no_coverage=layer_id.endswith("coverage"),
                     )
             except Exception:
@@ -672,7 +711,15 @@ def ingest_geomet(
                 layer,
                 valid_time,
                 destination,
-                extra={"renderVersion": COVERAGE_RENDER_VERSION} if layer_id.endswith("coverage") else None,
+                extra=(
+                    {
+                        "renderVersion": expected_render_version,
+                        "outputWidth": render_domain.width,
+                        "outputHeight": render_domain.height,
+                    }
+                    if expected_render_version is not None
+                    else None
+                ),
             )
             if layer_id == "lightning":
                 derive_eccc_lightning_points(root, domain, valid_time)

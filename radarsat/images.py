@@ -225,9 +225,9 @@ def lightning_trail(
     # white-to-yellow bolt symbols used before lightning moved to a lightweight
     # transparent raster; the dark outline remains visible over bright cloud.
     styles = [
-        ((255, 254, 240, 255), (255, 255, 255, 180), round(8 * symbol_scale)),
-        ((255, 242, 154, 210), (255, 255, 255, 120), round(7 * symbol_scale)),
-        ((255, 224, 100, 145), (255, 255, 255, 70), round(6 * symbol_scale)),
+        ((255, 254, 240, 255), (255, 255, 255, 180), round(6 * symbol_scale)),
+        ((255, 242, 154, 210), (255, 255, 255, 120), round(5.25 * symbol_scale)),
+        ((255, 224, 100, 145), (255, 255, 255, 70), round(4.5 * symbol_scale)),
     ]
     for age_index, (mask, (fill, glow, half_height)) in reversed(list(enumerate(zip(masks, styles)))):
         if mask is None or (arrival_only and age_index != 0):
@@ -262,13 +262,13 @@ def lightning_trail(
                 # the raster cheap to generate while producing a genuinely
                 # diffuse halo rather than visible concentric rings or a
                 # translucent white disk.
-                radius = max(6, round(8 * symbol_scale))
+                radius = max(9, round(12 * symbol_scale))
                 padding = radius * 3
                 patch_size = padding * 2 + 1
                 patch_alpha = Image.new("L", (patch_size, patch_size), 0)
                 patch_draw = ImageDraw.Draw(patch_alpha)
                 centre = padding
-                core = max(1, round(1.6 * symbol_scale))
+                core = max(2, round(4.5 * symbol_scale))
                 patch_draw.ellipse(
                     (
                         centre - core,
@@ -276,10 +276,10 @@ def lightning_trail(
                         centre + core,
                         centre + core,
                     ),
-                    fill=180,
+                    fill=255,
                 )
                 patch_alpha = patch_alpha.filter(
-                    ImageFilter.GaussianBlur(radius=max(2.2, radius * 0.52))
+                    ImageFilter.GaussianBlur(radius=max(2.8, radius * 0.30))
                 )
                 patch = Image.new(
                     "RGBA",

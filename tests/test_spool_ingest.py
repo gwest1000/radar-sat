@@ -21,9 +21,11 @@ from radarsat.images import lightning_trail, render_transmission_overlay, render
 from radarsat.pipeline import (
     derive_lightning_trails,
     frame_path,
+    geomet_render_version,
     ingest_hotspot_snapshot,
     metadata_path,
     parse_args,
+    precipitation_render_domain,
     run,
     write_metadata,
 )
@@ -144,6 +146,38 @@ class NativeDiscoveryTests(unittest.TestCase):
 
 
 class NativeRenderTests(unittest.TestCase):
+    def test_precipitation_overlays_use_screen_sharp_render_grids(self) -> None:
+        bc = precipitation_render_domain(Domain(
+            id="bc",
+            title="BC",
+            west=-145,
+            south=45,
+            east=-108,
+            north=63,
+            crs="EPSG:3005",
+            width=1920,
+            height=1472,
+            tier="bc",
+            projected_bounds=(-550000, -100000, 2450000, 2200000),
+        ))
+        north_america = precipitation_render_domain(Domain(
+            id="north-america",
+            title="North America",
+            west=-180,
+            south=5,
+            east=-50,
+            north=75,
+            crs="EPSG:3857",
+            width=1280,
+            height=960,
+            tier="broad",
+        ))
+        self.assertEqual((bc.width, bc.height), (3000, 2300))
+        self.assertEqual((north_america.width, north_america.height), (2560, 1920))
+        self.assertEqual(geomet_render_version("radar-rain"), 1)
+        self.assertEqual(geomet_render_version("radar-coverage"), 3)
+        self.assertIsNone(geomet_render_version("daynight"))
+
     def test_hotspots_render_as_age_coloured_diamonds(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -377,8 +411,8 @@ class NativeRenderTests(unittest.TestCase):
             rendered = np.asarray(Image.open(destination).convert("RGBA"))
             alpha = rendered[:, :, 3]
             y, x = np.where(alpha > 0)
-            self.assertGreater(len(x), 150)
-            self.assertLess(len(x), 500)
+            self.assertGreater(len(x), 80)
+            self.assertLess(len(x), 400)
             # The asymmetric lightning silhouette is taller than it is wide.
             self.assertGreater(y.max() - y.min(), x.max() - x.min())
             white_core = (
@@ -416,12 +450,14 @@ class NativeRenderTests(unittest.TestCase):
             )[:, :, 3]
             halo_pixels = np.count_nonzero(flash_alpha > 8)
             self.assertGreater(halo_pixels, 60)
+            self.assertGreater(halo_pixels, np.count_nonzero(alpha > 8))
             self.assertLess(
                 halo_pixels,
-                round(np.count_nonzero(alpha > 8) * 1.25),
+                round(np.count_nonzero(alpha > 8) * 3),
             )
             self.assertTrue(np.any((flash_alpha > 0) & (flash_alpha < 120)))
-            self.assertEqual(np.count_nonzero(flash_alpha >= 120), 0)
+            self.assertGreater(int(flash_alpha.max()), 120)
+            self.assertLess(int(flash_alpha.max()), 220)
             flash_rendered = np.asarray(
                 Image.open(flash_destination).convert("RGBA")
             )

@@ -126,6 +126,9 @@ type SiteConfig = {
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
+const FIVE_MINUTES_MS = 5 * 60_000;
+const THIRTY_MINUTES_MS = 30 * 60_000;
+const HIGH_FREQUENCY_ARCHIVE_MS = 24 * 60 * 60_000;
 const AUTO_REFRESH_MS = 5 * 60_000;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
@@ -222,6 +225,48 @@ function mergedFrames(...collections: Frame[][]): Frame[] {
   return [...byTime.values()].sort((left, right) => (
     Date.parse(left.validTime) - Date.parse(right.validTime)
   ));
+}
+
+function playbackFrames(sourceFrames: Frame[], rangeHours: number): Frame[] {
+  if (!sourceFrames.length) return [];
+  const parsed = sourceFrames
+    .map((frame) => ({ frame, time: Date.parse(frame.validTime) }))
+    .filter((item) => Number.isFinite(item.time))
+    .sort((left, right) => left.time - right.time);
+  if (!parsed.length) return [];
+  const newest = Math.floor(parsed[parsed.length - 1].time / FIVE_MINUTES_MS) * FIVE_MINUTES_MS;
+  const requestedStart = newest - rangeHours * 60 * 60_000;
+  const availableStart = Math.ceil(parsed[0].time / FIVE_MINUTES_MS) * FIVE_MINUTES_MS;
+  const start = Math.max(requestedStart, availableStart);
+  const recentStart = Math.max(start, newest - HIGH_FREQUENCY_ARCHIVE_MS);
+  const times: number[] = [];
+  if (rangeHours > 24 && start < recentStart) {
+    let historic = Math.ceil(start / THIRTY_MINUTES_MS) * THIRTY_MINUTES_MS;
+    while (historic < recentStart) {
+      times.push(historic);
+      historic += THIRTY_MINUTES_MS;
+    }
+  }
+  let current = Math.ceil(recentStart / FIVE_MINUTES_MS) * FIVE_MINUTES_MS;
+  while (current <= newest) {
+    times.push(current);
+    current += FIVE_MINUTES_MS;
+  }
+  let sourceIndex = 0;
+  return times.flatMap((time): Frame[] => {
+    while (
+      sourceIndex + 1 < parsed.length
+      && parsed[sourceIndex + 1].time <= time
+    ) {
+      sourceIndex += 1;
+    }
+    const source = parsed[sourceIndex];
+    if (source.time > time) return [];
+    return [{
+      ...source.frame,
+      validTime: new Date(time).toISOString(),
+    }];
+  });
 }
 
 function nearestFrame(frames: Frame[], target: string, toleranceMinutes: number): Frame | undefined {
@@ -717,9 +762,14 @@ function composeLayers(
     const flashFrame = flashLayerId
       ? domain.layers[flashLayerId]?.frames.find((candidate) => candidate.validTime === frame.validTime)
       : undefined;
+    const flashDisplayAge = flashFrame
+      ? Date.parse(anchor.validTime) - Date.parse(flashFrame.validTime)
+      : Number.POSITIVE_INFINITY;
     if (
       flashLayerId
       && flashFrame
+      && flashDisplayAge >= 0
+      && flashDisplayAge < FIVE_MINUTES_MS
       && actualSourceTime(flashLayerId, flashFrame) === actualSourceTime(renderedLayerId, frame)
     ) {
       layers.push({
@@ -854,20 +904,13 @@ function archiveSpan(frames: Frame[]): string {
   return `${span} · ${utcClock(first.validTime)}–${utcClock(last.validTime)} UTC`;
 }
 
-function playbackCadenceFactor(frames: Frame[]): number {
-  const recent = frames.slice(-24);
-  const intervals = recent.slice(1).flatMap((frame, index) => {
-    const minutes = (
-      Date.parse(frame.validTime) - Date.parse(recent[index].validTime)
-    ) / 60_000;
-    return Number.isFinite(minutes) && minutes > 0 && minutes <= 30 ? [minutes] : [];
-  }).sort((left, right) => left - right);
-  if (!intervals.length) return 1;
-  const middle = Math.floor(intervals.length / 2);
-  const median = intervals.length % 2
-    ? intervals[middle]
-    : (intervals[middle - 1] + intervals[middle]) / 2;
-  return Math.max(1, Math.min(2, median / 5));
+function playbackStepFactor(frames: Frame[], currentIndex: number): number {
+  if (currentIndex < 0 || currentIndex >= frames.length - 1) return 1;
+  const minutes = (
+    Date.parse(frames[currentIndex + 1].validTime)
+    - Date.parse(frames[currentIndex].validTime)
+  ) / 60_000;
+  return Number.isFinite(minutes) ? Math.max(1, Math.min(6, minutes / 5)) : 1;
 }
 
 function ageLabel(minutes: number): string {
@@ -1486,9 +1529,7 @@ export function RadarViewer() {
         )
       : domain.layers[activeAnchorId]?.frames ?? [];
     if (!frames.length) return [];
-    const newest = Date.parse(frames[frames.length - 1].validTime);
-    const cutoff = newest - effectiveRangeHours * 60 * 60 * 1000;
-    return frames.filter((frame) => Date.parse(frame.validTime) >= cutoff);
+    return playbackFrames(frames, effectiveRangeHours);
   }, [activeAnchorId, domain, effectiveRangeHours, product]);
 
   const availableRangeOptions = useMemo(
@@ -1497,12 +1538,8 @@ export function RadarViewer() {
   );
 
   const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
-  const cadenceFactor = useMemo(
-    () => playbackCadenceFactor(anchorFrames),
-    [anchorFrames],
-  );
-
   const currentFrameIndex = Math.min(frameIndex, Math.max(0, anchorFrames.length - 1));
+  const stepFactor = playbackStepFactor(anchorFrames, currentFrameIndex);
   const isAnimating = playing && pageVisible && anchorFrames.length > 1;
   const anchor = anchorFrames[currentFrameIndex];
   const lightningController = product?.layers.find((recipe) => LIGHTNING_CONTROLLERS.has(recipe.id));
@@ -1725,7 +1762,7 @@ export function RadarViewer() {
       }
       return references;
     };
-    const lookaheadCount = 2;
+    const lookaheadCount = 6;
     const lookahead = Array.from({ length: Math.min(lookaheadCount, anchorFrames.length - 1) }, (_, offset) => {
       const index = (currentFrameIndex + offset + 1) % anchorFrames.length;
       const candidate = anchorFrames[index];
@@ -1734,51 +1771,34 @@ export function RadarViewer() {
         pointReferences: pointReferencesFor(candidate),
       };
     });
-    const nextFrame = lookahead[0];
-    if (!nextFrame) return;
+    if (!lookahead.length) return;
 
-    // Decode only the next two maps. A large rolling decode buffer competes
-    // with painting and can make the whole browser choppy on broad products.
+    // Keep a modest six-frame decode buffer, but never let network/decode
+    // variance alter the display clock. Every recent frame advances on the
+    // same five-minute wall-clock interval.
     lookahead.forEach((candidate) => {
       candidate.urls.forEach((url) => void preloadImageFrame(url));
       candidate.pointReferences.forEach((reference) => preloadPointFrame(reference.url));
     });
-    let cancelled = false;
-    let timer: number | undefined;
-    const loads = nextFrame.urls.map(preloadImageFrame);
-    loads.push(...nextFrame.pointReferences.map((reference) => (
-      loadPointFrame(reference.url).then(() => undefined).catch(() => undefined)
-    )));
-
-    void Promise.all(loads).then(() => {
-      if (cancelled) return;
-      const finalFrame = currentFrameIndex === anchorFrames.length - 1;
-      // A ten-minute frame is held twice as long as a five-minute frame, so an
-      // hour of weather takes the same playback time at a given speed. The
-      // loop-end pause stays fixed instead of being doubled with the cadence.
-      const delay = (
-        110 * cadenceFactor
-        + (finalFrame ? 215 : 0)
-      ) / speed;
-      timer = window.setTimeout(() => advance(1), delay);
-    });
+    const finalFrame = currentFrameIndex === anchorFrames.length - 1;
+    const delay = (110 * stepFactor + (finalFrame ? 215 : 0)) / speed;
+    const timer = window.setTimeout(() => advance(1), delay);
 
     return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
+      window.clearTimeout(timer);
     };
   }, [
     advance,
     anchorFrames,
     catalog,
     catalogBase,
-    cadenceFactor,
     currentFrameIndex,
     domain,
     isAnimating,
     optionalLayers,
     product,
     speed,
+    stepFactor,
   ]);
 
   useEffect(() => {

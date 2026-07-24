@@ -184,9 +184,10 @@ LAYERS: dict[str, Layer] = {
         id="lightning-trail",
         title="CLDN 30-minute age trail",
         source_layer=None,
-        # Derived anchors may follow a six-minute radar clock. Keep alignment
-        # tight so an age-coloured trail is not reused on much newer imagery.
-        max_age_minutes=6,
+        # Lightning is a ten-minute observation. Retain the newest honest trail
+        # through short source/ingest gaps instead of dropping it on intervening
+        # five-minute display frames.
+        max_age_minutes=30,
     ),
     "lightning-flash": Layer(
         id="lightning-flash",
@@ -206,7 +207,7 @@ LAYERS: dict[str, Layer] = {
         title="GOES-18 GLM 30-minute total-lightning age trail",
         source_layer=None,
         source="NOAA GOES-18",
-        max_age_minutes=10,
+        max_age_minutes=30,
     ),
     "glm-lightning-flash": Layer(
         id="glm-lightning-flash",
@@ -380,7 +381,7 @@ def regional_layer_id(base_layer_id: str, region_id: str) -> str:
 
 for _region_id in VIEWPORTS:
     for _base_layer_id, _title, _max_age in (
-        ("lightning-trail", "CLDN 30-minute age trail", 6),
+        ("lightning-trail", "CLDN 30-minute age trail", 30),
         ("lightning-flash", "CLDN newest-lightning arrival flash", 6),
         ("hotspots", "Active-wildfire and thermal-hotspot overlay", 30),
     ):
