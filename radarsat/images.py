@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 from pathlib import Path
 
@@ -8,7 +9,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from .config import Domain
-from .geomet import projected_bbox
+from .geomet import projected_bbox, projection_longitude
 
 
 DEFAULT_BCH_WATERSHEDS = (
@@ -19,11 +20,22 @@ DEFAULT_BCH_WATERSHEDS = (
     / "bch"
     / "AllWatershedsUTM.shp"
 )
+DEFAULT_TRANSMISSION_LINES = (
+    Path(__file__).resolve().parents[2]
+    / "fcstGraphics"
+    / "data"
+    / "bc_transmission_lines.geojson"
+)
 
 
 def bch_watershed_source() -> Path:
     configured = os.environ.get("RADARSAT_BCH_WATERSHEDS")
     return Path(configured).expanduser() if configured else DEFAULT_BCH_WATERSHEDS
+
+
+def transmission_line_source() -> Path:
+    configured = os.environ.get("RADARSAT_TRANSMISSION_LINES")
+    return Path(configured).expanduser() if configured else DEFAULT_TRANSMISSION_LINES
 
 
 def save_satellite(content: bytes, destination: Path) -> None:
@@ -108,9 +120,17 @@ def reproject_overlay(
     return output.getvalue()
 
 
-def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
+def lightning_trail(
+    source_paths: list[Path | None],
+    destination: Path,
+    *,
+    scale: int = 1,
+) -> None:
     """Render age-fading lightning clusters as haloed bolt markers."""
+    if scale < 1:
+        raise ValueError("Lightning raster scale must be at least one")
     destination.parent.mkdir(parents=True, exist_ok=True)
+    source_size: tuple[int, int] | None = None
     size: tuple[int, int] | None = None
     masks: list[np.ndarray | None] = []
     for path in source_paths:
@@ -118,8 +138,13 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
             masks.append(None)
             continue
         source = Image.open(path).convert("RGBA")
-        size = source.size
-        masks.append(np.asarray(source.getchannel("A")) > 20)
+        current_source_size = source.size
+        if source_size is not None and current_source_size != source_size:
+            raise ValueError("Lightning source frames do not share a common grid")
+        source_size = current_source_size
+        size = (current_source_size[0] * scale, current_source_size[1] * scale)
+        mask = np.asarray(source.getchannel("A")) > 20
+        masks.append(mask)
     if size is None:
         raise ValueError("At least one lightning source frame is required")
 
@@ -157,9 +182,9 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
     # white-to-yellow bolt symbols used before lightning moved to a lightweight
     # transparent raster; the dark outline remains visible over bright cloud.
     styles = [
-        ((255, 254, 240, 255), (255, 255, 255, 180), 8),
-        ((255, 242, 154, 210), (255, 255, 255, 120), 7),
-        ((255, 224, 100, 145), (255, 255, 255, 70), 6),
+        ((255, 254, 240, 255), (255, 255, 255, 180), 8 * scale),
+        ((255, 242, 154, 210), (255, 255, 255, 120), 7 * scale),
+        ((255, 224, 100, 145), (255, 255, 255, 70), 6 * scale),
     ]
     for age_index, (mask, (fill, glow, half_height)) in reversed(list(enumerate(zip(masks, styles)))):
         if mask is None:
@@ -168,9 +193,11 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
         bolt_draw = ImageDraw.Draw(bolt_layer, "RGBA")
         arrival_glow = Image.new("RGBA", size, (0, 0, 0, 0)) if age_index == 0 else None
         arrival_draw = ImageDraw.Draw(arrival_glow, "RGBA") if arrival_glow is not None else None
-        for x, y, area in component_centres(mask):
-            height = half_height + min(2, max(0, area.bit_length() - 2))
-            width = max(5, round(height * 0.72))
+        for source_x, source_y, area in component_centres(mask):
+            x = round(source_x * scale + (scale - 1) / 2)
+            y = round(source_y * scale + (scale - 1) / 2)
+            height = half_height + min(2 * scale, max(0, area.bit_length() - 2) * scale)
+            width = max(5 * scale, round(height * 0.72))
             bolt = [
                 (x + round(width * 0.18), y - height),
                 (x - width, y + round(height * 0.08)),
@@ -181,13 +208,25 @@ def lightning_trail(source_paths: list[Path | None], destination: Path) -> None:
             ]
             closed_bolt = bolt + [bolt[0]]
             if arrival_draw is not None:
-                arrival_draw.line(closed_bolt, fill=(255, 252, 214, 170), width=7, joint="curve")
+                arrival_draw.line(
+                    closed_bolt,
+                    fill=(255, 252, 214, 170),
+                    width=7 * scale,
+                    joint="curve",
+                )
                 arrival_draw.polygon(bolt, fill=(255, 255, 244, 190))
-            bolt_draw.line(closed_bolt, fill=(2, 7, 11, min(225, fill[3])), width=5, joint="curve")
-            bolt_draw.line(closed_bolt, fill=glow, width=3, joint="curve")
+            bolt_draw.line(
+                closed_bolt,
+                fill=(2, 7, 11, min(225, fill[3])),
+                width=5 * scale,
+                joint="curve",
+            )
+            bolt_draw.line(closed_bolt, fill=glow, width=3 * scale, joint="curve")
             bolt_draw.polygon(bolt, fill=fill)
         if arrival_glow is not None:
-            canvas.alpha_composite(arrival_glow.filter(ImageFilter.GaussianBlur(radius=5)))
+            canvas.alpha_composite(
+                arrival_glow.filter(ImageFilter.GaussianBlur(radius=5 * scale))
+            )
         canvas.alpha_composite(bolt_layer)
     canvas.quantize(colors=32, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(
         destination,
@@ -267,6 +306,94 @@ def render_watershed_overlay(
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:
         image.save(temporary, "PNG", optimize=True)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def render_transmission_overlay(
+    domain: Domain,
+    destination: Path,
+    source_path: Path | None = None,
+) -> None:
+    """Render the GeoBC transmission network onto the aligned map grid."""
+    from pyproj import Transformer
+
+    source = source_path or transmission_line_source()
+    if not source.is_file():
+        raise FileNotFoundError(f"BC transmission-line GeoJSON is missing: {source}")
+    payload = json.loads(source.read_text())
+    features = payload.get("features", [])
+    if payload.get("type") != "FeatureCollection" or not isinstance(features, list):
+        raise RuntimeError("BC transmission-line source is not a GeoJSON FeatureCollection")
+
+    def coordinate_lines(geometry: object):
+        if not isinstance(geometry, dict):
+            return
+        geometry_type = geometry.get("type")
+        coordinates = geometry.get("coordinates")
+        if geometry_type == "LineString" and isinstance(coordinates, list):
+            yield coordinates
+        elif geometry_type == "MultiLineString" and isinstance(coordinates, list):
+            yield from coordinates
+
+    transformer = Transformer.from_crs(
+        "EPSG:4326",
+        domain.crs,
+        always_xy=True,
+        force_over=True,
+    )
+    xmin, ymin, xmax, ymax = projected_bbox(domain)
+    pixel_lines: list[list[tuple[float, float]]] = []
+    for feature in features:
+        if not isinstance(feature, dict):
+            continue
+        for coordinates in coordinate_lines(feature.get("geometry")):
+            values: list[tuple[float, float]] = []
+            for coordinate in coordinates:
+                if not isinstance(coordinate, list) or len(coordinate) < 2:
+                    continue
+                try:
+                    longitude = projection_longitude(float(coordinate[0]), domain)
+                    latitude = float(coordinate[1])
+                except (TypeError, ValueError):
+                    continue
+                x, y = transformer.transform(longitude, latitude)
+                if not (np.isfinite(x) and np.isfinite(y)):
+                    continue
+                values.append((x, y))
+            if len(values) < 2:
+                continue
+            line_x = [point[0] for point in values]
+            line_y = [point[1] for point in values]
+            if max(line_x) < xmin or min(line_x) > xmax or max(line_y) < ymin or min(line_y) > ymax:
+                continue
+            pixel_lines.append([
+                (
+                    (x - xmin) / (xmax - xmin) * (domain.width - 1),
+                    (ymax - y) / (ymax - ymin) * (domain.height - 1),
+                )
+                for x, y in values
+            ])
+    if not pixel_lines:
+        raise RuntimeError("BC transmission-line source does not intersect the map domain")
+
+    image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image, "RGBA")
+    halo_width = 3 if domain.tier == "bc" else 2
+    core_width = 2 if domain.tier == "bc" else 1
+    for line in pixel_lines:
+        draw.line(line, fill=(255, 255, 255, 225), width=halo_width, joint="curve")
+    for line in pixel_lines:
+        draw.line(line, fill=(98, 103, 109, 230), width=core_width, joint="curve")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    try:
+        image.quantize(
+            colors=16,
+            method=Image.Quantize.FASTOCTREE,
+            dither=Image.Dither.NONE,
+        ).save(temporary, "PNG", optimize=True)
         temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)

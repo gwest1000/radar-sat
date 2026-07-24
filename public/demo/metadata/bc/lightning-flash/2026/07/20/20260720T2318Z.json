@@ -1,0 +1,11 @@
+{
+  "validTime": "2026-07-20T23:18:00Z",
+  "path": "frames/bc/lightning-flash/2026/07/20/20260720T2318Z.png",
+  "source": "ECCC GeoMet",
+  "sourceLayer": "derived",
+  "fetchedAt": "2026-07-24T04:04:59Z",
+  "sourceTimes": {
+    "age0": "2026-07-20T23:10:00Z"
+  },
+  "renderVersion": 1
+}

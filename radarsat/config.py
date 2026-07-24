@@ -188,6 +188,24 @@ LAYERS: dict[str, Layer] = {
         # tight so an age-coloured trail is not reused on much newer imagery.
         max_age_minutes=6,
     ),
+    "lightning-flash": Layer(
+        id="lightning-flash",
+        title="CLDN newest-lightning arrival flash",
+        source_layer=None,
+        max_age_minutes=6,
+    ),
+    "lightning-trail-hires": Layer(
+        id="lightning-trail-hires",
+        title="CLDN high-resolution 30-minute age trail",
+        source_layer=None,
+        max_age_minutes=6,
+    ),
+    "lightning-flash-hires": Layer(
+        id="lightning-flash-hires",
+        title="CLDN high-resolution newest-lightning arrival flash",
+        source_layer=None,
+        max_age_minutes=6,
+    ),
     "glm-lightning": Layer(
         id="glm-lightning",
         title="GOES-18 GLM 10-minute total-lightning flashes",
@@ -198,6 +216,13 @@ LAYERS: dict[str, Layer] = {
     "glm-lightning-trail": Layer(
         id="glm-lightning-trail",
         title="GOES-18 GLM 30-minute total-lightning age trail",
+        source_layer=None,
+        source="NOAA GOES-18",
+        max_age_minutes=10,
+    ),
+    "glm-lightning-flash": Layer(
+        id="glm-lightning-flash",
+        title="GOES-18 GLM newest-lightning arrival flash",
         source_layer=None,
         source="NOAA GOES-18",
         max_age_minutes=10,
@@ -414,9 +439,10 @@ def _overlay_product(
             {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "watersheds", "opacity": 1.0},
+            {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
         ],
-        "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds"],
+        "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
             (
                 "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5°N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km."
@@ -426,6 +452,7 @@ def _overlay_product(
             "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
             "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
             "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+            "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
             "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters.",
         ],
     }
@@ -468,6 +495,7 @@ def _broad_product(
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
         ],
         "legends": [
@@ -477,6 +505,7 @@ def _broad_product(
             "glm-lightning-age",
             "smoke-confidence",
             "hotspots",
+            "transmission-lines",
         ],
         "notes": notes
         + [
@@ -573,6 +602,10 @@ LEGENDS: dict[str, dict[str, str]] = {
     "watersheds": {
         "title": "BC Hydro watershed boundary",
         "kind": "watersheds",
+    },
+    "transmission-lines": {
+        "title": "BC transmission lines",
+        "kind": "transmission-lines",
     },
     "hotspots": {
         "title": "Active wildfires and thermal hotspots",

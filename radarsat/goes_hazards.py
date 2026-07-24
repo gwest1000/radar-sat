@@ -305,16 +305,16 @@ def render_smoke_overlay(product: SmokeProduct, domain: Domain, destination: Pat
     medium = target == 1
     high = target == 2
     low = target == 3
-    # Pale neutral smoke tint: enough to reveal a plume while leaving the
-    # underlying true-colour texture visible. Confidence changes opacity, not
-    # implied aerosol concentration.
-    rgba[medium] = np.array((188, 204, 205, 92), dtype=np.uint8)
-    rgba[high] = np.array((244, 220, 174, 166), dtype=np.uint8)
+    # A muted gray-brown separates smoke from the gray and white cloud field
+    # while leaving the underlying true-colour texture visible. Confidence
+    # changes opacity, not implied aerosol concentration.
+    rgba[medium] = np.array((165, 143, 120, 116), dtype=np.uint8)
+    rgba[high] = np.array((218, 179, 127, 178), dtype=np.uint8)
     # For this WestWX experiment, low-confidence detections use the same
     # enhancement as medium-confidence detections. Confidence remains exposed
     # in metadata so the styling can be separated again without changing the
     # source ingest.
-    rgba[low] = np.array((188, 204, 205, 92), dtype=np.uint8)
+    rgba[low] = np.array((165, 143, 120, 116), dtype=np.uint8)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:

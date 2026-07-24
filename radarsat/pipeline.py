@@ -35,6 +35,7 @@ from .images import (
     lightning_trail,
     reproject_overlay,
     render_static_maps,
+    render_transmission_overlay,
     render_watershed_overlay,
     save_coverage,
     save_overlay,
@@ -53,6 +54,8 @@ from .point_frames import (
 
 UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 5
+LIGHTNING_FLASH_RENDER_VERSION = 1
+LIGHTNING_HIRES_RENDER_VERSION = 1
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
@@ -60,9 +63,10 @@ ACTIVE_FIRE_POINT_RENDER_VERSION = 3
 FIRE_OVERLAY_RENDER_VERSION = 1
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
-SMOKE_RENDER_VERSION = 2
+SMOKE_RENDER_VERSION = 3
 GLM_LIGHTNING_RENDER_VERSION = 2
 GLM_LIGHTNING_TRAIL_RENDER_VERSION = 5
+GLM_LIGHTNING_FLASH_RENDER_VERSION = 1
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
@@ -446,6 +450,9 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
     watersheds = root / "static" / domain.id / "bch-watersheds.png"
     if domain.id == "bc" and not watersheds.exists():
         render_watershed_overlay(domain, watersheds)
+    transmission_lines = root / "static" / domain.id / "transmission-lines.png"
+    if not transmission_lines.exists():
+        render_transmission_overlay(domain, transmission_lines)
 
     legend_specs = {
         "legend-radar-rain.png": LAYERS["radar-rain"],
@@ -672,6 +679,9 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 all_anchors.add(lightning_time)
     anchors = sorted(value for value in all_anchors if value >= cutoff)
     output_layer = LAYERS["lightning-trail"]
+    flash_layer = LAYERS["lightning-flash"]
+    hires_layer = LAYERS["lightning-trail-hires"]
+    hires_flash_layer = LAYERS["lightning-flash-hires"]
     source_layer = LAYERS["lightning"]
 
     # A previous capability-timeline implementation could manufacture derived
@@ -679,24 +689,74 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
     # only anchors represented in the local archive.  Older, legitimately
     # retained anchors remain valid because ``all_anchors`` is not hour-limited.
     valid_anchor_stamps = {frame_stamp(value) for value in all_anchors}
-    output_metadata_root = root / "metadata" / domain.id / output_layer.id
-    if output_metadata_root.exists():
-        for path in output_metadata_root.rglob("*.json"):
-            if path.stem in valid_anchor_stamps:
-                continue
-            try:
-                payload = json.loads(path.read_text())
-                image_path = safe_archive_path(root, str(payload.get("path", "")))
-                if image_path.is_file():
-                    image_path.unlink()
-            except (OSError, ValueError, json.JSONDecodeError):
-                pass
-            path.unlink(missing_ok=True)
-    output_frame_root = root / "frames" / domain.id / output_layer.id
-    if output_frame_root.exists():
-        for path in output_frame_root.rglob(f"*.{output_layer.extension}"):
-            if path.stem not in valid_anchor_stamps:
+    for derived_layer in (output_layer, flash_layer, hires_layer, hires_flash_layer):
+        output_metadata_root = root / "metadata" / domain.id / derived_layer.id
+        if output_metadata_root.exists():
+            for path in output_metadata_root.rglob("*.json"):
+                if path.stem in valid_anchor_stamps:
+                    continue
+                try:
+                    payload = json.loads(path.read_text())
+                    image_path = safe_archive_path(root, str(payload.get("path", "")))
+                    if image_path.is_file():
+                        image_path.unlink()
+                except (OSError, ValueError, json.JSONDecodeError):
+                    pass
                 path.unlink(missing_ok=True)
+        output_frame_root = root / "frames" / domain.id / derived_layer.id
+        if output_frame_root.exists():
+            for path in output_frame_root.rglob(f"*.{derived_layer.extension}"):
+                if path.stem not in valid_anchor_stamps:
+                    path.unlink(missing_ok=True)
+
+    def write_derived(
+        layer: Layer,
+        anchor: dt.datetime,
+        existing: list[Path | None],
+        source_times: list[dt.datetime | None],
+        *,
+        render_version: int,
+        scale: int = 1,
+    ) -> None:
+        destination = frame_path(root, domain, layer, anchor)
+        meta = metadata_path(root, domain, layer, anchor)
+        expected_sources = {
+            f"age{index * 10}": format_utc(value)
+            for index, value in enumerate(source_times)
+            if value
+        }
+        current_sources: dict[str, str] = {}
+        current_render_version: int | None = None
+        if meta.exists():
+            try:
+                current_metadata = json.loads(meta.read_text())
+                current_sources = current_metadata.get("sourceTimes", {})
+                current_render_version = current_metadata.get("renderVersion")
+            except (OSError, json.JSONDecodeError):
+                pass
+        if (
+            destination.exists()
+            and current_sources == expected_sources
+            and current_render_version == render_version
+        ):
+            return
+        lightning_trail(existing, destination, scale=scale)
+        write_metadata(
+            root,
+            domain,
+            layer,
+            anchor,
+            destination,
+            {
+                f"age{index * 10}": value
+                for index, value in enumerate(source_times)
+                if value
+            },
+            extra={
+                "renderVersion": render_version,
+                **({"rasterScale": scale} if scale > 1 else {}),
+            },
+        )
 
     for anchor in anchors:
         source_times: list[dt.datetime | None] = []
@@ -713,41 +773,48 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             source_times.append(selected)
         paths = [frame_path(root, domain, source_layer, value) if value else None for value in source_times]
         existing = [path if path and path.exists() else None for path in paths]
-        destination = frame_path(root, domain, output_layer, anchor)
-        meta = metadata_path(root, domain, output_layer, anchor)
         if not any(existing):
-            destination.unlink(missing_ok=True)
-            meta.unlink(missing_ok=True)
+            for layer in (output_layer, flash_layer, hires_layer, hires_flash_layer):
+                frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
+                metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
             continue
-        expected_sources = {
-            f"age{index * 10}": format_utc(value)
-            for index, value in enumerate(source_times)
-            if value
-        }
-        current_sources: dict[str, str] = {}
-        current_render_version: int | None = None
-        if meta.exists():
-            try:
-                current_metadata = json.loads(meta.read_text())
-                current_sources = current_metadata.get("sourceTimes", {})
-                current_render_version = current_metadata.get("renderVersion")
-            except (OSError, json.JSONDecodeError):
-                current_sources = {}
-        if (
-            not destination.exists()
-            or current_sources != expected_sources
-            or current_render_version != LIGHTNING_TRAIL_RENDER_VERSION
-        ):
-            lightning_trail(existing, destination)
-            write_metadata(
-                root,
-                domain,
-                output_layer,
+        write_derived(
+            output_layer,
+            anchor,
+            existing,
+            source_times,
+            render_version=LIGHTNING_TRAIL_RENDER_VERSION,
+        )
+        if existing[0] is not None:
+            flash_sources = [source_times[0], None, None]
+            flash_paths = [existing[0], None, None]
+            write_derived(
+                flash_layer,
                 anchor,
-                destination,
-                {f"age{index * 10}": value for index, value in enumerate(source_times) if value},
-                extra={"renderVersion": LIGHTNING_TRAIL_RENDER_VERSION},
+                flash_paths,
+                flash_sources,
+                render_version=LIGHTNING_FLASH_RENDER_VERSION,
             )
+            write_derived(
+                hires_flash_layer,
+                anchor,
+                flash_paths,
+                flash_sources,
+                render_version=LIGHTNING_HIRES_RENDER_VERSION,
+                scale=2,
+            )
+        else:
+            for layer in (flash_layer, hires_flash_layer):
+                frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
+                metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
+        write_derived(
+            hires_layer,
+            anchor,
+            existing,
+            source_times,
+            render_version=LIGHTNING_HIRES_RENDER_VERSION,
+            scale=2,
+        )
 
 
 def _rendered_frame_ready(
@@ -916,6 +983,7 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
     """Turn exact ten-minute GLM bins into the common fading bolt symbols."""
     source_layer = LAYERS["glm-lightning"]
     output_layer = LAYERS["glm-lightning-trail"]
+    flash_layer = LAYERS["glm-lightning-flash"]
     source_times = _archived_layer_times(root, domain, source_layer)
     if not source_times:
         return
@@ -955,22 +1023,57 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
             and current_sources == expected_sources
             and current_version == GLM_LIGHTNING_TRAIL_RENDER_VERSION
         ):
+            pass
+        else:
+            lightning_trail(existing, destination)
+            write_metadata(
+                root,
+                domain,
+                output_layer,
+                anchor,
+                destination,
+                {
+                    f"age{index * 10}": value
+                    for index, value in enumerate(selected)
+                    if value is not None
+                },
+                source="NOAA GOES-18",
+                source_layer="GLM-L2-LCFA 30-minute age trail",
+                extra={"renderVersion": GLM_LIGHTNING_TRAIL_RENDER_VERSION},
+            )
+        if existing[0] is None or selected[0] is None:
+            frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
+            metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
             continue
-        lightning_trail(existing, destination)
+        flash_destination = frame_path(root, domain, flash_layer, anchor)
+        flash_metadata = metadata_path(root, domain, flash_layer, anchor)
+        flash_sources = {"age0": format_utc(selected[0])}
+        current_flash_sources: dict[str, str] = {}
+        current_flash_version: int | None = None
+        if flash_metadata.is_file():
+            try:
+                flash_payload = json.loads(flash_metadata.read_text())
+                current_flash_sources = flash_payload.get("sourceTimes", {})
+                current_flash_version = flash_payload.get("renderVersion")
+            except (OSError, json.JSONDecodeError):
+                pass
+        if (
+            flash_destination.is_file()
+            and current_flash_sources == flash_sources
+            and current_flash_version == GLM_LIGHTNING_FLASH_RENDER_VERSION
+        ):
+            continue
+        lightning_trail([existing[0], None, None], flash_destination)
         write_metadata(
             root,
             domain,
-            output_layer,
+            flash_layer,
             anchor,
-            destination,
-            {
-                f"age{index * 10}": value
-                for index, value in enumerate(selected)
-                if value is not None
-            },
+            flash_destination,
+            {"age0": selected[0]},
             source="NOAA GOES-18",
-            source_layer="GLM-L2-LCFA 30-minute age trail",
-            extra={"renderVersion": GLM_LIGHTNING_TRAIL_RENDER_VERSION},
+            source_layer="GLM-L2-LCFA newest-flash arrival overlay",
+            extra={"renderVersion": GLM_LIGHTNING_FLASH_RENDER_VERSION},
         )
 
 

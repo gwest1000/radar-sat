@@ -3,10 +3,10 @@
   "path": "frames/bc/lightning-trail/2026/07/20/20260720T2306Z.png",
   "source": "ECCC GeoMet",
   "sourceLayer": "derived",
-  "fetchedAt": "2026-07-21T05:31:49Z",
+  "fetchedAt": "2026-07-24T04:04:57Z",
   "sourceTimes": {
     "age0": "2026-07-20T23:00:00Z",
     "age10": "2026-07-20T22:50:00Z"
   },
-  "renderVersion": 2
+  "renderVersion": 5
 }

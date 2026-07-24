@@ -16,7 +16,7 @@ import shapefile
 
 from radarsat.config import LAYERS, Domain
 from radarsat.hotspots import render_fire_overlay, render_hotspots
-from radarsat.images import lightning_trail, render_watershed_overlay
+from radarsat.images import lightning_trail, render_transmission_overlay, render_watershed_overlay
 from radarsat.pipeline import (
     derive_lightning_trails,
     frame_path,
@@ -345,6 +345,56 @@ class NativeRenderTests(unittest.TestCase):
             self.assertTrue(np.any(white_core))
             self.assertTrue(np.any((alpha > 0) & (alpha < 120)))
 
+            hires_destination = root / "trail-hires.png"
+            lightning_trail([source, None, None], hires_destination, scale=2)
+            with Image.open(hires_destination) as hires_image:
+                self.assertEqual(hires_image.size, (160, 120))
+
+    def test_transmission_overlay_uses_haloed_geobc_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "transmission-lines.geojson"
+            source.write_text(json.dumps({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "properties": {},
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[-124.0, 49.0], [-121.0, 52.0]],
+                    },
+                }],
+            }))
+            transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+            xmin, ymin = transformer.transform(-125.0, 48.0)
+            xmax, ymax = transformer.transform(-120.0, 53.0)
+            domain = Domain(
+                id="bc",
+                title="BC",
+                west=-125.0,
+                south=48.0,
+                east=-120.0,
+                north=53.0,
+                crs="EPSG:3857",
+                width=120,
+                height=100,
+                tier="bc",
+                projected_bounds=(xmin, ymin, xmax, ymax),
+            )
+            destination = root / "transmission-lines.png"
+
+            render_transmission_overlay(domain, destination, source)
+
+            rendered = np.asarray(Image.open(destination).convert("RGBA"))
+            self.assertEqual(rendered.shape, (100, 120, 4))
+            self.assertTrue(np.any(rendered[:, :, 3] > 0))
+            self.assertTrue(np.any(
+                (rendered[:, :, 0] < 130)
+                & (rendered[:, :, 1] < 130)
+                & (rendered[:, :, 2] < 130)
+                & (rendered[:, :, 3] > 0)
+            ))
+
     def test_lightning_density_palette_is_transparent_at_zero_and_red_at_legend_ceiling(self) -> None:
         rgba = _lightning_rgba(np.asarray([[np.nan, 0.0, 0.2, 1.0, 2.0, 5.0]], dtype=np.float32))
 
@@ -402,6 +452,13 @@ class NativeRenderTests(unittest.TestCase):
             self.assertTrue(
                 frame_path(output, domain, LAYERS["lightning-trail"], old).exists()
             )
+            self.assertTrue(
+                frame_path(output, domain, LAYERS["lightning-flash"], old).exists()
+            )
+            hires = frame_path(output, domain, LAYERS["lightning-trail-hires"], old)
+            self.assertTrue(hires.exists())
+            with Image.open(hires) as hires_image:
+                self.assertEqual(hires_image.size, (domain.width * 2, domain.height * 2))
 
     def test_native_recovery_window_renders_backlog_older_than_geomet_window(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

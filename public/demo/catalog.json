@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-23T23:36:58.861651Z",
+  "generatedAt": "2026-07-24T04:11:18.775458Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -306,6 +306,528 @@
           "role": "overlay",
           "format": "image/png"
         },
+        "lightning-flash": {
+          "title": "CLDN newest-lightning arrival flash",
+          "maxAgeMinutes": 6,
+          "frames": [
+            {
+              "validTime": "2026-07-20T22:50:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2250Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:55Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T22:50:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:56Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:00:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:57Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:00:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:58Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:10:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:59Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:10:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:00Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:20:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:01Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:30:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:01Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:30:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:02Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:40:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:03Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:40:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:04Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:50:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:05Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:00:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:06Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:00:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:07Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:10:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:08Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:10:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:09Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:20:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:10Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:30:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:11Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:30:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:11Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:40:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:12Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:40:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:13Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:50:00Z"
+              },
+              "renderVersion": 1
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/lightning-flash/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:14Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:50:00Z"
+              },
+              "renderVersion": 1
+            }
+          ],
+          "role": "overlay",
+          "format": "image/png"
+        },
+        "lightning-flash-hires": {
+          "title": "CLDN high-resolution newest-lightning arrival flash",
+          "maxAgeMinutes": 6,
+          "frames": [
+            {
+              "validTime": "2026-07-20T22:50:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2250Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:56Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T22:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:56Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:00:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:57Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:00:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:58Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:10:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:59Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:10:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:00Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:20:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:01Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:30:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:02Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:30:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:03Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:40:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:04Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:40:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:05Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:05Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:00:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:06Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:00:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:07Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:10:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:08Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:10:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:09Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:20:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:10Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:30:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:11Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:30:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:12Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:40:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:13Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:40:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:14Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/lightning-flash-hires/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:14Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            }
+          ],
+          "role": "overlay",
+          "format": "image/png"
+        },
         "lightning-trail": {
           "title": "CLDN 30-minute age trail",
           "maxAgeMinutes": 6,
@@ -315,281 +837,592 @@
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2250Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:04:55Z",
               "sourceTimes": {
                 "age0": "2026-07-20T22:50:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:00:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2300Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:04:56Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:00:00Z",
                 "age10": "2026-07-20T22:50:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:06:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2306Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:04:57Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:00:00Z",
                 "age10": "2026-07-20T22:50:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:12:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2312Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:04:58Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:10:00Z",
                 "age10": "2026-07-20T23:00:00Z",
                 "age20": "2026-07-20T22:50:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:18:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2318Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:04:59Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:10:00Z",
                 "age10": "2026-07-20T23:00:00Z",
                 "age20": "2026-07-20T22:50:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:24:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2324Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:04:59Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:20:00Z",
                 "age10": "2026-07-20T23:10:00Z",
                 "age20": "2026-07-20T23:00:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:30:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2330Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:00Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:30:00Z",
                 "age10": "2026-07-20T23:20:00Z",
                 "age20": "2026-07-20T23:10:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:36:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2336Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:01Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:30:00Z",
                 "age10": "2026-07-20T23:20:00Z",
                 "age20": "2026-07-20T23:10:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:42:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2342Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:02Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:40:00Z",
                 "age10": "2026-07-20T23:30:00Z",
                 "age20": "2026-07-20T23:20:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:48:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2348Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:03Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:40:00Z",
                 "age10": "2026-07-20T23:30:00Z",
                 "age20": "2026-07-20T23:20:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-20T23:54:00Z",
               "path": "frames/bc/lightning-trail/2026/07/20/20260720T2354Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:04Z",
               "sourceTimes": {
                 "age0": "2026-07-20T23:50:00Z",
                 "age10": "2026-07-20T23:40:00Z",
                 "age20": "2026-07-20T23:30:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:00:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0000Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:05Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:00:00Z",
                 "age10": "2026-07-20T23:50:00Z",
                 "age20": "2026-07-20T23:40:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:06:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0006Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:06Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:00:00Z",
                 "age10": "2026-07-20T23:50:00Z",
                 "age20": "2026-07-20T23:40:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:12:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0012Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:07Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:10:00Z",
                 "age10": "2026-07-21T00:00:00Z",
                 "age20": "2026-07-20T23:50:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:18:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0018Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:08Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:10:00Z",
                 "age10": "2026-07-21T00:00:00Z",
                 "age20": "2026-07-20T23:50:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:24:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0024Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:09Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:20:00Z",
                 "age10": "2026-07-21T00:10:00Z",
                 "age20": "2026-07-21T00:00:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:30:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0030Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:10Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:30:00Z",
                 "age10": "2026-07-21T00:20:00Z",
                 "age20": "2026-07-21T00:10:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:36:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0036Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:10Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:30:00Z",
                 "age10": "2026-07-21T00:20:00Z",
                 "age20": "2026-07-21T00:10:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:42:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0042Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:11Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:40:00Z",
                 "age10": "2026-07-21T00:30:00Z",
                 "age20": "2026-07-21T00:20:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:48:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0048Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:12Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:40:00Z",
                 "age10": "2026-07-21T00:30:00Z",
                 "age20": "2026-07-21T00:20:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T00:54:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0054Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:49Z",
+              "fetchedAt": "2026-07-24T04:05:13Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:50:00Z",
                 "age10": "2026-07-21T00:40:00Z",
                 "age20": "2026-07-21T00:30:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
             },
             {
               "validTime": "2026-07-21T01:00:00Z",
               "path": "frames/bc/lightning-trail/2026/07/21/20260721T0100Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-07-21T05:31:50Z",
+              "fetchedAt": "2026-07-24T04:05:14Z",
               "sourceTimes": {
                 "age0": "2026-07-21T00:50:00Z",
                 "age20": "2026-07-21T00:40:00Z"
               },
-              "renderVersion": 2
+              "renderVersion": 5
+            }
+          ],
+          "role": "overlay",
+          "format": "image/png"
+        },
+        "lightning-trail-hires": {
+          "title": "CLDN high-resolution 30-minute age trail",
+          "maxAgeMinutes": 6,
+          "frames": [
+            {
+              "validTime": "2026-07-20T22:50:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2250Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:56Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T22:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:00:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2300Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:57Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:00:00Z",
+                "age10": "2026-07-20T22:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:06:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2306Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:58Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:00:00Z",
+                "age10": "2026-07-20T22:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:12:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2312Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:58Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:10:00Z",
+                "age10": "2026-07-20T23:00:00Z",
+                "age20": "2026-07-20T22:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:18:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2318Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:04:59Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:10:00Z",
+                "age10": "2026-07-20T23:00:00Z",
+                "age20": "2026-07-20T22:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:24:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2324Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:00Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:20:00Z",
+                "age10": "2026-07-20T23:10:00Z",
+                "age20": "2026-07-20T23:00:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:30:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2330Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:01Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:30:00Z",
+                "age10": "2026-07-20T23:20:00Z",
+                "age20": "2026-07-20T23:10:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:36:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2336Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:02Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:30:00Z",
+                "age10": "2026-07-20T23:20:00Z",
+                "age20": "2026-07-20T23:10:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:42:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2342Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:03Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:40:00Z",
+                "age10": "2026-07-20T23:30:00Z",
+                "age20": "2026-07-20T23:20:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:48:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2348Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:04Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:40:00Z",
+                "age10": "2026-07-20T23:30:00Z",
+                "age20": "2026-07-20T23:20:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-20T23:54:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/20/20260720T2354Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:05Z",
+              "sourceTimes": {
+                "age0": "2026-07-20T23:50:00Z",
+                "age10": "2026-07-20T23:40:00Z",
+                "age20": "2026-07-20T23:30:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:00:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0000Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:06Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:00:00Z",
+                "age10": "2026-07-20T23:50:00Z",
+                "age20": "2026-07-20T23:40:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:06:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0006Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:07Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:00:00Z",
+                "age10": "2026-07-20T23:50:00Z",
+                "age20": "2026-07-20T23:40:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:12:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0012Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:08Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:10:00Z",
+                "age10": "2026-07-21T00:00:00Z",
+                "age20": "2026-07-20T23:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:18:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0018Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:09Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:10:00Z",
+                "age10": "2026-07-21T00:00:00Z",
+                "age20": "2026-07-20T23:50:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:24:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0024Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:09Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:20:00Z",
+                "age10": "2026-07-21T00:10:00Z",
+                "age20": "2026-07-21T00:00:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:30:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0030Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:10Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:30:00Z",
+                "age10": "2026-07-21T00:20:00Z",
+                "age20": "2026-07-21T00:10:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:36:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0036Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:11Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:30:00Z",
+                "age10": "2026-07-21T00:20:00Z",
+                "age20": "2026-07-21T00:10:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:42:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0042Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:12Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:40:00Z",
+                "age10": "2026-07-21T00:30:00Z",
+                "age20": "2026-07-21T00:20:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:48:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0048Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:13Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:40:00Z",
+                "age10": "2026-07-21T00:30:00Z",
+                "age20": "2026-07-21T00:20:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T00:54:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0054Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:14Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:50:00Z",
+                "age10": "2026-07-21T00:40:00Z",
+                "age20": "2026-07-21T00:30:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
+            },
+            {
+              "validTime": "2026-07-21T01:00:00Z",
+              "path": "frames/bc/lightning-trail-hires/2026/07/21/20260721T0100Z.png",
+              "source": "ECCC GeoMet",
+              "sourceLayer": "derived",
+              "fetchedAt": "2026-07-24T04:05:15Z",
+              "sourceTimes": {
+                "age0": "2026-07-21T00:50:00Z",
+                "age20": "2026-07-21T00:40:00Z"
+              },
+              "renderVersion": 1,
+              "rasterScale": 2
             }
           ],
           "role": "overlay",
@@ -1492,6 +2325,9 @@
         "watersheds": {
           "path": "static/bc/bch-watersheds.png"
         },
+        "transmission-lines": {
+          "path": "static/bc/transmission-lines.png"
+        },
         "boundaries": {
           "path": "static/bc/boundaries.png"
         }
@@ -1630,6 +2466,10 @@
           "opacity": 1.0
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -1640,13 +2480,15 @@
         "lightning-age",
         "smoke-confidence",
         "hotspots",
-        "watersheds"
+        "watersheds",
+        "transmission-lines"
       ],
       "notes": [
         "This view uses genuine ten-minute GOES-18 full-disk scans. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ]
     },
@@ -1753,6 +2595,10 @@
           "opacity": 1.0
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -1763,13 +2609,15 @@
         "lightning-age",
         "smoke-confidence",
         "hotspots",
-        "watersheds"
+        "watersheds",
+        "transmission-lines"
       ],
       "notes": [
         "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
@@ -1883,6 +2731,10 @@
           "opacity": 1.0
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -1893,13 +2745,15 @@
         "lightning-age",
         "smoke-confidence",
         "hotspots",
-        "watersheds"
+        "watersheds",
+        "transmission-lines"
       ],
       "notes": [
         "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
@@ -2013,6 +2867,10 @@
           "opacity": 1.0
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -2023,13 +2881,15 @@
         "lightning-age",
         "smoke-confidence",
         "hotspots",
-        "watersheds"
+        "watersheds",
+        "transmission-lines"
       ],
       "notes": [
         "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
@@ -2143,6 +3003,10 @@
           "opacity": 1.0
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -2153,13 +3017,15 @@
         "lightning-age",
         "smoke-confidence",
         "hotspots",
-        "watersheds"
+        "watersheds",
+        "transmission-lines"
       ],
       "notes": [
         "This view uses genuine ten-minute GOES-18 full-disk scans. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
+        "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
@@ -2241,6 +3107,10 @@
           "defaultEnabled": true
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -2251,7 +3121,8 @@
         "ptype",
         "glm-lightning-age",
         "smoke-confidence",
-        "hotspots"
+        "hotspots",
+        "transmission-lines"
       ],
       "notes": [
         "The Pacific-centred crop covers roughly 170\u00b0E\u2013102\u00b0W and 20\u201366\u00b0N without a dateline seam.",
@@ -2339,6 +3210,10 @@
           "defaultEnabled": true
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -2349,7 +3224,8 @@
         "ptype",
         "glm-lightning-age",
         "smoke-confidence",
-        "hotspots"
+        "hotspots",
+        "transmission-lines"
       ],
       "notes": [
         "GOES-18 supplies genuine ten-minute scan times on the common 2 km display grid; the far eastern edge has weaker viewing geometry than the legacy GOES-18/19 blend.",
@@ -2438,6 +3314,10 @@
           "defaultEnabled": true
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
           "id": "boundaries",
           "opacity": 1.0
         }
@@ -2448,7 +3328,8 @@
         "ptype",
         "glm-lightning-age",
         "smoke-confidence",
-        "hotspots"
+        "hotspots",
+        "transmission-lines"
       ],
       "notes": [
         "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
@@ -2499,6 +3380,10 @@
       "title": "BC Hydro watershed boundary",
       "kind": "watersheds"
     },
+    "transmission-lines": {
+      "title": "BC transmission lines",
+      "kind": "transmission-lines"
+    },
     "hotspots": {
       "title": "Active wildfires and thermal hotspots",
       "kind": "hotspots"
@@ -2519,6 +3404,7 @@
     "BC Wildfire Service": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0",
     "NIFC WFIGS": "https://www.arcgis.com/home/item.html?id=4181a117dc9e43db8598533e29972015",
     "NOAA Open Data": "https://www.ncei.noaa.gov/products/ncei-data-noaa-open-dissemination-program",
-    "NOAA GOES-18": "https://www.ncei.noaa.gov/products/satellite/goes-r-series"
+    "NOAA GOES-18": "https://www.ncei.noaa.gov/products/satellite/goes-r-series",
+    "GeoBC": "https://catalogue.data.gov.bc.ca/dataset/transmission-lines"
   }
 }

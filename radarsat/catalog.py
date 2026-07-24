@@ -142,6 +142,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
             for layer_id, filename in (
                 ("base-dark", "base-dark.png"),
                 ("watersheds", "bch-watersheds.png"),
+                ("transmission-lines", "transmission-lines.png"),
                 ("boundaries", "boundaries.png"),
             ):
                 path = root / "static" / domain_id / filename
@@ -171,6 +172,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
             "NIFC WFIGS": "https://www.arcgis.com/home/item.html?id=4181a117dc9e43db8598533e29972015",
             "NOAA Open Data": "https://www.ncei.noaa.gov/products/ncei-data-noaa-open-dissemination-program",
             "NOAA GOES-18": "https://www.ncei.noaa.gov/products/satellite/goes-r-series",
+            "GeoBC": "https://catalogue.data.gov.bc.ca/dataset/transmission-lines",
         },
     }
 

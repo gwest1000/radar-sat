@@ -82,6 +82,9 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /resilientActiveFireFrameReferences/);
   assert.match(viewer, /usesRasterLightning\(product\)/);
   assert.match(viewer, /usesRasterFire\(product\)/);
+  assert.match(viewer, /"lightning-trail-hires"/);
+  assert.match(viewer, /"lightning-flash-hires"/);
+  assert.match(viewer, /lightning-arrival-layer/);
   assert.match(viewer, /usesRasterFire\(product\) && recipe\.id === "hotspots"/);
   assert.match(viewer, /createRadialGradient/);
   assert.match(viewer, /layerId\.startsWith\("westwx-"\)/);
@@ -92,7 +95,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(styles, /\.fire-count/);
   assert.match(styles, /\.hotspot-fire-marker svg/);
   assert.match(styles, /\.eccc-north-fallback/);
-  assert.doesNotMatch(styles, /@keyframes lightning-arrival/);
+  assert.match(styles, /@keyframes lightning-raster-arrival/);
+  assert.match(styles, /\.lightning-arrival-layer/);
   assert.match(styles, /\.lightning-marker\.age-3 \{ color: #f6d451/);
 });
 
@@ -143,6 +147,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.some((product) => product.group === "Snow / fog"), false);
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");
+  assert.equal(demo.domains.bc.staticLayers["transmission-lines"].path, "static/bc/transmission-lines.png");
+  assert.equal(overlay.legends.includes("transmission-lines"), true);
   assert.match(overlay.notes.join(" "), /54-polygon BC Hydro boundary source/);
   assert.equal(demo.products.some((product) => product.id === "bc-lightning"), false);
   assert.equal(demo.products.some((product) => product.id === "north-america-overlay"), true);

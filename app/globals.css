@@ -292,6 +292,28 @@ input:focus-visible {
   user-select: none;
 }
 
+.lightning-arrival-layer {
+  z-index: 13;
+  opacity: 0;
+  will-change: opacity;
+  animation: lightning-raster-arrival 560ms ease-out both;
+}
+
+@keyframes lightning-raster-arrival {
+  0% {
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+  }
+  42% {
+    opacity: 0.76;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .point-symbol-layer {
   position: absolute;
   z-index: 12;
@@ -775,6 +797,13 @@ input:focus-visible {
   box-shadow: 0 -1px 0 1px #031017;
 }
 
+.transmission-symbol {
+  width: 28px;
+  height: 0;
+  border-top: 2px solid #62676d;
+  box-shadow: 0 -1px 0 #fff, 0 1px 0 #fff;
+}
+
 .hotspot-legend {
   display: grid;
   gap: 4px;
@@ -1139,6 +1168,11 @@ input:focus-visible {
   *::after {
     scroll-behavior: auto !important;
     transition: none !important;
+  }
+
+  .lightning-arrival-layer {
+    animation: none !important;
+    opacity: 0;
   }
 
 }

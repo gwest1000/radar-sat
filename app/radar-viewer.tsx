@@ -164,6 +164,7 @@ const SOURCE_SUMMARIES: Record<string, string> = {
   "NRCan CWFIS": "Timestamped satellite thermal detections and Canadian active-fire records.",
   "BC Wildfire Service": "Official BC active fires and Wildfires of Note.",
   "NIFC WFIGS": "Current U.S. ICS-209 large-incident locations.",
+  "GeoBC": "Public BC transmission-line geometry used in the forecast fire-weather maps.",
 };
 
 function pointLayerId(controllerId: string): string | undefined {
@@ -174,14 +175,11 @@ function pointLayerId(controllerId: string): string | undefined {
 }
 
 function usesRasterLightning(product: Product | undefined): boolean {
-  // Cropping a full-domain PNG magnifies its encoded symbols. Render lightning
-  // from point data on cropped BC views so bolts and their arrival glow remain
-  // sharp at the final browser resolution.
-  return RASTER_LIGHTNING_OVERLAYS && !(product?.domain === "bc" && product.viewport);
+  return RASTER_LIGHTNING_OVERLAYS && Boolean(product);
 }
 
 function usesRasterFire(product: Product | undefined): boolean {
-  return RASTER_FIRE_OVERLAYS && !(product?.domain === "bc" && product.viewport);
+  return RASTER_FIRE_OVERLAYS && Boolean(product);
 }
 
 function absoluteUrl(path: string, base: string): string {
@@ -581,10 +579,31 @@ function cachedFireMarkers(
 
 type ComposedLayer = {
   id: string;
+  renderId?: string;
   url: string;
   opacity: number;
   frame?: Frame;
+  arrival?: boolean;
 };
+
+function rasterLayerId(recipeId: string, product: Product, domain: Domain): string {
+  if (product.domain === "bc" && product.viewport) {
+    if (recipeId === "lightning-trail" && domain.layers["lightning-trail-hires"]?.frames?.length) {
+      return "lightning-trail-hires";
+    }
+  }
+  return recipeId;
+}
+
+function lightningFlashLayerId(recipeId: string, product: Product): string | undefined {
+  if (recipeId === "lightning-trail") {
+    return product.domain === "bc" && product.viewport
+      ? "lightning-flash-hires"
+      : "lightning-flash";
+  }
+  if (recipeId === "glm-lightning-trail") return "glm-lightning-flash";
+  return undefined;
+}
 
 function isProductLayerEnabled(
   recipe: ProductLayer,
@@ -634,7 +653,8 @@ function composeLayers(
         opacity: recipe.opacity,
       }];
     }
-    let dynamicLayer = domain.layers[recipe.id];
+    const renderedLayerId = rasterLayerId(recipe.id, product, domain);
+    let dynamicLayer = domain.layers[renderedLayerId];
     let frames = dynamicLayer?.frames ?? [];
     if (product.domain === "bc" && recipe.id === "raw-visir-5min") {
       const rapidLayer = domain.layers["raw-visir-5min"];
@@ -664,21 +684,41 @@ function composeLayers(
     // Trail rasters are regenerated on the radar clock, but their actual
     // observations are ten-minute lightning intervals. Select them by that
     // source interval so VALID and the 0–10/10–20/20–30 minute bins agree.
-    const frame = recipe.id.endsWith("lightning-trail")
-      ? atOrBeforeSourceTime(recipe.id, frames, anchor.validTime, dynamicLayer?.maxAgeMinutes)
+    const frame = LIGHTNING_CONTROLLERS.has(recipe.id)
+      ? atOrBeforeSourceTime(renderedLayerId, frames, anchor.validTime, dynamicLayer?.maxAgeMinutes)
       : atOrBefore(frames, anchor.validTime, dynamicLayer?.maxAgeMinutes);
     if (!frame) return [];
-    return [{
+    const layers: ComposedLayer[] = [{
       id: recipe.id,
+      renderId: renderedLayerId,
       url: frameUrl(frame, catalogBase),
       opacity: recipe.opacity,
       frame,
     }];
+    const flashLayerId = lightningFlashLayerId(recipe.id, product);
+    const flashFrame = flashLayerId
+      ? domain.layers[flashLayerId]?.frames.find((candidate) => candidate.validTime === frame.validTime)
+      : undefined;
+    if (
+      flashLayerId
+      && flashFrame
+      && actualSourceTime(flashLayerId, flashFrame) === actualSourceTime(renderedLayerId, frame)
+    ) {
+      layers.push({
+        id: flashLayerId,
+        renderId: flashLayerId,
+        url: frameUrl(flashFrame, catalogBase),
+        opacity: 1,
+        frame: flashFrame,
+        arrival: true,
+      });
+    }
+    return layers;
   });
 }
 
 function actualSourceTime(layerId: string, frame: Frame): string {
-  if (layerId.endsWith("lightning-trail") && frame.sourceTimes) {
+  if (layerId.includes("lightning") && frame.sourceTimes) {
     const values = Object.values(frame.sourceTimes)
       .filter((value) => Number.isFinite(Date.parse(value)))
       .sort((left, right) => Date.parse(right) - Date.parse(left));
@@ -1109,19 +1149,28 @@ function WatershedLegend() {
   );
 }
 
+function TransmissionLegend() {
+  return (
+    <div className="watershed-legend" aria-label="BC transmission line legend">
+      <span className="transmission-symbol" aria-hidden="true" />
+      <span>BC transmission line</span>
+    </div>
+  );
+}
+
 function SmokeLegend({ frame }: { frame?: Frame }) {
   return (
     <div className="hotspot-legend" aria-label="Satellite smoke detection confidence legend">
       <div className="hotspot-key-row">
-        <span className="hotspot-symbol" style={{ background: "rgba(244, 220, 174, .88)" }} />
+        <span className="hotspot-symbol" style={{ background: "rgba(218, 179, 127, .88)" }} />
         <span>High-confidence detection</span>
       </div>
       <div className="hotspot-key-row">
-        <span className="hotspot-symbol" style={{ background: "rgba(188, 204, 205, .72)" }} />
+        <span className="hotspot-symbol" style={{ background: "rgba(165, 143, 120, .72)" }} />
         <span>Medium-confidence detection</span>
       </div>
       <div className="hotspot-key-row">
-        <span className="hotspot-symbol" style={{ background: "rgba(188, 204, 205, .72)" }} />
+        <span className="hotspot-symbol" style={{ background: "rgba(165, 143, 120, .72)" }} />
         <span>Low-confidence detection</span>
       </div>
       <p>
@@ -1949,11 +1998,14 @@ export function RadarViewer() {
               // Raw overlay rasters must retain their exact common-grid dimensions.
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                className="map-layer"
+                className={`map-layer${layer.arrival ? " lightning-arrival-layer" : ""}`}
                 src={layer.url}
                 alt=""
                 aria-hidden="true"
-                key={layer.id}
+                data-layer-id={layer.renderId ?? layer.id}
+                key={layer.arrival
+                  ? `${layer.id}-${layer.frame ? actualSourceTime(layer.id, layer.frame) : layer.url}`
+                  : layer.id}
                 style={{
                   ...cropStyle,
                   opacity: layer.opacity,
@@ -2052,6 +2104,7 @@ export function RadarViewer() {
               }
               if (legend.kind === "raw-ir") return <InfraredLegend key={legendId} />;
               if (legend.kind === "watersheds") return <WatershedLegend key={legendId} />;
+              if (legend.kind === "transmission-lines") return <TransmissionLegend key={legendId} />;
               return legend.path ? (
                 // Legend rasters are supplied by the authoritative data source.
                 // eslint-disable-next-line @next/next/no-img-element
