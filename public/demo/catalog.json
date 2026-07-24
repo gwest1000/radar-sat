@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-24T18:11:48.987944Z",
+  "generatedAt": "2026-07-24T19:34:31.241073Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -4833,16 +4833,20 @@
       },
       "staticLayers": {
         "base-dark": {
-          "path": "static/bc/base-dark.png"
+          "path": "static/bc/base-dark.png",
+          "revision": "1784921503299214247"
         },
         "watersheds": {
-          "path": "static/bc/bch-watersheds.png"
+          "path": "static/bc/bch-watersheds.png",
+          "revision": "1784613755485610720"
         },
         "transmission-lines": {
-          "path": "static/bc/transmission-lines.png"
+          "path": "static/bc/transmission-lines.png",
+          "revision": "1784912403088914324"
         },
         "boundaries": {
-          "path": "static/bc/boundaries.png"
+          "path": "static/bc/boundaries.png",
+          "revision": "1784921504684988390"
         }
       }
     },
@@ -4860,13 +4864,16 @@
       "layers": {},
       "staticLayers": {
         "base-dark": {
-          "path": "static/north-america/base-dark.png"
+          "path": "static/north-america/base-dark.png",
+          "revision": "1784912405743026975"
         },
         "transmission-lines": {
-          "path": "static/north-america/transmission-lines.png"
+          "path": "static/north-america/transmission-lines.png",
+          "revision": "1784912415285972195"
         },
         "boundaries": {
-          "path": "static/north-america/boundaries.png"
+          "path": "static/north-america/boundaries.png",
+          "revision": "1784912414488177792"
         }
       }
     },
@@ -4884,13 +4891,16 @@
       "layers": {},
       "staticLayers": {
         "base-dark": {
-          "path": "static/north-pacific/base-dark.png"
+          "path": "static/north-pacific/base-dark.png",
+          "revision": "1784912418622607499"
         },
         "transmission-lines": {
-          "path": "static/north-pacific/transmission-lines.png"
+          "path": "static/north-pacific/transmission-lines.png",
+          "revision": "1784912446487840721"
         },
         "boundaries": {
-          "path": "static/north-pacific/boundaries.png"
+          "path": "static/north-pacific/boundaries.png",
+          "revision": "1784912445677913965"
         }
       }
     }

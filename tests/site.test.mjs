@@ -38,6 +38,9 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.doesNotMatch(viewer, /document\.hasFocus\(\)/);
   assert.doesNotMatch(viewer, /window\.addEventListener\("blur"/);
   assert.match(viewer, /IMAGE_FRAME_CACHE_LIMIT = 96/);
+  assert.match(viewer, /function StableMapImage/);
+  assert.match(viewer, /setDisplayedSrc\(src\)/);
+  assert.match(viewer, /atOrBefore\(nativeLayer\?\.frames \?\? \[\], anchor\.validTime/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
   assert.match(viewer, /AUTO_REFRESH_MS = 5 \* 60_000/);

@@ -86,6 +86,19 @@ class CatalogTests(unittest.TestCase):
 
             self.assertNotIn("radar-rain", rebuilt["domains"]["bc"]["layers"])
 
+    def test_static_layers_include_a_cache_busting_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            boundary = root / "static" / "bc" / "boundaries.png"
+            boundary.parent.mkdir(parents=True, exist_ok=True)
+            boundary.write_bytes(b"boundary")
+
+            rebuilt = build_catalog(root)
+            entry = rebuilt["domains"]["bc"]["staticLayers"]["boundaries"]
+
+            self.assertEqual(entry["path"], "static/bc/boundaries.png")
+            self.assertTrue(entry["revision"].isdigit())
+
 
 if __name__ == "__main__":
     unittest.main()

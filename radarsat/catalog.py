@@ -165,7 +165,10 @@ def build_catalog(root: Path) -> dict[str, Any]:
             ):
                 path = root / "static" / domain_id / filename
                 if path.exists():
-                    static_layers[layer_id] = {"path": path.relative_to(root).as_posix()}
+                    static_layers[layer_id] = {
+                        "path": path.relative_to(root).as_posix(),
+                        "revision": str(path.stat().st_mtime_ns),
+                    }
             domains[domain_id] = {
                 "id": domain.id,
                 "title": domain.title,

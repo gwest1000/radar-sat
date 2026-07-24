@@ -69,7 +69,7 @@ type Domain = {
   height: number;
   projection: string;
   layers: Record<string, DynamicLayer>;
-  staticLayers: Record<string, { path: string }>;
+  staticLayers: Record<string, { path: string; revision?: string }>;
 };
 
 type ProductLayer = {
@@ -168,7 +168,7 @@ const WEB_MERCATOR_RADIUS = 6_378_137;
 const WGS84_ECCENTRICITY = 0.08181919084262149;
 const NORTH_AMERICA_BOUNDS = [-21_051_700.011, 557_305.257, -4_551_782.871, 12_932_243.112] as const;
 const NORTH_PACIFIC_BOUNDS = [-3_339_584.7, 764_000, 15_584_728.7, 11_413_000] as const;
-const imageFrameCache = new Map<string, Promise<void>>();
+const imageFrameCache = new Map<string, Promise<boolean>>();
 const lightningMarkerCache = new Map<string, Promise<LightningMarker[]>>();
 const fireMarkerCache = new Map<string, Promise<FireMarker[]>>();
 const IMAGE_FRAME_CACHE_LIMIT = 96;
@@ -292,29 +292,31 @@ function frameUrl(frame: Frame, base: string): string {
   return url.toString();
 }
 
-function preloadImageFrame(url: string): Promise<void> {
+function preloadImageFrame(url: string): Promise<boolean> {
   const existing = imageFrameCache.get(url);
   if (existing) {
     imageFrameCache.delete(url);
     imageFrameCache.set(url, existing);
     return existing;
   }
-  const request = new Promise<void>((resolve) => {
+  const request = new Promise<boolean>((resolve) => {
     const image = new Image();
     let finished = false;
-    const finish = () => {
+    const finish = (loaded: boolean) => {
       if (finished) return;
       finished = true;
-      if (typeof image.decode === "function") {
-        void image.decode().catch(() => undefined).then(() => resolve());
+      if (loaded && typeof image.decode === "function") {
+        void image.decode()
+          .then(() => resolve(true))
+          .catch(() => resolve(image.naturalWidth > 0));
       } else {
-        resolve();
+        resolve(loaded);
       }
     };
-    image.onload = finish;
-    image.onerror = () => resolve();
+    image.onload = () => finish(true);
+    image.onerror = () => finish(false);
     image.src = url;
-    if (image.complete) finish();
+    if (image.complete) finish(image.naturalWidth > 0);
   });
   imageFrameCache.set(url, request);
   while (imageFrameCache.size > IMAGE_FRAME_CACHE_LIMIT) {
@@ -323,6 +325,46 @@ function preloadImageFrame(url: string): Promise<void> {
     imageFrameCache.delete(oldest);
   }
   return request;
+}
+
+function StableMapImage({
+  src,
+  className,
+  style,
+  layerId,
+}: {
+  src: string;
+  className: string;
+  style: CSSProperties;
+  layerId: string;
+}) {
+  const [displayedSrc, setDisplayedSrc] = useState(src);
+
+  useEffect(() => {
+    if (displayedSrc === src) return;
+    let current = true;
+    void preloadImageFrame(src).then((loaded) => {
+      if (current && loaded) setDisplayedSrc(src);
+    });
+    return () => {
+      current = false;
+    };
+  }, [displayedSrc, src]);
+
+  // Keep the previous decoded raster visible until the replacement is ready.
+  // This preserves the exact animation clock without showing a blank layer
+  // during a slower satellite download or decode.
+  // eslint-disable-next-line @next/next/no-img-element
+  return (
+    <img
+      className={className}
+      src={displayedSrc}
+      alt=""
+      aria-hidden="true"
+      data-layer-id={layerId}
+      style={style}
+    />
+  );
 }
 
 function pointFrameReferences(
@@ -709,9 +751,11 @@ function composeLayers(
     ) return [];
     const staticLayer = domain.staticLayers[recipe.id];
     if (staticLayer) {
+      const url = new URL(staticLayer.path, catalogBase);
+      if (staticLayer.revision) url.searchParams.set("v", staticLayer.revision);
       return [{
         id: recipe.id,
-        url: absoluteUrl(staticLayer.path, catalogBase),
+        url: url.toString(),
         opacity: recipe.opacity,
       }];
     }
@@ -732,7 +776,8 @@ function composeLayers(
     } else if (product.domain === "bc" && recipe.id === "raw-visir") {
       const standardLayer = domain.layers["raw-visir"];
       const nativeLayer = domain.layers["raw-visir-native"];
-      const nativeFrame = nearestFrame(nativeLayer?.frames ?? [], anchor.validTime, 2);
+      const nativeFrame = nearestFrame(nativeLayer?.frames ?? [], anchor.validTime, 2)
+        ?? atOrBefore(nativeLayer?.frames ?? [], anchor.validTime, nativeLayer?.maxAgeMinutes);
       const standardFrame = nearestFrame(standardLayer?.frames ?? [], anchor.validTime, 2)
         ?? atOrBefore(standardLayer?.frames ?? [], anchor.validTime, standardLayer?.maxAgeMinutes);
       if (nativeFrame) {
@@ -2065,17 +2110,13 @@ export function RadarViewer() {
           >
             {!anchor && <div className="map-loading">No frames are available for this product yet.</div>}
             {composedLayers.map((layer) => (
-              // Raw overlay rasters must retain their exact common-grid dimensions.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <StableMapImage
                 className={`map-layer${layer.arrival ? " lightning-arrival-layer" : ""}`}
                 src={layer.url}
-                alt=""
-                aria-hidden="true"
-                data-layer-id={layer.renderId ?? layer.id}
+                layerId={layer.renderId ?? layer.id}
                 key={layer.arrival
-                  ? `${layer.id}-${layer.frame ? actualSourceTime(layer.id, layer.frame) : layer.url}`
-                  : layer.id}
+                  ? `${product.id}-${layer.id}-${layer.frame ? actualSourceTime(layer.id, layer.frame) : layer.url}`
+                  : `${product.id}-${layer.id}`}
                 style={{
                   ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
                   opacity: layer.opacity,

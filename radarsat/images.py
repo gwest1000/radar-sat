@@ -530,8 +530,13 @@ def render_static_maps(
     matplotlib.use("Agg")
     import matplotlib.patheffects as path_effects
     import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
+    import cartopy.io.shapereader as shapereader
+    from pyproj import Transformer
+    from shapely.geometry import box
+    from shapely.ops import transform as transform_geometry
 
     projection = ccrs.epsg(int(domain.crs.split(":", 1)[1]))
     bbox = projected_bbox(domain)
@@ -564,7 +569,15 @@ def render_static_maps(
         xlocs=range(-180, 181, 10 if domain.tier == "broad" else 5),
         ylocs=range(0 if domain.tier == "broad" else 40, 81, 10 if domain.tier == "broad" else 5),
     )
-    figure.savefig(base_destination, dpi=dpi, transparent=False, pad_inches=0)
+    temporary_base = base_destination.with_suffix(base_destination.suffix + ".tmp")
+    figure.savefig(
+        temporary_base,
+        dpi=dpi,
+        transparent=False,
+        pad_inches=0,
+        format="png",
+    )
+    temporary_base.replace(base_destination)
     plt.close(figure)
 
     boundary_figsize = (
@@ -572,32 +585,104 @@ def render_static_maps(
         domain.height * boundary_scale / dpi,
     )
     figure = plt.figure(figsize=boundary_figsize, dpi=dpi, facecolor="none")
-    axis = figure.add_axes([0, 0, 1, 1], projection=projection)
-    configure_axes(axis)
-    provinces = cfeature.NaturalEarthFeature(
-        "cultural",
-        "admin_1_states_provinces",
-        "10m",
-        facecolor="none",
-    )
-    borders = cfeature.BORDERS.with_scale("10m")
-    coastline = cfeature.COASTLINE.with_scale("10m")
-    for feature, width in ((coastline, 2.8), (borders, 2.6), (provinces, 2.4)):
-        axis.add_feature(
-            feature,
-            edgecolor="#071018",
-            linewidth=width * boundary_scale,
-            alpha=0.86,
-            zorder=5,
+    if domain.id == "bc":
+        # Cartopy clips EPSG:3005 features to the CRS's official BC area of
+        # use, even though our operational grid intentionally extends well
+        # into neighbouring provinces, territories and U.S. states. Project
+        # Natural Earth linework directly onto an ordinary axis so boundaries
+        # cover the complete raster instead of stopping at the BC outline.
+        axis = figure.add_axes([0, 0, 1, 1])
+        configure_axes(axis)
+        clip_box = box(*bbox)
+        transformer = Transformer.from_crs("EPSG:4326", domain.crs, always_xy=True)
+
+        def geometry_segments(geometry: object) -> list[list[tuple[float, float]]]:
+            geometry_type = getattr(geometry, "geom_type", "")
+            if geometry_type in {"LineString", "LinearRing"}:
+                coordinates = list(geometry.coords)
+                return [coordinates] if len(coordinates) >= 2 else []
+            segments: list[list[tuple[float, float]]] = []
+            for child in getattr(geometry, "geoms", ()):
+                segments.extend(geometry_segments(child))
+            return segments
+
+        def natural_earth_segments(category: str, name: str) -> list[list[tuple[float, float]]]:
+            source = shapereader.natural_earth("10m", category, name)
+            segments: list[list[tuple[float, float]]] = []
+            for geometry in shapereader.Reader(source).geometries():
+                west, south, east, north = geometry.bounds
+                if east < -175 or west > -80 or north < 30 or south > 75:
+                    continue
+                try:
+                    projected = transform_geometry(transformer.transform, geometry)
+                    clipped = projected.intersection(clip_box)
+                except Exception:
+                    continue
+                segments.extend(geometry_segments(clipped))
+            return segments
+
+        linework = (
+            (
+                natural_earth_segments("physical", "coastline"),
+                2.8,
+                1.15,
+                0.96,
+            ),
+            (
+                natural_earth_segments("cultural", "admin_0_boundary_lines_land"),
+                2.6,
+                1.05,
+                0.94,
+            ),
+            (
+                natural_earth_segments("cultural", "admin_1_states_provinces_lines"),
+                2.4,
+                0.72,
+                0.78,
+            ),
         )
-    for feature, width, alpha in ((coastline, 1.15, 0.96), (borders, 1.05, 0.94), (provinces, 0.72, 0.78)):
-        axis.add_feature(
-            feature,
-            edgecolor="#f4f7f8",
-            linewidth=width * boundary_scale,
-            alpha=alpha,
-            zorder=6,
+        for segments, dark_width, light_width, light_alpha in linework:
+            axis.add_collection(LineCollection(
+                segments,
+                colors="#071018",
+                linewidths=dark_width * boundary_scale,
+                alpha=0.86,
+                zorder=5,
+            ))
+            axis.add_collection(LineCollection(
+                segments,
+                colors="#f4f7f8",
+                linewidths=light_width * boundary_scale,
+                alpha=light_alpha,
+                zorder=6,
+            ))
+    else:
+        axis = figure.add_axes([0, 0, 1, 1], projection=projection)
+        configure_axes(axis)
+        provinces = cfeature.NaturalEarthFeature(
+            "cultural",
+            "admin_1_states_provinces",
+            "10m",
+            facecolor="none",
         )
+        borders = cfeature.BORDERS.with_scale("10m")
+        coastline = cfeature.COASTLINE.with_scale("10m")
+        for feature, width in ((coastline, 2.8), (borders, 2.6), (provinces, 2.4)):
+            axis.add_feature(
+                feature,
+                edgecolor="#071018",
+                linewidth=width * boundary_scale,
+                alpha=0.86,
+                zorder=5,
+            )
+        for feature, width, alpha in ((coastline, 1.15, 0.96), (borders, 1.05, 0.94), (provinces, 0.72, 0.78)):
+            axis.add_feature(
+                feature,
+                edgecolor="#f4f7f8",
+                linewidth=width * boundary_scale,
+                alpha=alpha,
+                zorder=6,
+            )
 
     cities = [
         ("Victoria", -123.37, 48.43),
@@ -612,22 +697,21 @@ def render_static_maps(
         ("Cranbrook", -115.77, 49.51),
     ]
     for name, lon, lat in cities if domain.id == "bc" else []:
+        city_x, city_y = transformer.transform(lon, lat)
         axis.plot(
-            lon,
-            lat,
+            city_x,
+            city_y,
             marker="o",
             markersize=2.8 * boundary_scale,
             color="#ffffff",
             markeredgecolor="#071018",
             markeredgewidth=0.9 * boundary_scale,
-            transform=ccrs.PlateCarree(),
             zorder=8,
         )
         text = axis.text(
-            lon + 0.18,
-            lat + 0.10,
+            city_x + (bbox[2] - bbox[0]) * 0.0048,
+            city_y + (bbox[3] - bbox[1]) * 0.0038,
             name,
-            transform=ccrs.PlateCarree(),
             color="#ffffff",
             fontsize=7.3 * boundary_scale,
             weight="medium",
@@ -640,5 +724,15 @@ def render_static_maps(
             ),
             path_effects.Normal(),
         ])
-    figure.savefig(boundary_destination, dpi=dpi, transparent=True, pad_inches=0)
+    temporary_boundaries = boundary_destination.with_suffix(
+        boundary_destination.suffix + ".tmp"
+    )
+    figure.savefig(
+        temporary_boundaries,
+        dpi=dpi,
+        transparent=True,
+        pad_inches=0,
+        format="png",
+    )
+    temporary_boundaries.replace(boundary_destination)
     plt.close(figure)
