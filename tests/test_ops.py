@@ -337,7 +337,10 @@ class PublisherTests(unittest.TestCase):
             self.assertTrue(first["fast"])
             self.assertEqual(first["uploaded"], 3)
             self.assertEqual(second["uploaded"], 0)
-            self.assertEqual(fake.events, [("put", "catalog.json")])
+            self.assertEqual(fake.events, [
+                ("put", "westwx-catalog.json"),
+                ("put", "catalog.json"),
+            ])
 
 
 if __name__ == "__main__":

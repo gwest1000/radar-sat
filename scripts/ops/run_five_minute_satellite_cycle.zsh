@@ -90,5 +90,14 @@ fi
   --defer-catalog \
   --apply || print -u2 "Warning: five-minute BC satellite refresh failed; continuing to publication."
 
+if [[ "${RADARSAT_WEB_TILES_ENABLED:-1}" == "1" ]]; then
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_raster_tiles.py" \
+    --output-root "${OUTPUT_ROOT}" \
+    --hours "${RADARSAT_WEB_TILE_HOURS:-3}" \
+    --max-frames "${RADARSAT_WEB_TILE_RAPID_MAX_FRAMES:-4}" \
+    --layer bc:raw-visir-5min \
+    || print -u2 "Warning: five-minute WestWX tile refresh failed; retaining whole-frame fallback."
+fi
+
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
 "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast

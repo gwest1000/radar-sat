@@ -22,6 +22,7 @@ from .config import DOMAINS
 from .geomet import format_utc
 from .pipeline import write_status
 from .retention import keep_frame
+from .westwx_catalog import build_westwx_catalog
 
 
 UTC = dt.timezone.utc
@@ -273,6 +274,30 @@ def _metadata_path_for_frame(root: Path, frame_key: str) -> Path:
     return root.joinpath("metadata", *parts[1:]).with_suffix(".json")
 
 
+def _tile_manifest_paths(root: Path, relative: str) -> list[str]:
+    manifest_relative = Path(relative)
+    if (
+        manifest_relative.is_absolute()
+        or not manifest_relative.parts
+        or ".." in manifest_relative.parts
+    ):
+        raise PublicationSafetyError(f"Unsafe tile manifest path: {relative!r}")
+    root_resolved = root.resolve()
+    manifest = (root / manifest_relative).resolve()
+    if not manifest.is_relative_to(root_resolved) or not manifest.is_file():
+        raise PublicationSafetyError(f"Tile manifest is missing: {relative!r}")
+    try:
+        payload = json.loads(manifest.read_bytes())
+    except json.JSONDecodeError as error:
+        raise PublicationSafetyError(
+            f"Tile manifest is not valid JSON: {relative!r}"
+        ) from error
+    files = payload.get("files")
+    if not isinstance(files, list) or not files:
+        raise PublicationSafetyError(f"Tile manifest contains no files: {relative!r}")
+    return [str(value) for value in files]
+
+
 def discover_objects(root: Path) -> tuple[list[LocalObject], bytes]:
     """Return every object referenced by the catalog plus its metadata.
 
@@ -298,6 +323,13 @@ def discover_objects(root: Path) -> tuple[list[LocalObject], bytes]:
                 metadata_path = _metadata_path_for_frame(root, key)
                 relative_paths.add(metadata_path.relative_to(root).as_posix())
                 frame_count += 1
+                tiles = frame.get("tiles")
+                if isinstance(tiles, dict) and isinstance(tiles.get("manifest"), str):
+                    manifest = str(tiles["manifest"])
+                    relative_paths.add(manifest)
+                    relative_paths.update(
+                        _tile_manifest_paths(root, manifest)
+                    )
         for static in domain.get("staticLayers", {}).values():
             relative_paths.add(str(static.get("path", "")))
     for legend in catalog.get("legends", {}).values():
@@ -408,25 +440,33 @@ def upload_object(client: Any, config: R2Config, item: LocalObject) -> str:
     return sha256
 
 
-def upload_catalog(client: Any, config: R2Config, payload: bytes) -> None:
+def upload_catalog(client: Any, config: R2Config, payload: bytes, key: str = "catalog.json") -> None:
     retry(
         lambda: client.put_object(
             Bucket=config.bucket,
-            Key="catalog.json",
+            Key=key,
             Body=payload,
             ContentType="application/json; charset=utf-8",
             CacheControl=CATALOG_CACHE_CONTROL,
         ),
-        "Upload catalog.json",
+        f"Upload {key}",
     )
 
 
 def remote_valid_time(key: str) -> tuple[dt.datetime, str] | None:
     parts = Path(key).parts
-    if len(parts) < 7 or parts[0] not in {"frames", "metadata"}:
+    if len(parts) < 7 or parts[0] not in {
+        "frames",
+        "metadata",
+        "tiles",
+        "tile-manifests",
+    }:
         return None
     domain_id = parts[1]
-    stamp = Path(parts[-1]).stem
+    stamp = next(
+        (Path(part).stem for part in reversed(parts) if STAMP_RE.fullmatch(Path(part).stem)),
+        "",
+    )
     if domain_id not in DOMAINS or not STAMP_RE.fullmatch(stamp):
         return None
     try:
@@ -516,6 +556,10 @@ def publish(
 ) -> dict[str, object]:
     now = (now or dt.datetime.now(UTC)).astimezone(UTC)
     objects, catalog_bytes = discover_objects(root)
+    westwx_catalog_bytes = json.dumps(
+        build_westwx_catalog(json.loads(catalog_bytes)),
+        separators=(",", ":"),
+    ).encode()
     client = client or boto3_client(config)
     state = PublishState(state_path, f"{config.account_id}/{config.bucket}")
     try:
@@ -575,6 +619,12 @@ def publish(
 
         # This is the commit point: browsers cannot observe references to an
         # object until every referenced asset has uploaded successfully.
+        upload_catalog(
+            client,
+            config,
+            westwx_catalog_bytes,
+            key="westwx-catalog.json",
+        )
         upload_catalog(client, config, catalog_bytes)
 
         # Deletion is intentionally after the catalog commit and is limited to
