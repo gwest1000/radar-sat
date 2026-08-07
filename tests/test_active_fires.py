@@ -385,6 +385,7 @@ class ActiveFireTests(unittest.TestCase):
             self.assertEqual(regional_metadata["activeFireDisplayCount"], 1)
             self.assertEqual(regional_metadata["hotspotDisplayCount"], 1)
             self.assertEqual(regional_metadata["symbolReferenceWidth"], 1120)
+            self.assertEqual(regional_metadata["notableSizeScale"], 0.85)
             detailed_layer = LAYERS[regional_layer_id("hotspots", "southwest")]
             detailed_path = frame_path(root, domain, detailed_layer, valid_time)
             detailed_metadata = json.loads(
@@ -398,6 +399,7 @@ class ActiveFireTests(unittest.TestCase):
                 )
                 self.assertEqual(detailed_image.size, (3840, expected_height))
             self.assertEqual(detailed_metadata["symbolReferenceWidth"], 1440)
+            self.assertEqual(detailed_metadata["notableSizeScale"], 1.0)
             self.assertFalse(detailed_metadata["blurGlow"])
 
 

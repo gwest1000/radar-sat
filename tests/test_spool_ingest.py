@@ -343,6 +343,24 @@ class NativeRenderTests(unittest.TestCase):
             overview_height = overview_bbox[3] - overview_bbox[1]
             self.assertLessEqual(overview_height, round(broad_height * 0.60))
 
+            smaller_destination = root / "fire-overlay-bc-notable-smaller.png"
+            render_fire_overlay(
+                [],
+                notable_row,
+                domain,
+                smaller_destination,
+                output_width=480,
+                symbol_reference_width=360,
+                notable_size_scale=0.85,
+                blur_glow=False,
+            )
+            smaller_bbox = Image.open(smaller_destination).convert("RGBA").getbbox()
+            self.assertIsNotNone(smaller_bbox)
+            assert smaller_bbox is not None
+            smaller_height = smaller_bbox[3] - smaller_bbox[1]
+            self.assertLess(smaller_height, broad_height)
+            self.assertLessEqual(smaller_height, round(broad_height * 0.90))
+
     @mock.patch("radarsat.pipeline.fetch_hotspots")
     def test_hotspot_snapshot_uses_ten_minute_archive_clock(self, fetch: mock.Mock) -> None:
         with tempfile.TemporaryDirectory() as temporary:

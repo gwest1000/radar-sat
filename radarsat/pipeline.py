@@ -56,16 +56,16 @@ UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 7
 LIGHTNING_HOUR_RENDER_VERSION = 1
 LIGHTNING_FLASH_RENDER_VERSION = 9
-LIGHTNING_REGIONAL_RENDER_VERSION = 4
-LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 1
-LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 10
+LIGHTNING_REGIONAL_RENDER_VERSION = 5
+LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 2
+LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 11
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
 ACTIVE_FIRE_POINT_RENDER_VERSION = 3
 FIRE_OVERLAY_RENDER_VERSION = 2
 FIRE_BROAD_OVERLAY_RENDER_VERSION = 3
-FIRE_REGIONAL_RENDER_VERSION = 4
+FIRE_REGIONAL_RENDER_VERSION = 5
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
@@ -79,6 +79,8 @@ PRECIP_OVERLAY_RENDER_VERSION = 1
 REGIONAL_HAZARD_WIDTH = 1920
 DETAILED_REGIONAL_HAZARD_WIDTH = 3840
 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH = 1440
+BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH = 1600
+BC_SMALL_NOTABLE_FIRE_SCALE = 0.85
 BROAD_HAZARD_SCALE = 2
 BROAD_FIRE_SYMBOL_REFERENCE_WIDTH = 1920
 STATIC_BOUNDARY_RENDER_VERSION = 4
@@ -1003,7 +1005,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                         symbol_reference_width=(
                             DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
                             if detailed_region
-                            else 960
+                            else BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH
                         ),
                         blur_glow=not detailed_region,
                     )
@@ -1020,7 +1022,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             regional_symbol_reference_width = (
                 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
                 if detailed_region
-                else 960
+                else BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH
             )
             write_derived(
                 regional_trail_layers[region_id],
@@ -1237,6 +1239,11 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                 viewport=viewport,
                 output_width=render_output_width,
                 symbol_reference_width=render_symbol_reference_width,
+                notable_size_scale=(
+                    BC_SMALL_NOTABLE_FIRE_SCALE
+                    if region_id == "small"
+                    else 1.0
+                ),
                 supersample=1,
                 blur_glow=render_blur_glow,
             )
@@ -1267,6 +1274,11 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                     {
                         "outputWidth": render_output_width,
                         "symbolReferenceWidth": render_symbol_reference_width,
+                        "notableSizeScale": (
+                            BC_SMALL_NOTABLE_FIRE_SCALE
+                            if region_id == "small"
+                            else 1.0
+                        ),
                         "supersample": 1,
                         "blurGlow": render_blur_glow,
                     }
