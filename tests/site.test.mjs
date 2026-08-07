@@ -80,7 +80,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.doesNotMatch(viewer, /sizeHectares < 5_000|sizeHectares >= 5_000/);
   assert.match(viewer, /hotspot-fire-marker/);
   assert.match(viewer, /className="point-symbol-layer fire-canvas"/);
-  assert.match(viewer, /Low-confidence detection/);
+  assert.match(viewer, /Medium\/low-confidence smoke tint/);
   assert.match(viewer, /ecccFallbackPointReferences/);
   assert.match(viewer, /layerId === "westwx-visir"\) return "NOAA VIS\/IR"/);
   assert.match(viewer, /layerId === "daynight"\) return "ECCC VIS\/IR"/);
@@ -127,12 +127,15 @@ test("keeps a compact desktop control rail and gives the map the remaining width
   assert.match(styles, /\.sidebar-layer-controls/);
   assert.match(styles, /\.layers-popover\s*\{[\s\S]*?position: absolute;[\s\S]*?inset: 0/);
   assert.match(styles, /\.layer-selector:hover \.layers-popover/);
-  assert.match(styles, /\.product-switcher \.selector-options\s*\{[\s\S]*?bottom: calc\(100% \+ 4px\)/);
-  assert.match(styles, /\.product-switcher \.product-button\s*\{[\s\S]*?width: 100%/);
+  assert.match(styles, /\.product-switcher \.selector-options,[\s\S]*?\.range-selector \.selector-options\s*\{[\s\S]*?bottom: calc\(100% \+ 4px\)/);
+  assert.match(styles, /\.product-switcher \.product-button,[\s\S]*?\.range-selector \.range-button\s*\{[\s\S]*?width: 100%/);
+  assert.match(styles, /\.legend-content\s*\{[\s\S]*?border: 1px solid var\(--border-strong\)/);
   assert.match(styles, /\.active-layer-list\s*\{[\s\S]*?display: grid/);
   assert.match(styles, /\.product-switcher \.selector-current,[\s\S]*?\.range-selector \.selector-current\s*\{[\s\S]*?width: 100%/);
   assert.match(viewer, /activeLayerLabels\.map\(\(label\) =>/);
   assert.match(viewer, /className="active-layer-item"/);
+  assert.match(viewer, /aria-label=\{`Region: \$\{product\.shortTitle\}`\}/);
+  assert.match(viewer, /aria-label=\{`Time span:/);
   assert.doesNotMatch(viewer, /Mixed freshness|live-summary|freshnessClock/);
   assert.match(viewer, /product-switcher/);
   assert.match(viewer, /className="sources-drawer"/);

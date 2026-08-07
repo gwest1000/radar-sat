@@ -1272,16 +1272,12 @@ function SmokeLegend({ frame }: { frame?: Frame }) {
   return (
     <div className="hotspot-legend" aria-label="Satellite smoke detection confidence legend">
       <div className="hotspot-key-row">
-        <span className="hotspot-symbol" style={{ background: "rgba(218, 179, 127, .88)" }} />
-        <span>High-confidence detection</span>
+        <span className="smoke-confidence-swatch" style={{ background: "rgba(218, 179, 127, .88)" }} />
+        <span>High-confidence smoke tint</span>
       </div>
       <div className="hotspot-key-row">
-        <span className="hotspot-symbol" style={{ background: "rgba(165, 143, 120, .72)" }} />
-        <span>Medium-confidence detection</span>
-      </div>
-      <div className="hotspot-key-row">
-        <span className="hotspot-symbol" style={{ background: "rgba(165, 143, 120, .72)" }} />
-        <span>Low-confidence detection</span>
+        <span className="smoke-confidence-swatch" style={{ background: "rgba(165, 143, 120, .72)" }} />
+        <span>Medium/low-confidence smoke tint</span>
       </div>
       <p>
         {frame?.availability === "unavailable"
@@ -1983,12 +1979,12 @@ export function RadarViewer() {
                 <button
                   className="selector-current"
                   type="button"
+                  aria-label={`Region: ${product.shortTitle}`}
                   aria-expanded={regionMenuOpen}
                   onClick={() => setRegionMenuOpen((open) => !open)}
                 >
-                  <span className="selector-label">Region</span>
-                  <span>{product.shortTitle}</span>
-                  <span className="selector-chevron" aria-hidden="true">›</span>
+                  <span className="selector-value">{product.shortTitle}</span>
+                  <span className="selector-chevron" aria-hidden="true">⌃</span>
                 </button>
                 <div className="selector-options product-menu" role="group" aria-label="Loop products">
                   {availableProducts.map((item) => (
@@ -2017,12 +2013,12 @@ export function RadarViewer() {
                 <button
                   className="selector-current"
                   type="button"
+                  aria-label={`Time span: ${effectiveRangeHours === 168 ? "7 days" : `${effectiveRangeHours} hours`}`}
                   aria-expanded={rangeMenuOpen}
                   onClick={() => setRangeMenuOpen((open) => !open)}
                 >
-                  <span className="selector-label">Span</span>
-                  <span>{effectiveRangeHours === 168 ? "7 d" : `${effectiveRangeHours} h`}</span>
-                  <span className="selector-chevron" aria-hidden="true">›</span>
+                  <span className="selector-value">{effectiveRangeHours === 168 ? "7 d" : `${effectiveRangeHours} h`}</span>
+                  <span className="selector-chevron" aria-hidden="true">⌃</span>
                 </button>
                 <div className="selector-options range-actions" role="group" aria-label="Archive range">
                   {availableRangeOptions.map((hours) => (
