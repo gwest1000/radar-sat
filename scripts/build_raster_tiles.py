@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 from pathlib import Path
 
@@ -38,12 +39,19 @@ def main() -> int:
             raise SystemExit(f"Unknown tile profile: {value}")
     if not profiles:
         profiles = list(RASTER_PROFILES)
-    results = build_profiles(
-        args.output_root.resolve(),
-        profiles,
-        hours=args.hours,
-        max_frames=args.max_frames,
-    )
+    output_root = args.output_root.resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    # Full-disk and rapid-BC workers run independently. A shared advisory lock
+    # prevents their tile cleanup/generation phases from racing each other.
+    lock_path = output_root / ".raster-tiles.lock"
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        results = build_profiles(
+            output_root,
+            profiles,
+            hours=args.hours,
+            max_frames=args.max_frames,
+        )
     print(json.dumps({"status": "ok", "results": results}, indent=2))
     return 0
 

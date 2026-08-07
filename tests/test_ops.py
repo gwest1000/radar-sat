@@ -268,6 +268,29 @@ class PublisherTests(unittest.TestCase):
                     self.config(warn_bytes=1, max_bytes=10),
                 )
 
+    def test_size_guard_allows_recovery_peak_when_expired_objects_restore_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            objects, catalog = discover_objects(root)
+            local_bytes = sum(item.size for item in objects) + len(catalog)
+            expired = "frames/bc/radar-rain/2026/07/01/20260701T0000Z.png"
+            result = size_guard(
+                objects,
+                catalog,
+                {expired: local_bytes},
+                self.config(
+                    warn_bytes=1,
+                    max_bytes=local_bytes + 1,
+                ),
+                pending_delete=(expired,),
+            )
+
+            self.assertLessEqual(result["projectedBytes"], local_bytes + 1)
+            self.assertGreater(result["peakProjectedBytes"], local_bytes + 1)
+            self.assertEqual(result["pendingDeleteBytes"], local_bytes)
+
     def test_only_policy_expired_remote_objects_are_selected(self) -> None:
         now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
         remote = {
@@ -303,6 +326,34 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(result["deleted"], 0)
             self.assertFalse(any(event[0] == "delete" for event in fake.events))
 
+    def test_whole_frame_recovery_catalog_omits_optional_tiles(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            catalog_path = root / "catalog.json"
+            catalog = json.loads(catalog_path.read_text())
+            frame = catalog["domains"]["bc"]["layers"]["radar-rain"]["frames"][0]
+            tile = root / "tiles/bc/radar-rain/tile.webp"
+            tile.parent.mkdir(parents=True)
+            tile.write_bytes(b"tile")
+            manifest = root / "tile-manifests/bc/radar-rain/manifest.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({"files": [tile.relative_to(root).as_posix()]}))
+            frame["tiles"] = {
+                "manifest": manifest.relative_to(root).as_posix(),
+                "template": "tiles/bc/radar-rain/{z}/{x}/{y}.webp",
+            }
+            catalog_path.write_text(json.dumps(catalog))
+
+            objects, payload = discover_objects(root, whole_frame_only=True)
+            published = json.loads(payload)
+            published_frame = published["domains"]["bc"]["layers"]["radar-rain"]["frames"][0]
+
+            self.assertNotIn("tiles", published_frame)
+            self.assertNotIn(tile.relative_to(root).as_posix(), {item.key for item in objects})
+            self.assertNotIn(manifest.relative_to(root).as_posix(), {item.key for item in objects})
+
     def test_fast_publication_uses_successful_upload_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -324,19 +375,21 @@ class PublisherTests(unittest.TestCase):
                 fast=True,
             )
             fake.events.clear()
-            second = publish(
-                root,
-                self.config(),
-                state,
-                status,
-                client=fake,
-                now=now,
-                fast=True,
-            )
+            with mock.patch("radarsat.r2.os.link", wraps=os.link) as link:
+                second = publish(
+                    root,
+                    self.config(),
+                    state,
+                    status,
+                    client=fake,
+                    now=now,
+                    fast=True,
+                )
 
             self.assertTrue(first["fast"])
             self.assertEqual(first["uploaded"], 3)
             self.assertEqual(second["uploaded"], 0)
+            link.assert_not_called()
             self.assertEqual(fake.events, [
                 ("put", "westwx-catalog.json"),
                 ("put", "catalog.json"),

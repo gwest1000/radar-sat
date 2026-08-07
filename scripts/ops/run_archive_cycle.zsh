@@ -101,5 +101,14 @@ done
   --spool-mode off \
   --spool-hours "${RADARSAT_SPOOL_INGEST_HOURS:-12}"
 
+if [[ "${RADARSAT_WEB_TILES_ENABLED:-1}" == "1" ]]; then
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_raster_tiles.py" \
+    --output-root "${OUTPUT_ROOT}" \
+    --hours "${RADARSAT_WEB_TILE_HOURS:-3}" \
+    --max-frames "${RADARSAT_WEB_TILE_MAX_FRAMES:-2}" \
+    || print -u2 "Warning: archive raster-tile refresh failed; retaining whole-frame fallback."
+fi
+
+"${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
 release_heavy_satellite_lock
 "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh"

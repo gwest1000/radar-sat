@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-24T19:34:31.241073Z",
+  "generatedAt": "2026-08-07T19:51:44.700282Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -4879,7 +4879,7 @@
     },
     "north-pacific": {
       "id": "north-pacific",
-      "title": "North Pacific",
+      "title": "Pacific",
       "width": 1600,
       "height": 900,
       "projection": "EPSG:3832",
@@ -4993,18 +4993,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "lightning-trail",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
-          "id": "hotspots",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5015,6 +5003,18 @@
         {
           "id": "boundaries",
           "opacity": 1.0
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
         }
       ],
       "legends": [
@@ -5122,18 +5122,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "lightning-trail",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
-          "id": "hotspots",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5144,6 +5132,18 @@
         {
           "id": "boundaries",
           "opacity": 1.0
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
         }
       ],
       "legends": [
@@ -5164,9 +5164,9 @@
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.245,
+        "left": 0.132,
         "top": 0.155,
-        "width": 0.59,
+        "width": 0.76,
         "height": 0.68
       },
       "maxHours": 24
@@ -5258,18 +5258,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "lightning-trail",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
-          "id": "hotspots",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5280,6 +5268,18 @@
         {
           "id": "boundaries",
           "opacity": 1.0
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
         }
       ],
       "legends": [
@@ -5394,18 +5394,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "lightning-trail",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
-          "id": "hotspots",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5416,6 +5404,18 @@
         {
           "id": "boundaries",
           "opacity": 1.0
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
         }
       ],
       "legends": [
@@ -5530,18 +5530,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "lightning-trail",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
-          "id": "hotspots",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": true
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5552,6 +5540,18 @@
         {
           "id": "boundaries",
           "opacity": 1.0
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
+        },
+        {
+          "id": "hotspots",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": true
         }
       ],
       "legends": [
@@ -5638,6 +5638,14 @@
           "choiceGroup": "precipitation"
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        },
+        {
           "id": "glm-lightning-trail",
           "opacity": 1.0,
           "optional": true,
@@ -5648,14 +5656,6 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
-        },
-        {
-          "id": "transmission-lines",
-          "opacity": 1.0
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
         }
       ],
       "legends": [
@@ -5671,6 +5671,7 @@
         "The Pacific-centred crop covers roughly 170\u00b0E\u2013102\u00b0W and 20\u201366\u00b0N without a dateline seam.",
         "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
         "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
+        "Pacific NOAA VIS/IR uses genuine GOES-18 full-disk scan times at a nominal ten-minute cadence; the half-hour Himawari-9/GOES-18 blend remains the infrared and availability fallback.",
         "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; BC regional products use the ECCC/CLDN raster trail where GOES-18 GLM coverage is less useful.",
         "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
@@ -5741,6 +5742,14 @@
           "choiceGroup": "precipitation"
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        },
+        {
           "id": "glm-lightning-trail",
           "opacity": 1.0,
           "optional": true,
@@ -5751,14 +5760,6 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
-        },
-        {
-          "id": "transmission-lines",
-          "opacity": 1.0
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
         }
       ],
       "legends": [
@@ -5788,13 +5789,13 @@
     },
     {
       "id": "north-pacific-overlay",
-      "title": "North Pacific Satellite / West Coast Radar",
-      "shortTitle": "North Pacific",
+      "title": "Pacific Satellite / West Coast Radar",
+      "shortTitle": "Pacific",
       "group": "Broad",
       "domain": "north-pacific",
       "anchorLayer": "raw-ir",
       "defaultHours": 24,
-      "description": "Himawari-9/GOES-18 calibrated satellite imagery with real West Coast radar coverage.",
+      "description": "Ten-minute NOAA GOES-18 GeoColor imagery with real West Coast radar coverage.",
       "layers": [
         {
           "id": "base-dark",
@@ -5845,6 +5846,14 @@
           "choiceGroup": "precipitation"
         },
         {
+          "id": "transmission-lines",
+          "opacity": 1.0
+        },
+        {
+          "id": "boundaries",
+          "opacity": 1.0
+        },
+        {
           "id": "glm-lightning-trail",
           "opacity": 1.0,
           "optional": true,
@@ -5855,14 +5864,6 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
-        },
-        {
-          "id": "transmission-lines",
-          "opacity": 1.0
-        },
-        {
-          "id": "boundaries",
-          "opacity": 1.0
         }
       ],
       "legends": [
@@ -5875,9 +5876,10 @@
         "transmission-lines"
       ],
       "notes": [
-        "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
+        "NOAA GOES-18 GeoColor supplies the ten-minute VIS/IR clock; the slower Himawari-9/GOES-18 blend remains available for infrared and fallback coverage.",
         "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
         "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
+        "Pacific NOAA VIS/IR uses genuine GOES-18 full-disk scan times at a nominal ten-minute cadence; the half-hour Himawari-9/GOES-18 blend remains the infrared and availability fallback.",
         "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; BC regional products use the ECCC/CLDN raster trail where GOES-18 GLM coverage is less useful.",
         "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
@@ -5948,6 +5950,7 @@
     "NIFC WFIGS": "https://www.arcgis.com/home/item.html?id=4181a117dc9e43db8598533e29972015",
     "NOAA Open Data": "https://www.ncei.noaa.gov/products/ncei-data-noaa-open-dissemination-program",
     "NOAA GOES-18": "https://www.ncei.noaa.gov/products/satellite/goes-r-series",
+    "NOAA/NESDIS/STAR": "https://www.goes.noaa.gov/",
     "GeoBC": "https://catalogue.data.gov.bc.ca/dataset/transmission-lines"
   }
 }

@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("exports the operational viewer", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
-  assert.match(html, /BC Satellite\/Radar\/Lightning\/Fires/);
+  assert.match(html, /Real-Time Weather Display/);
   assert.match(html, /href="\/radar-sat\/_next\//);
   assert.match(html, /href="\/radar-sat\/favicon\.svg"/);
   assert.match(html, /https:\/\/gwest1000\.github\.io\/radar-sat\/og-radar-sat\.png/);
@@ -110,21 +110,24 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(styles, /\.lightning-marker\.age-3 \{ color: #f6d451/);
 });
 
-test("keeps the desktop controls and map at the full available width", async () => {
+test("keeps a compact desktop control rail and gives the map the remaining width", async () => {
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(styles, /\.app-shell\s*\{[\s\S]*?width: 100%/);
-  assert.match(styles, /\.app-shell\s*\{[\s\S]*?grid-template-columns: clamp\(360px, 26vw, 420px\) minmax\(0, 1fr\)/);
+  assert.match(styles, /\.app-shell\s*\{[\s\S]*?grid-template-columns: clamp\(205px, 14\.5vw, 236px\) minmax\(0, 1fr\)/);
   assert.match(styles, /\.viewer-grid\s*\{[\s\S]*?display: contents/);
   assert.match(styles, /\.map-column\s*\{[\s\S]*?display: contents/);
   assert.match(styles, /\.map-stage\s*\{[\s\S]*?grid-column: 2/);
   assert.match(styles, /\.map-stage\s*\{[\s\S]*?place-self: center/);
   assert.match(styles, /\.legend-rail\s*\{[\s\S]*?grid-column: 1/);
-  assert.match(styles, /\.legend-rail\s*\{[\s\S]*?overflow: visible/);
+  assert.match(styles, /\.legend-rail\s*\{[\s\S]*?overflow: hidden/);
   assert.match(styles, /\.timeline-scrubber\s*\{[\s\S]*?grid-column: 1 \/ -1/);
   assert.match(styles, /width: min\(100%, var\(--map-max-width/);
   assert.match(viewer, /"--map-max-width": `calc\(\$\{mapAspect \* 100\}dvh/);
   assert.match(styles, /\.sidebar-layer-controls/);
+  assert.match(styles, /\.layers-popover\s*\{[\s\S]*?position: absolute;[\s\S]*?inset: 0/);
+  assert.match(styles, /\.layer-selector:hover \.layers-popover/);
+  assert.match(viewer, /activeLayerLabels\.join\(" · "\)/);
   assert.match(viewer, /product-switcher/);
   assert.match(viewer, /className="sources-drawer"/);
 });
@@ -141,7 +144,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(small.shortTitle, "BC");
   assert.equal(small.anchorLayer, "raw-visir-5min");
   assert.equal(small.maxHours, 24);
-  assert.deepEqual(small.viewport, { left: 0.245, top: 0.155, width: 0.59, height: 0.68 });
+  assert.deepEqual(small.viewport, { left: 0.132, top: 0.155, width: 0.76, height: 0.68 });
   assert.equal(overlay.anchorLayer, "raw-visir");
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, false);
@@ -166,6 +169,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.find((product) => product.id === "pacific-wna-overlay").shortTitle, "Pacific/WNA");
   const northAmerica = demo.products.find((product) => product.id === "north-america-overlay");
   const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
+  assert.equal(northPacific.shortTitle, "Pacific");
+  assert.equal(demo.domains["north-pacific"].title, "Pacific");
   assert.equal(northAmerica.anchorLayer, "westwx-ir");
   assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.8272, height: 0.8237 });
   assert.deepEqual(
@@ -178,6 +183,18 @@ test("ships a runtime data configuration", async () => {
   assert.deepEqual(northPacific.viewport, { left: 0, top: 0.065936, width: 0.705882, height: 0.934064 });
   assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
+  assert.ok(
+    overlay.layers.findIndex((layer) => layer.id === "lightning-trail")
+      > overlay.layers.findIndex((layer) => layer.id === "transmission-lines"),
+  );
+  assert.ok(
+    overlay.layers.findIndex((layer) => layer.id === "hotspots")
+      > overlay.layers.findIndex((layer) => layer.id === "watersheds"),
+  );
+  assert.ok(
+    northPacific.layers.findIndex((layer) => layer.id === "glm-lightning-trail")
+      > northPacific.layers.findIndex((layer) => layer.id === "transmission-lines"),
+  );
 });
 
 test("deploy workflow uses the GitHub Pages artifact flow", async () => {

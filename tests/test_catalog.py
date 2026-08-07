@@ -86,6 +86,61 @@ class CatalogTests(unittest.TestCase):
 
             self.assertNotIn("radar-rain", rebuilt["domains"]["bc"]["layers"])
 
+    def test_catalog_falls_back_to_whole_frame_when_tile_manifest_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = DOMAINS["bc"]
+            layer = LAYERS["ptype"]
+            valid_time = dt.datetime(2026, 7, 22, 12, tzinfo=UTC)
+            image = frame_path(root, domain, layer, valid_time)
+            image.parent.mkdir(parents=True, exist_ok=True)
+            image.write_bytes(b"frame")
+            write_metadata(
+                root,
+                domain,
+                layer,
+                valid_time,
+                image,
+                extra={
+                    "tiles": {
+                        "manifest": "tile-manifests/bc/ptype/missing.json",
+                        "template": "tiles/bc/ptype/{z}/{x}/{y}.webp",
+                    }
+                },
+            )
+
+            rebuilt = build_catalog(root)
+            frame = rebuilt["domains"]["bc"]["layers"]["ptype"]["frames"][0]
+
+            self.assertNotIn("tiles", frame)
+            self.assertEqual(frame["path"], image.relative_to(root).as_posix())
+
+    def test_catalog_falls_back_when_tile_manifest_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = DOMAINS["bc"]
+            layer = LAYERS["ptype"]
+            valid_time = dt.datetime(2026, 7, 22, 12, tzinfo=UTC)
+            image = frame_path(root, domain, layer, valid_time)
+            image.parent.mkdir(parents=True, exist_ok=True)
+            image.write_bytes(b"frame")
+            manifest = root / "tile-manifests/bc/ptype/empty.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({"files": []}))
+            write_metadata(
+                root,
+                domain,
+                layer,
+                valid_time,
+                image,
+                extra={"tiles": {"manifest": manifest.relative_to(root).as_posix()}},
+            )
+
+            rebuilt = build_catalog(root)
+            frame = rebuilt["domains"]["bc"]["layers"]["ptype"]["frames"][0]
+
+            self.assertNotIn("tiles", frame)
+
     def test_static_layers_include_a_cache_busting_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -98,6 +153,55 @@ class CatalogTests(unittest.TestCase):
 
             self.assertEqual(entry["path"], "static/bc/boundaries.png")
             self.assertTrue(entry["revision"].isdigit())
+
+    def test_five_minute_catalog_uses_one_source_and_monotonic_fallbacks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = DOMAINS["bc"]
+            layer = LAYERS["raw-visir-5min"]
+            frames = (
+                (0, "NOAA/NESDIS/STAR", 0, 3840, 2944),
+                (5, "NOAA GOES-18", 0, 1920, 1472),
+                (10, "NOAA/NESDIS/STAR", -10, 3840, 2944),
+                (15, "NOAA/NESDIS/STAR", 10, 3840, 2944),
+            )
+            base = dt.datetime(2026, 7, 22, 18, tzinfo=UTC)
+            for minute, source, fallback_offset, width, height in frames:
+                valid = base + dt.timedelta(minutes=minute)
+                fallback = base + dt.timedelta(minutes=fallback_offset)
+                image = frame_path(root, domain, layer, valid)
+                image.parent.mkdir(parents=True, exist_ok=True)
+                image.write_bytes(b"frame")
+                write_metadata(
+                    root,
+                    domain,
+                    layer,
+                    valid,
+                    image,
+                    source=source,
+                    extra={
+                        "fallbackSourceTime": fallback.isoformat(),
+                        "starRenderVersion": 4,
+                        "renderWidth": width,
+                        "renderHeight": height,
+                    },
+                )
+
+            rebuilt = build_catalog(root)
+            published = rebuilt["domains"]["bc"]["layers"]["raw-visir-5min"][
+                "frames"
+            ]
+
+            self.assertEqual(
+                [frame["validTime"] for frame in published],
+                [
+                    "2026-07-22T18:00:00Z",
+                    "2026-07-22T18:15:00Z",
+                ],
+            )
+            self.assertTrue(
+                all(frame["source"] == "NOAA/NESDIS/STAR" for frame in published)
+            )
 
 
 if __name__ == "__main__":

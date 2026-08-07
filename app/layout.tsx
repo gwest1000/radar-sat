@@ -5,34 +5,34 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gwest1000.github.io/radar-sat/"),
-  title: "BC Satellite/Radar/Lightning/Fires",
+  title: "Real-Time Weather Display",
   description:
-    "Operational satellite, radar, precipitation-type, and lightning loops for British Columbia.",
+    "Operational satellite, radar, lightning, smoke, and fire loops for British Columbia, North America, and the Pacific.",
   icons: {
     icon: `${basePath}/favicon.svg`,
     shortcut: `${basePath}/favicon.svg`,
   },
   openGraph: {
-    title: "BC Satellite/Radar/Lightning/Fires",
+    title: "Real-Time Weather Display",
     description:
-      "Operational satellite, radar, precipitation-type, and lightning loops for British Columbia.",
+      "Operational satellite, radar, lightning, smoke, and fire loops for British Columbia, North America, and the Pacific.",
     type: "website",
     url: "https://gwest1000.github.io/radar-sat/",
-    siteName: "BC Satellite/Radar/Lightning/Fires",
+    siteName: "Real-Time Weather Display",
     images: [
       {
         url: "https://gwest1000.github.io/radar-sat/og-radar-sat.png",
         width: 1200,
         height: 630,
-        alt: "BC satellite, radar and lightning observational loops",
+        alt: "Real-time satellite, radar, lightning, smoke and fire loops",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "BC Satellite/Radar/Lightning/Fires",
+    title: "Real-Time Weather Display",
     description:
-      "Operational satellite, radar, precipitation-type, and lightning loops for British Columbia.",
+      "Operational satellite, radar, lightning, smoke, and fire loops for British Columbia, North America, and the Pacific.",
     images: ["https://gwest1000.github.io/radar-sat/og-radar-sat.png"],
   },
 };

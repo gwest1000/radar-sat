@@ -1821,6 +1821,36 @@ def _write_raw_metadata(
     source_times: dict[str, dt.datetime],
     visir_details: dict[str, object],
 ) -> None:
+    _write_raw_ir_metadata(
+        root,
+        domain,
+        valid_time,
+        source,
+        source_layer,
+        source_times,
+    )
+    visir = LAYERS["raw-visir"]
+    write_metadata(
+        root,
+        domain,
+        visir,
+        valid_time,
+        frame_path(root, domain, visir, valid_time),
+        source_times,
+        source=source,
+        source_layer=f"{source_layer} solar visible/IR blend",
+        extra={**visir_details, "renderVersion": RAW_VISIR_RENDER_VERSION},
+    )
+
+
+def _write_raw_ir_metadata(
+    root: Path,
+    domain: Domain,
+    valid_time: dt.datetime,
+    source: str,
+    source_layer: str,
+    source_times: dict[str, dt.datetime],
+) -> None:
     for layer_id in ("raw-ir",):
         layer = LAYERS[layer_id]
         write_metadata(
@@ -1834,17 +1864,25 @@ def _write_raw_metadata(
             source_layer=source_layer,
             extra={"renderVersion": RAW_SATELLITE_RENDER_VERSION},
         )
-    visir = LAYERS["raw-visir"]
-    write_metadata(
-        root,
-        domain,
-        visir,
-        valid_time,
-        frame_path(root, domain, visir, valid_time),
-        source_times,
-        source=source,
-        source_layer=f"{source_layer} solar visible/IR blend",
-        extra={**visir_details, "renderVersion": RAW_VISIR_RENDER_VERSION},
+
+
+def _preferred_pacific_visir_exists(
+    root: Path,
+    domain: Domain,
+    valid_time: dt.datetime,
+) -> bool:
+    layer = LAYERS["raw-visir"]
+    image = frame_path(root, domain, layer, valid_time)
+    metadata = metadata_path(root, domain, layer, valid_time)
+    if not image.is_file() or not metadata.is_file():
+        return False
+    try:
+        payload = json.loads(metadata.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (
+        payload.get("source") == "NOAA/NESDIS/STAR"
+        and payload.get("renderVersion") == RAW_VISIR_RENDER_VERSION
     )
 
 
@@ -2164,22 +2202,82 @@ def ingest_raw_satellite(
                     )
                 finally:
                     clear_downloads(cache_root)
-                visir_details = compose_visible_infrared(
-                    visible_destination,
-                    gray_destination,
-                    north_pacific,
-                    valid_time,
-                    frame_path(root, north_pacific, LAYERS["raw-visir"], valid_time),
-                )
-                _write_raw_metadata(
-                    root,
-                    north_pacific,
-                    valid_time,
-                    source,
-                    source_layer,
-                    source_times,
-                    visir_details,
-                )
+                if _preferred_pacific_visir_exists(root, north_pacific, valid_time):
+                    from .noaa_star_geocolor import blend_pacific_geocolor
+
+                    legacy_visir_destination = (
+                        render_root
+                        / f"combined-{north_pacific.id}-{frame_stamp(valid_time)}-legacy-visir.webp"
+                    )
+                    compose_visible_infrared(
+                        visible_destination,
+                        gray_destination,
+                        north_pacific,
+                        valid_time,
+                        legacy_visir_destination,
+                    )
+                    preferred_destination = frame_path(
+                        root,
+                        north_pacific,
+                        LAYERS["raw-visir"],
+                        valid_time,
+                    )
+                    blend_pacific_geocolor(
+                        preferred_destination,
+                        legacy_visir_destination,
+                        north_pacific,
+                        preferred_destination,
+                    )
+                    preferred_metadata = metadata_path(
+                        root,
+                        north_pacific,
+                        LAYERS["raw-visir"],
+                        valid_time,
+                    )
+                    try:
+                        payload = json.loads(preferred_metadata.read_text())
+                        payload["sourceTimes"] = {
+                            **dict(payload.get("sourceTimes") or {}),
+                            **{
+                                label: format_utc(value)
+                                for label, value in source_times.items()
+                            },
+                        }
+                        payload["westFallbackSource"] = source
+                        payload["westFallbackValidTime"] = format_utc(valid_time)
+                        payload["bytes"] = preferred_destination.stat().st_size
+                        temporary = preferred_metadata.with_name(
+                            f"{preferred_metadata.name}.{os.getpid()}.tmp"
+                        )
+                        temporary.write_text(json.dumps(payload, indent=2) + "\n")
+                        temporary.replace(preferred_metadata)
+                    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                        pass
+                    _write_raw_ir_metadata(
+                        root,
+                        north_pacific,
+                        valid_time,
+                        source,
+                        source_layer,
+                        source_times,
+                    )
+                else:
+                    visir_details = compose_visible_infrared(
+                        visible_destination,
+                        gray_destination,
+                        north_pacific,
+                        valid_time,
+                        frame_path(root, north_pacific, LAYERS["raw-visir"], valid_time),
+                    )
+                    _write_raw_metadata(
+                        root,
+                        north_pacific,
+                        valid_time,
+                        source,
+                        source_layer,
+                        source_times,
+                        visir_details,
+                    )
                 rendered_domains.append(north_pacific.id)
         finally:
             clear_downloads(cache_root)

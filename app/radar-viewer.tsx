@@ -1399,6 +1399,7 @@ export function RadarViewer() {
   const [fireMarkers, setFireMarkers] = useState<FireMarker[]>([]);
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
+  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
   const preferencesRef = useRef<ViewerPreferences>({
@@ -1879,7 +1880,7 @@ export function RadarViewer() {
   if (error) {
     return (
       <main className="app-shell">
-        <h1 className="brand">BC Satellite/Radar/Lightning/Fires</h1>
+        <h1 className="brand">Real-Time Weather Display</h1>
         <div className="error-panel" role="alert">{error}</div>
       </main>
     );
@@ -1933,6 +1934,23 @@ export function RadarViewer() {
     .filter((label, index, all) => all.indexOf(label) === index);
   const hasCoverage = composedLayers.some((layer) => layer.id.includes("coverage"));
   const optional = product.layers.filter((layer) => layer.optional);
+  const activeLayerLabels = optional
+    .filter(isLayerEnabled)
+    .map((layer) => layerControlLabel(layer.id));
+  const toggleOptionalLayer = (layer: ProductLayer, checked: boolean) => {
+    setOptionalLayers((current) => {
+      const next = { ...current };
+      if (checked && layer.choiceGroup) {
+        for (const peer of optional) {
+          if (peer.choiceGroup === layer.choiceGroup) next[peer.id] = false;
+        }
+      }
+      next[layer.id] = checked;
+      return next;
+    });
+    setFrameIndex(NEWEST_FRAME);
+    setPlaying(true);
+  };
   const visibleLegends = product.legends.filter((legendId) => {
     const recipe = product.layers.find((layer) => layer.id === legendLayerId(legendId));
     return !recipe || isLayerEnabled(recipe);
@@ -1985,12 +2003,7 @@ export function RadarViewer() {
     <main className="app-shell">
       <header className="site-header">
         <div className="brand-row">
-          <h1 className="brand">
-            BC Satellite<span className="brand-mark">/</span><wbr />
-            Radar<span className="brand-mark">/</span><wbr />
-            Lightning<span className="brand-mark">/</span><wbr />
-            Fires
-          </h1>
+          <h1 className="brand">Real-Time Weather Display</h1>
         </div>
         <div className="live-summary" aria-live="polite">
           <span className={`status-dot status-${liveState.toLowerCase()}`} aria-hidden="true" />
@@ -2164,32 +2177,43 @@ export function RadarViewer() {
 
         <aside className="legend-rail" aria-label="Map legends">
           {optional.length > 0 && (
-            <div className="sidebar-layer-controls" role="group" aria-label="Overlay layers">
-              <h2 className="legend-title">Layers</h2>
-              {optional.map((layer) => (
-                <label className="field-select" key={layer.id}>
-                  <input
-                    type="checkbox"
-                    checked={isLayerEnabled(layer)}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setOptionalLayers((current) => {
-                        const next = { ...current };
-                        if (checked && layer.choiceGroup) {
-                          for (const peer of optional) {
-                            if (peer.choiceGroup === layer.choiceGroup) next[peer.id] = false;
-                          }
-                        }
-                        next[layer.id] = checked;
-                        return next;
-                      });
-                      setFrameIndex(NEWEST_FRAME);
-                      setPlaying(true);
-                    }}
-                  />
-                  {layerControlLabel(layer.id)}
-                </label>
-              ))}
+            <div
+              className={`layer-selector${layersMenuOpen ? " is-open" : ""}`}
+              onMouseLeave={() => setLayersMenuOpen(false)}
+            >
+              <button
+                className="layers-summary"
+                type="button"
+                aria-expanded={layersMenuOpen}
+                onClick={() => setLayersMenuOpen((open) => !open)}
+              >
+                <span className="layers-summary-heading">
+                  <span className="selector-label">Layers</span>
+                  <span className="layers-count">{activeLayerLabels.length} on</span>
+                </span>
+                <span className="active-layer-list">
+                  {activeLayerLabels.length ? activeLayerLabels.join(" · ") : "None selected"}
+                </span>
+                <span className="layers-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div className="layers-popover" role="group" aria-label="Overlay layers">
+                <div className="layers-popover-heading">
+                  <span>Layers</span>
+                  <span>{activeLayerLabels.length} active</span>
+                </div>
+                <div className="sidebar-layer-controls">
+                  {optional.map((layer) => (
+                    <label className="field-select" key={layer.id}>
+                      <input
+                        type="checkbox"
+                        checked={isLayerEnabled(layer)}
+                        onChange={(event) => toggleOptionalLayer(layer, event.target.checked)}
+                      />
+                      {layerControlLabel(layer.id)}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
           <div className="legend-content">

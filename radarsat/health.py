@@ -10,7 +10,10 @@ from .geomet import format_utc, parse_utc
 
 
 UTC = dt.timezone.utc
-REQUIRED_LAYERS = ("daynight", "radar-rain", "ptype", "lightning")
+# Monitor the satellite product the viewer actually selects by default. The
+# older ECCC day/night layer is an optional fallback and can legitimately lag
+# without making the NOAA-based operational loop stale.
+REQUIRED_LAYERS = ("raw-visir-5min", "radar-rain", "ptype", "lightning")
 
 
 def directory_size(root: Path) -> int:
@@ -38,7 +41,7 @@ def read_json(path: Path) -> dict[str, Any]:
 def status_age_issue(
     payload: dict[str, Any], label: str, now: dt.datetime, max_age_minutes: int
 ) -> str | None:
-    if payload.get("status") != "ok":
+    if payload.get("status") not in {"ok", "warning"}:
         return f"{label} status is {payload.get('status', 'unknown')}"
     try:
         updated = parse_utc(str(payload["updatedAt"]))
@@ -67,6 +70,10 @@ def inspect_health(
 
     try:
         ingest = read_json(ingest_status_path)
+        if ingest.get("status") == "warning":
+            details = ingest.get("warnings", [])
+            suffix = f": {details[0]}" if isinstance(details, list) and details else ""
+            warnings.append(f"ingest completed with source warnings{suffix}")
         issue = status_age_issue(ingest, "ingest", now, service_max_age_minutes)
         if issue:
             errors.append(issue)

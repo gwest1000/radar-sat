@@ -39,12 +39,18 @@ from urllib3.util.retry import Retry
 from .catalog import write_catalog
 from .config import DOMAINS, LAYERS, Domain
 from .geomet import format_utc, projected_bbox
-from .pipeline import frame_path, metadata_path, safe_archive_path, write_metadata
+from .pipeline import (
+    RAW_VISIR_RENDER_VERSION,
+    frame_path,
+    metadata_path,
+    safe_archive_path,
+    write_metadata,
+)
 
 
 UTC = dt.timezone.utc
 SOURCE = "NOAA/NESDIS/STAR"
-RENDER_VERSION = 1
+RENDER_VERSION = 4
 OUTPUT_WIDTH = 3840
 OUTPUT_HEIGHT = 2944
 DEFAULT_MAX_SOURCE_BYTES = 100_000_000
@@ -115,6 +121,29 @@ class StarScan:
     @property
     def url(self) -> str:
         return f"{self.sector.directory_url}{self.filename}"
+
+
+@dataclass(frozen=True)
+class RenderTarget:
+    domain_id: str
+    layer_id: str
+    width: int
+    height: int
+
+
+def render_targets(sector: StarSector) -> tuple[RenderTarget, ...]:
+    if sector.id == FULL_DISK.id:
+        pacific = DOMAINS["north-pacific"]
+        return (
+            RenderTarget("bc", sector.layer_id, OUTPUT_WIDTH, OUTPUT_HEIGHT),
+            RenderTarget(
+                pacific.id,
+                "raw-visir",
+                pacific.width,
+                pacific.height,
+            ),
+        )
+    return (RenderTarget("bc", sector.layer_id, OUTPUT_WIDTH, OUTPUT_HEIGHT),)
 
 
 @dataclass(frozen=True)
@@ -299,21 +328,30 @@ def discover_scans(
 
 
 def scan_ready(root: Path, scan: StarScan) -> bool:
-    domain = DOMAINS["bc"]
-    layer = LAYERS[scan.sector.layer_id]
-    image = frame_path(root, domain, layer, scan.valid_time)
-    metadata = metadata_path(root, domain, layer, scan.valid_time)
-    if not image.is_file() or not metadata.is_file():
-        return False
-    try:
-        payload = json.loads(metadata.read_text())
-    except (OSError, json.JSONDecodeError):
-        return False
-    return (
-        payload.get("renderVersion") == RENDER_VERSION
-        and payload.get("sourceFile") == scan.filename
-        and payload.get("source") == SOURCE
-    )
+    for target in render_targets(scan.sector):
+        domain = DOMAINS[target.domain_id]
+        layer = LAYERS[target.layer_id]
+        image = frame_path(root, domain, layer, scan.valid_time)
+        metadata = metadata_path(root, domain, layer, scan.valid_time)
+        if not image.is_file() or not metadata.is_file():
+            return False
+        try:
+            payload = json.loads(metadata.read_text())
+        except (OSError, json.JSONDecodeError):
+            return False
+        expected_version = (
+            RENDER_VERSION
+            if target.layer_id == scan.sector.layer_id
+            else RAW_VISIR_RENDER_VERSION
+        )
+        if (
+            payload.get("renderVersion") != expected_version
+            or payload.get("starRenderVersion") != RENDER_VERSION
+            or payload.get("sourceFile") != scan.filename
+            or payload.get("source") != SOURCE
+        ):
+            return False
+    return True
 
 
 def plan_backfill(
@@ -417,7 +455,7 @@ def project_geocolor(
             num_threads=4,
         )
         if sector.id == FULL_DISK.id:
-            coverage.fill(255)
+            coverage = full_disk_coverage(domain, width, height)
         else:
             source_coverage = np.full((raster.height, raster.width), 255, dtype=np.uint8)
             reproject(
@@ -431,6 +469,35 @@ def project_geocolor(
                 num_threads=4,
             )
     return np.moveaxis(destination, 0, -1), coverage
+
+
+def full_disk_coverage(domain: Domain, width: int, height: int) -> np.ndarray:
+    """Project the ABI Earth disk to a target grid without a source-sized mask."""
+    mask_size = 1024
+    xmin, xmax = (value * GOES_HEIGHT_METRES for value in FULL_DISK.x_bounds_radians)
+    ymin, ymax = (value * GOES_HEIGHT_METRES for value in FULL_DISK.y_bounds_radians)
+    x = np.linspace(-1, 1, mask_size, dtype=np.float32)
+    y = np.linspace(1, -1, mask_size, dtype=np.float32)
+    # The ABI limb is very nearly circular in fixed-grid scan angle. Keeping
+    # the mask just inside the JPEG limb avoids feathering black space into
+    # the Himawari/GOES fallback.
+    source_coverage = np.where(
+        x[None, :] ** 2 + y[:, None] ** 2 <= 0.994**2,
+        255,
+        0,
+    ).astype(np.uint8)
+    coverage = np.zeros((height, width), dtype=np.uint8)
+    reproject(
+        source=source_coverage,
+        destination=coverage,
+        src_transform=from_bounds(xmin, ymin, xmax, ymax, mask_size, mask_size),
+        src_crs=GOES_CRS,
+        dst_transform=from_bounds(*projected_bbox(domain), width, height),
+        dst_crs=domain.crs,
+        resampling=Resampling.nearest,
+        num_threads=2,
+    )
+    return coverage
 
 
 def _parse_time(value: object) -> dt.datetime | None:
@@ -527,11 +594,12 @@ def select_fallback(
     ]
     if bounded:
         candidates = bounded
-    # Prefer STAR's full-resolution fallback whenever it is recent and obeys
-    # the adjacent-frame monotonic bounds.  The coarser raw NODD render is a
-    # reliability fallback, not a reason to discard GeoColor detail merely
-    # because it is one ten-minute clock newer.
-    selected = max(candidates, key=lambda item: (item[1], item[0]))
+    # Temporal continuity is more important than selecting a preferred
+    # renderer for the northern fallback. Choose the newest admissible scan,
+    # using the higher-resolution native/STAR image only to break an exact
+    # clock tie. This prevents a newer PACUS frame from being composited over
+    # an older northern scan merely because that older image came from STAR.
+    selected = max(candidates, key=lambda item: (item[0], item[1]))
     return selected[2], selected[3], selected[0]
 
 
@@ -558,6 +626,53 @@ def composite_over_fallback(
     ).astype(np.uint8)
 
 
+def select_pacific_fallback(
+    root: Path,
+    valid_time: dt.datetime,
+    *,
+    max_age_minutes: int = 90,
+) -> tuple[Path, dict[str, object], dt.datetime] | None:
+    domain = DOMAINS["north-pacific"]
+    metadata_root = root / "metadata" / domain.id / "raw-visir"
+    candidates: list[tuple[dt.datetime, Path, dict[str, object]]] = []
+    for path in metadata_root.rglob("*.json") if metadata_root.exists() else ():
+        try:
+            payload = json.loads(path.read_text())
+            frame_time = _parse_time(payload.get("validTime"))
+            image = safe_archive_path(root, str(payload["path"]))
+        except (OSError, KeyError, ValueError, json.JSONDecodeError):
+            continue
+        if frame_time is None or frame_time > valid_time or not image.is_file():
+            continue
+        if valid_time - frame_time > dt.timedelta(minutes=max_age_minutes):
+            continue
+        # A same-clock STAR image is the output being repaired, not an
+        # independent western-Pacific fallback.
+        if frame_time == valid_time and payload.get("source") == SOURCE:
+            continue
+        candidates.append((frame_time, image, payload))
+    if not candidates:
+        return None
+    frame_time, image, payload = max(candidates, key=lambda item: item[0])
+    return image, payload, frame_time
+
+
+def blend_pacific_geocolor(
+    geocolor_path: Path,
+    fallback_path: Path,
+    domain: Domain,
+    destination: Path,
+) -> None:
+    """Feather the GOES-18 disk over a dateline-safe Pacific fallback."""
+    with Image.open(geocolor_path) as image:
+        geocolor = np.asarray(image.convert("RGB"))
+    coverage = full_disk_coverage(domain, geocolor.shape[1], geocolor.shape[0])
+    blended = composite_over_fallback(geocolor, coverage, fallback_path)
+    temporary = destination.with_name(f"{destination.name}.{os.getpid()}.tmp")
+    Image.fromarray(blended).save(temporary, "WEBP", quality=86, method=4)
+    temporary.replace(destination)
+
+
 def render_scan(
     root: Path,
     scan: StarScan,
@@ -566,9 +681,7 @@ def render_scan(
     *,
     max_source_bytes: int = DEFAULT_MAX_SOURCE_BYTES,
     overwrite: bool = False,
-    projector: Callable[
-        [Path, StarSector, Domain, Path], tuple[np.ndarray, np.ndarray]
-    ] = project_geocolor,
+    projector: Callable[..., tuple[np.ndarray, np.ndarray]] = project_geocolor,
 ) -> ScanResult:
     if not overwrite and scan_ready(root, scan):
         return ScanResult(scan.valid_time, scan.source_time, "skipped", scan.size)
@@ -583,8 +696,6 @@ def render_scan(
         source_path = client.download(scan, scan_cache, max_source_bytes)
         download_seconds = time.perf_counter() - download_started
         render_started = time.perf_counter()
-        domain = DOMAINS["bc"]
-        rendered, coverage = projector(source_path, scan.sector, domain, scan_cache)
         fallback_time: dt.datetime | None = None
         fallback_source: str | None = None
         if scan.sector.id == PACUS.id:
@@ -594,20 +705,6 @@ def render_scan(
                 scan.source_time,
             )
             fallback_source = str(fallback_metadata.get("source") or "NOAA Open Data")
-            rendered = composite_over_fallback(rendered, coverage, fallback_path)
-        layer = LAYERS[scan.sector.layer_id]
-        destination = frame_path(root, domain, layer, scan.valid_time)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_name(
-            f"{destination.name}.{os.getpid()}.tmp"
-        )
-        Image.fromarray(rendered).save(
-            temporary,
-            "WEBP",
-            quality=86,
-            method=4,
-        )
-        temporary.replace(destination)
         source_times = {
             (
                 "NOAA STAR GOES-18 full-disk GeoColor"
@@ -623,41 +720,92 @@ def render_scan(
                     else "Raw NOAA GOES-18 full-disk fallback"
                 )
             ] = fallback_time
-        write_metadata(
-            root,
-            domain,
-            layer,
-            scan.valid_time,
-            destination,
-            source_times,
-            source=SOURCE,
-            source_layer=(
-                "CIRA GeoColor on the GOES-18 ABI 0.5 km full-disk grid"
-                if scan.sector.id == FULL_DISK.id
-                else "CIRA GeoColor on the GOES-18 ABI 0.5 km PACUS grid "
-                "over ten-minute full-disk fallback"
-            ),
-            extra={
-                "renderVersion": RENDER_VERSION,
-                "nativeResolution": True,
-                "sourceGridResolutionKm": 0.5,
-                "renderWidth": OUTPUT_WIDTH,
-                "renderHeight": OUTPUT_HEIGHT,
-                "nominalCadenceMinutes": scan.sector.cadence_minutes,
-                "retentionHours": 24,
-                "sourceFile": scan.filename,
-                "sourceBytes": scan.size,
-                **(
-                    {
-                        "pacusNorthBoundDegrees": 53.5,
-                        "fallbackSourceTime": format_utc(fallback_time),
-                        "fallbackSource": fallback_source,
-                    }
-                    if fallback_time is not None
-                    else {}
+        for target in render_targets(scan.sector):
+            domain = DOMAINS[target.domain_id]
+            layer = LAYERS[target.layer_id]
+            rendered, coverage = projector(
+                source_path,
+                scan.sector,
+                domain,
+                scan_cache,
+                width=target.width,
+                height=target.height,
+            )
+            if fallback_time is not None:
+                rendered = composite_over_fallback(rendered, coverage, fallback_path)
+            pacific_fallback: tuple[Path, dict[str, object], dt.datetime] | None = None
+            if domain.id == "north-pacific":
+                pacific_fallback = select_pacific_fallback(root, scan.valid_time)
+                if pacific_fallback is not None:
+                    rendered = composite_over_fallback(
+                        rendered,
+                        coverage,
+                        pacific_fallback[0],
+                    )
+            destination = frame_path(root, domain, layer, scan.valid_time)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_name(
+                f"{destination.name}.{os.getpid()}.tmp"
+            )
+            Image.fromarray(rendered).save(
+                temporary,
+                "WEBP",
+                quality=86,
+                method=4,
+            )
+            temporary.replace(destination)
+            is_native_layer = target.layer_id == scan.sector.layer_id
+            target_source_times = dict(source_times)
+            if pacific_fallback is not None:
+                target_source_times["Pacific western-disk fallback"] = pacific_fallback[2]
+            write_metadata(
+                root,
+                domain,
+                layer,
+                scan.valid_time,
+                destination,
+                target_source_times,
+                source=SOURCE,
+                source_layer=(
+                    "CIRA GeoColor on the GOES-18 ABI 0.5 km full-disk grid"
+                    if scan.sector.id == FULL_DISK.id
+                    else "CIRA GeoColor on the GOES-18 ABI 0.5 km PACUS grid "
+                    "over ten-minute full-disk fallback"
                 ),
-            },
-        )
+                extra={
+                    "renderVersion": (
+                        RENDER_VERSION
+                        if is_native_layer
+                        else RAW_VISIR_RENDER_VERSION
+                    ),
+                    "starRenderVersion": RENDER_VERSION,
+                    "nativeResolution": is_native_layer,
+                    "sourceGridResolutionKm": 0.5,
+                    "renderWidth": target.width,
+                    "renderHeight": target.height,
+                    "nominalCadenceMinutes": scan.sector.cadence_minutes,
+                    "retentionHours": 24,
+                    "sourceFile": scan.filename,
+                    "sourceBytes": scan.size,
+                    **(
+                        {
+                            "westFallbackSource": pacific_fallback[1].get("source"),
+                            "westFallbackValidTime": format_utc(pacific_fallback[2]),
+                        }
+                        if pacific_fallback is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "pacusNorthBoundDegrees": 53.5,
+                            "fallbackSourceTime": format_utc(fallback_time),
+                            "fallbackSource": fallback_source,
+                        }
+                        if fallback_time is not None
+                        else {}
+                    ),
+                },
+            )
         return ScanResult(
             scan.valid_time,
             scan.source_time,

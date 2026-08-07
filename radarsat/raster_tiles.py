@@ -141,6 +141,34 @@ def _save_tile(image: np.ndarray, destination: Path, encoding: str) -> None:
         rendered.save(destination, "WEBP", quality=90, method=6, exact=True)
 
 
+def _tile_manifest_files(root: Path, relative: str) -> list[str] | None:
+    manifest = root / relative
+    try:
+        payload = json.loads(manifest.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    files = payload.get("files")
+    if not isinstance(files, list):
+        return None
+    return [str(value) for value in files]
+
+
+def _tile_manifest_ready(root: Path, relative: str) -> bool:
+    files = _tile_manifest_files(root, relative)
+    if not files:
+        return False
+    for value in files:
+        path = Path(value)
+        if (
+            path.is_absolute()
+            or not path.parts
+            or ".." in path.parts
+            or not (root / path).is_file()
+        ):
+            return False
+    return True
+
+
 def _tile_paths(
     root: Path,
     profile: TileProfile,
@@ -161,11 +189,34 @@ def generate_tiles(
 ) -> dict[str, object]:
     payload = json.loads(metadata_path.read_text())
     existing = payload.get("tiles")
+    existing_manifest = (
+        existing.get("manifest") if isinstance(existing, dict) else None
+    )
+    if isinstance(existing_manifest, str):
+        existing_files = _tile_manifest_files(root, existing_manifest)
+        if existing_files == []:
+            # A fully transparent raster legitimately produces no tiles. It
+            # must remain available through its whole-frame fallback without
+            # advertising an empty pyramid to the publisher or browser.
+            (root / existing_manifest).unlink(missing_ok=True)
+            payload.pop("tiles", None)
+            temporary_metadata = metadata_path.with_name(
+                f"{metadata_path.name}.{os.getpid()}.tmp"
+            )
+            temporary_metadata.write_text(json.dumps(payload, indent=2) + "\n")
+            temporary_metadata.replace(metadata_path)
+            os.utime(metadata_path.parent, None)
+            return {
+                "status": "empty",
+                "metadata": metadata_path.as_posix(),
+                "tiles": 0,
+                "bytes": 0,
+            }
     if (
         isinstance(existing, dict)
         and existing.get("renderVersion") == TILE_RENDER_VERSION
-        and isinstance(existing.get("manifest"), str)
-        and (root / existing["manifest"]).is_file()
+        and isinstance(existing_manifest, str)
+        and _tile_manifest_ready(root, existing_manifest)
     ):
         # Catalog rebuilding uses directory mtimes to avoid reopening thousands
         # of unchanged metadata files. Touch the layer directory so the newly
@@ -234,6 +285,22 @@ def generate_tiles(
         "files": files,
         "bytes": total_bytes,
     }
+    if not files:
+        shutil.rmtree(tile_root, ignore_errors=True)
+        manifest_path.unlink(missing_ok=True)
+        payload.pop("tiles", None)
+        temporary_metadata = metadata_path.with_name(
+            f"{metadata_path.name}.{os.getpid()}.tmp"
+        )
+        temporary_metadata.write_text(json.dumps(payload, indent=2) + "\n")
+        temporary_metadata.replace(metadata_path)
+        os.utime(metadata_path.parent, None)
+        return {
+            "status": "empty",
+            "metadata": metadata_path.as_posix(),
+            "tiles": 0,
+            "bytes": 0,
+        }
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_manifest = manifest_path.with_name(f"{manifest_path.name}.{os.getpid()}.tmp")
     temporary_manifest.write_text(json.dumps(manifest_payload, separators=(",", ":")) + "\n")
@@ -288,6 +355,57 @@ def metadata_candidates(
     return [path for _valid_time, path in values[:max_frames]]
 
 
+def repair_candidates(
+    root: Path,
+    profiles: Iterable[TileProfile],
+) -> list[tuple[TileProfile, Path]]:
+    """Find tile-enabled metadata whose committed manifest disappeared."""
+    pending: list[tuple[dt.datetime, TileProfile, Path]] = []
+    for profile in profiles:
+        directory = root / "metadata" / profile.domain_id / profile.layer_id
+        for path in directory.rglob("*.json") if directory.exists() else ():
+            try:
+                payload = json.loads(path.read_text())
+                valid_time = _parse_time(payload.get("validTime"))
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            tiles = payload.get("tiles")
+            manifest = tiles.get("manifest") if isinstance(tiles, dict) else None
+            if isinstance(manifest, str) and not _tile_manifest_ready(root, manifest):
+                pending.append((valid_time, profile, path))
+    pending.sort(key=lambda item: item[0])
+    return [(profile, path) for _valid_time, profile, path in pending]
+
+
+def strip_stale_tile_references(
+    root: Path,
+    profiles: Iterable[TileProfile],
+    *,
+    hours: float,
+    now: dt.datetime | None = None,
+) -> int:
+    """Keep pyramids only for the recent smooth-loop window."""
+    cutoff = (now or dt.datetime.now(UTC)).astimezone(UTC) - dt.timedelta(hours=hours)
+    removed = 0
+    for profile in profiles:
+        directory = root / "metadata" / profile.domain_id / profile.layer_id
+        for path in directory.rglob("*.json") if directory.exists() else ():
+            try:
+                payload = json.loads(path.read_text())
+                valid_time = _parse_time(payload.get("validTime"))
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if valid_time >= cutoff or not isinstance(payload.get("tiles"), dict):
+                continue
+            payload.pop("tiles", None)
+            temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+            temporary.write_text(json.dumps(payload, indent=2) + "\n")
+            temporary.replace(path)
+            os.utime(path.parent, None)
+            removed += 1
+    return removed
+
+
 def prune_orphan_tiles(root: Path) -> dict[str, int]:
     """Remove pyramids whose source-frame metadata has already aged out."""
     referenced_manifests: set[str] = set()
@@ -304,6 +422,14 @@ def prune_orphan_tiles(root: Path) -> dict[str, int]:
 
     removed_files = 0
     removed_manifests = 0
+    # The build-wide advisory lock means no live temporary tile directory can
+    # exist here. Remove crash remnants before counting/reconciling manifests.
+    tile_tree = root / "tiles"
+    for temporary in tile_tree.rglob(".*.tmp") if tile_tree.exists() else ():
+        if not temporary.is_dir():
+            continue
+        removed_files += sum(1 for path in temporary.rglob("*") if path.is_file())
+        shutil.rmtree(temporary, ignore_errors=True)
     manifest_root = root / "tile-manifests"
     for manifest in manifest_root.rglob("*.json") if manifest_root.exists() else ():
         relative_manifest = manifest.relative_to(root).as_posix()
@@ -350,10 +476,27 @@ def build_profiles(
     max_frames: int,
 ) -> list[dict[str, object]]:
     results: list[dict[str, object]] = []
-    for profile in profiles:
+    selected_profiles = tuple(profiles)
+    stripped = strip_stale_tile_references(
+        root,
+        selected_profiles,
+        hours=hours,
+    )
+    if stripped:
+        results.append({"status": "stripped", "metadata": stripped})
+    processed: set[Path] = set()
+    # Repair old poisoned references regardless of the normal recent-frame
+    # window. Without this pass one missing manifest could block publication
+    # until its source frame finally aged out seven days later.
+    for profile, metadata in repair_candidates(root, selected_profiles):
+        results.append(generate_tiles(root, metadata, profile))
+        processed.add(metadata)
+    for profile in selected_profiles:
         for metadata in reversed(
             metadata_candidates(root, profile, hours=hours, max_frames=max_frames)
         ):
+            if metadata in processed:
+                continue
             results.append(generate_tiles(root, metadata, profile))
     cleanup = prune_orphan_tiles(root)
     if cleanup["files"] or cleanup["manifests"]:

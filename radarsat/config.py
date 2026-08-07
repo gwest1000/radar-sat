@@ -67,7 +67,7 @@ DOMAINS: dict[str, Domain] = {
     ),
     "north-pacific": Domain(
         id="north-pacific",
-        title="North Pacific",
+        title="Pacific",
         west=120.0,
         south=5.0,
         east=-70.0,
@@ -366,8 +366,10 @@ LAYERS: dict[str, Layer] = {
 VIEWPORTS: dict[str, dict[str, float]] = {
     # Normalized crops of the common EPSG:3005 BC grid. Reusing the same
     # aligned rasters gives regional displays without multiplying R2 storage.
-    # Natural Earth BC bounds plus roughly 180 km of context on each side.
-    "small": {"left": 0.2450, "top": 0.1550, "width": 0.5900, "height": 0.6800},
+    # A wider operational BC view. Relative to the previous crop, the added
+    # context is weighted about 2:1 to the Pacific side while retaining enough
+    # Alberta context for systems approaching from the east.
+    "small": {"left": 0.1320, "top": 0.1550, "width": 0.7600, "height": 0.6800},
     "southwest": {"left": 0.3531, "top": 0.5300, "width": 0.3898, "height": 0.3438},
     "southeast": {"left": 0.5518, "top": 0.4854, "width": 0.3550, "height": 0.3473},
     "northeast": {"left": 0.4196, "top": 0.1525, "width": 0.4520, "height": 0.4422},
@@ -444,11 +446,11 @@ def _overlay_product(
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
-            {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "watersheds", "opacity": 1.0},
             {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
+            {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
         ],
         "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
@@ -501,10 +503,10 @@ def _broad_product(
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
-            {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
+            {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
         ],
         "legends": [
             anchor_layer,
@@ -521,7 +523,7 @@ def _broad_product(
             *(
                 ["North America satellite backgrounds use genuine GOES-18 scan times at a nominal ten-minute cadence; the far eastern edge is outside the best GOES-West viewing geometry."]
                 if rapid_north_america
-                else []
+                else ["Pacific NOAA VIS/IR uses genuine GOES-18 full-disk scan times at a nominal ten-minute cadence; the half-hour Himawari-9/GOES-18 blend remains the infrared and availability fallback."]
             ),
             "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; BC regional products use the ECCC/CLDN raster trail where GOES-18 GLM coverage is less useful.",
             "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
@@ -565,12 +567,12 @@ PRODUCTS: list[dict[str, object]] = [
     ),
     _broad_product(
         "north-pacific-overlay",
-        "North Pacific Satellite / West Coast Radar",
-        "North Pacific",
+        "Pacific Satellite / West Coast Radar",
+        "Pacific",
         "north-pacific",
-        "Himawari-9/GOES-18 calibrated satellite imagery with real West Coast radar coverage.",
+        "Ten-minute NOAA GOES-18 GeoColor imagery with real West Coast radar coverage.",
         [
-            "Himawari-9 supplies the western Pacific and GOES-18 the eastern Pacific on a dateline-safe grid.",
+            "NOAA GOES-18 GeoColor supplies the ten-minute VIS/IR clock; the slower Himawari-9/GOES-18 blend remains available for infrared and fallback coverage.",
             "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
         ],
         BROAD_VIEWPORTS["north-pacific"],

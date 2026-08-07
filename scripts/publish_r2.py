@@ -26,6 +26,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
+        "--whole-frame-only",
+        action="store_true",
+        help=(
+            "Publish a recovery catalog without optional raster-tile pyramids; "
+            "the regular publisher can add them incrementally afterward."
+        ),
+    )
+    parser.add_argument(
+        "--recovery-hours",
+        type=float,
+        help=(
+            "Publish only the newest bounded frame window as an immediate "
+            "recovery catalog; normal cycles can restore older archives later."
+        ),
+    )
+    parser.add_argument(
         "--fast",
         action="store_true",
         help=(
@@ -33,7 +49,10 @@ def parse_args() -> argparse.Namespace:
             "entire bucket; a regular archive publication still reconciles R2."
         ),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.recovery_hours is not None and args.recovery_hours <= 0:
+        parser.error("recovery-hours must be positive")
+    return args
 
 
 def main() -> int:
@@ -47,6 +66,8 @@ def main() -> int:
             sync_delete=not args.no_delete,
             fast=args.fast,
             dry_run=args.dry_run,
+            whole_frame_only=args.whole_frame_only,
+            recovery_hours=args.recovery_hours,
         )
     except Exception as error:
         write_publish_error(args.status_path, error)

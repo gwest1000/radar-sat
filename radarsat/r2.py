@@ -12,8 +12,9 @@ import sqlite3
 import stat as stat_module
 import subprocess
 import sys
+import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -40,6 +41,9 @@ STATIC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400"
 CATALOG_CACHE_CONTROL = "no-cache, max-age=0, must-revalidate"
 DEFAULT_WARN_BYTES = 4_000_000_000
 DEFAULT_MAX_BYTES = 5_000_000_000
+# R2 begins leaving requests pending when a single Mac opens two dozen PUTs at
+# once.  Twelve still fills the uplink, while avoiding that long-tail stall.
+UPLOAD_WORKERS = 12
 STAMP_RE = re.compile(r"^(\d{8}T\d{4}Z)$")
 
 
@@ -274,6 +278,17 @@ def _metadata_path_for_frame(root: Path, frame_key: str) -> Path:
     return root.joinpath("metadata", *parts[1:]).with_suffix(".json")
 
 
+def _relative_file_available(root: Path, relative: str) -> bool:
+    path = Path(relative)
+    if path.is_absolute() or not path.parts or ".." in path.parts:
+        return False
+    try:
+        stat = (root / path).lstat()
+    except OSError:
+        return False
+    return stat_module.S_ISREG(stat.st_mode) and stat.st_size > 0
+
+
 def _tile_manifest_paths(root: Path, relative: str) -> list[str]:
     manifest_relative = Path(relative)
     if (
@@ -298,7 +313,12 @@ def _tile_manifest_paths(root: Path, relative: str) -> list[str]:
     return [str(value) for value in files]
 
 
-def discover_objects(root: Path) -> tuple[list[LocalObject], bytes]:
+def discover_objects(
+    root: Path,
+    *,
+    whole_frame_only: bool = False,
+    minimum_valid_time: dt.datetime | None = None,
+) -> tuple[list[LocalObject], bytes]:
     """Return every object referenced by the catalog plus its metadata.
 
     ``catalog.json`` is returned separately so the publisher can upload it only
@@ -312,6 +332,53 @@ def discover_objects(root: Path) -> tuple[list[LocalObject], bytes]:
         catalog = json.loads(catalog_bytes)
     except json.JSONDecodeError as error:
         raise PublicationSafetyError("catalog.json is not valid JSON") from error
+    # Ingest and retention intentionally run while publication is pending.
+    # Normalize the catalog against files that still exist, and degrade a
+    # broken optional tile pyramid to its whole-frame fallback.
+    for domain in catalog.get("domains", {}).values():
+        for layer in domain.get("layers", {}).values():
+            retained_frames: list[dict[str, object]] = []
+            for value in layer.get("frames", []):
+                if not isinstance(value, dict):
+                    continue
+                frame = dict(value)
+                if minimum_valid_time is not None:
+                    try:
+                        valid_time = dt.datetime.fromisoformat(
+                            str(frame["validTime"]).replace("Z", "+00:00")
+                        ).astimezone(UTC)
+                    except (KeyError, ValueError):
+                        continue
+                    if valid_time < minimum_valid_time:
+                        continue
+                key = str(frame.get("path", ""))
+                try:
+                    metadata = _metadata_path_for_frame(root, key)
+                    metadata_relative = metadata.relative_to(root).as_posix()
+                except (ValueError, PublicationSafetyError):
+                    continue
+                if (
+                    not _relative_file_available(root, key)
+                    or not _relative_file_available(root, metadata_relative)
+                ):
+                    continue
+                tiles = frame.get("tiles")
+                if whole_frame_only:
+                    frame.pop("tiles", None)
+                elif isinstance(tiles, dict) and isinstance(tiles.get("manifest"), str):
+                    try:
+                        tile_files = _tile_manifest_paths(root, str(tiles["manifest"]))
+                        tile_ready = all(
+                            _relative_file_available(root, relative)
+                            for relative in tile_files
+                        )
+                    except PublicationSafetyError:
+                        tile_ready = False
+                    if not tile_ready:
+                        frame.pop("tiles", None)
+                retained_frames.append(frame)
+            layer["frames"] = retained_frames
+    catalog_bytes = json.dumps(catalog, separators=(",", ":")).encode()
 
     relative_paths: set[str] = set()
     frame_count = 0
@@ -348,6 +415,72 @@ def discover_objects(root: Path) -> tuple[list[LocalObject], bytes]:
     return objects, catalog_bytes
 
 
+def publication_snapshot(
+    root: Path,
+    state_path: Path,
+    *,
+    whole_frame_only: bool,
+    minimum_valid_time: dt.datetime | None,
+    known_objects: Mapping[str, tuple[int, int]] | None = None,
+    attempts: int = 4,
+) -> tuple[Path, list[LocalObject], bytes]:
+    """Hard-link the upload set while live retention continues.
+
+    A fast publication already trusts its durable successful-upload index.
+    Objects unchanged in that index are never read during the PUT phase, so
+    leave those in place and snapshot only new or modified objects. This keeps
+    a current-catalog commit fast even when the retained archive has tens of
+    thousands of files.
+    """
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    for stale in state_path.parent.glob("r2-publish-snapshot-*"):
+        if stale.is_dir():
+            shutil.rmtree(stale, ignore_errors=True)
+    last_error: Exception | None = None
+    for _attempt in range(attempts):
+        snapshot_root = Path(
+            tempfile.mkdtemp(prefix="r2-publish-snapshot-", dir=state_path.parent)
+        )
+        try:
+            objects, catalog_bytes = discover_objects(
+                root,
+                whole_frame_only=whole_frame_only,
+                minimum_valid_time=minimum_valid_time,
+            )
+            snapshot_objects: list[LocalObject] = []
+            for item in objects:
+                if known_objects is not None and known_objects.get(item.key) == (
+                    item.size,
+                    item.mtime_ns,
+                ):
+                    snapshot_objects.append(item)
+                    continue
+                destination = snapshot_root / item.key
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    os.link(item.path, destination)
+                except OSError:
+                    # Preserve portability when output/state roots are placed
+                    # on separate filesystems. The normal configuration uses
+                    # hard links and therefore consumes no duplicate blocks.
+                    shutil.copy2(item.path, destination)
+                snapshot_objects.append(
+                    LocalObject(
+                        key=item.key,
+                        path=destination,
+                        size=item.size,
+                        mtime_ns=item.mtime_ns,
+                    )
+                )
+            return snapshot_root, snapshot_objects, catalog_bytes
+        except (OSError, PublicationSafetyError) as error:
+            last_error = error
+            shutil.rmtree(snapshot_root, ignore_errors=True)
+    raise PublicationSafetyError(
+        f"Could not capture a stable publication snapshot: {last_error}"
+    )
+
+
 def boto3_client(config: R2Config):
     try:
         import boto3
@@ -364,7 +497,7 @@ def boto3_client(config: R2Config):
             retries={"max_attempts": 1},
             connect_timeout=15,
             read_timeout=90,
-            max_pool_connections=4,
+            max_pool_connections=UPLOAD_WORKERS,
         ),
     )
 
@@ -512,6 +645,7 @@ def size_guard(
     catalog_bytes: bytes,
     remote: Mapping[str, int],
     config: R2Config,
+    pending_delete: Iterable[str] = (),
 ) -> dict[str, int]:
     values = list(objects)
     local_bytes = sum(item.size for item in values) + len(catalog_bytes)
@@ -519,12 +653,24 @@ def size_guard(
     replaced_bytes = sum(remote.get(item.key, 0) for item in values) + remote.get(
         "catalog.json", 0
     )
-    projected_bytes = remote_bytes - replaced_bytes + local_bytes
-    if local_bytes >= config.warn_bytes or projected_bytes >= config.warn_bytes:
+    peak_projected_bytes = remote_bytes - replaced_bytes + local_bytes
+    desired_keys = {item.key for item in values}
+    pending_delete_bytes = sum(
+        remote.get(key, 0)
+        for key in set(pending_delete)
+        if key not in desired_keys
+    )
+    projected_bytes = peak_projected_bytes - pending_delete_bytes
+    if (
+        local_bytes >= config.warn_bytes
+        or projected_bytes >= config.warn_bytes
+        or peak_projected_bytes >= config.warn_bytes
+    ):
         print(
             "R2 storage warning: "
             f"retained={local_bytes / 1_000_000_000:.2f} GB, "
-            f"projected bucket={projected_bytes / 1_000_000_000:.2f} GB",
+            f"projected bucket={projected_bytes / 1_000_000_000:.2f} GB, "
+            f"temporary peak={peak_projected_bytes / 1_000_000_000:.2f} GB",
             file=sys.stderr,
             flush=True,
         )
@@ -539,6 +685,8 @@ def size_guard(
         "localBytes": local_bytes,
         "remoteBytes": remote_bytes,
         "projectedBytes": projected_bytes,
+        "peakProjectedBytes": peak_projected_bytes,
+        "pendingDeleteBytes": pending_delete_bytes,
     }
 
 
@@ -552,18 +700,39 @@ def publish(
     sync_delete: bool = True,
     fast: bool = False,
     dry_run: bool = False,
+    whole_frame_only: bool = False,
+    recovery_hours: float | None = None,
     now: dt.datetime | None = None,
 ) -> dict[str, object]:
     now = (now or dt.datetime.now(UTC)).astimezone(UTC)
-    objects, catalog_bytes = discover_objects(root)
-    westwx_catalog_bytes = json.dumps(
-        build_westwx_catalog(json.loads(catalog_bytes)),
-        separators=(",", ":"),
-    ).encode()
-    client = client or boto3_client(config)
+    snapshot_root: Path | None = None
+    minimum_valid_time = (
+        now - dt.timedelta(hours=recovery_hours)
+        if recovery_hours is not None
+        else None
+    )
     state = PublishState(state_path, f"{config.account_id}/{config.bucket}")
     try:
         known_objects = state.known_objects()
+        if dry_run:
+            objects, catalog_bytes = discover_objects(
+                root,
+                whole_frame_only=whole_frame_only,
+                minimum_valid_time=minimum_valid_time,
+            )
+        else:
+            snapshot_root, objects, catalog_bytes = publication_snapshot(
+                root,
+                state_path,
+                whole_frame_only=whole_frame_only,
+                minimum_valid_time=minimum_valid_time,
+                known_objects=known_objects if fast else None,
+            )
+        westwx_catalog_bytes = json.dumps(
+            build_westwx_catalog(json.loads(catalog_bytes)),
+            separators=(",", ":"),
+        ).encode()
+        client = client or boto3_client(config)
         # Rapid satellite/observation commits trust the durable record of
         # successful uploads and avoid a paginated 10k-object bucket listing.
         # The half-hour archive worker still performs a full reconciliation
@@ -573,15 +742,19 @@ def publish(
             if fast
             else list_remote_objects(client, config.bucket)
         )
-        sizes = size_guard(objects, catalog_bytes, remote, config)
-        pending = [
-            item
-            for item in objects
-            if (
-                item.key not in remote
-                or known_objects.get(item.key) != (item.size, item.mtime_ns)
-            )
-        ]
+        if not fast:
+            # The fast path deliberately trusts this index, so a periodic
+            # authoritative listing must discard records for objects no longer
+            # present in R2. This keeps size estimates accurate and prevents a
+            # later fast catalog from assuming a missing archive object exists.
+            absent = set(known_objects).difference(remote)
+            if absent:
+                state.forget(absent)
+                known_objects = {
+                    key: value
+                    for key, value in known_objects.items()
+                    if key in remote
+                }
         desired_keys = {item.key for item in objects}
         expired = (
             [
@@ -592,6 +765,21 @@ def publish(
             if sync_delete and not fast
             else []
         )
+        sizes = size_guard(
+            objects,
+            catalog_bytes,
+            remote,
+            config,
+            pending_delete=expired,
+        )
+        pending = [
+            item
+            for item in objects
+            if (
+                item.key not in remote
+                or known_objects.get(item.key) != (item.size, item.mtime_ns)
+            )
+        ]
         if dry_run:
             result: dict[str, object] = {
                 "status": "dry-run",
@@ -601,6 +789,8 @@ def publish(
                 "pending": len(pending),
                 "expired": len(expired),
                 "fast": fast,
+                "wholeFrameOnly": whole_frame_only,
+                "recoveryHours": recovery_hours,
                 **sizes,
             }
             write_status(status_path, result)
@@ -610,10 +800,16 @@ def publish(
             return item, upload_object(client, config, item)
 
         uploaded = 0
-        with ThreadPoolExecutor(max_workers=min(4, max(1, len(pending)))) as executor:
-            for item, sha256 in executor.map(upload, pending):
+        with ThreadPoolExecutor(
+            max_workers=min(UPLOAD_WORKERS, max(1, len(pending)))
+        ) as executor:
+            futures = {executor.submit(upload, item): item for item in pending}
+            for future in as_completed(futures):
+                item, sha256 = future.result()
                 # Keep SQLite writes on the publishing thread. Only the
-                # independent network transfers run concurrently.
+                # independent network transfers run concurrently. Recording
+                # futures as they finish also prevents one slow PUT from
+                # hiding the successful progress of every later upload.
                 state.record(item, sha256)
                 uploaded += 1
 
@@ -643,6 +839,8 @@ def publish(
             "deleted": deleted,
             "catalogLast": True,
             "fast": fast,
+            "wholeFrameOnly": whole_frame_only,
+            "recoveryHours": recovery_hours,
             **sizes,
         }
         if config.public_base_url:
@@ -651,6 +849,8 @@ def publish(
         return result
     finally:
         state.close()
+        if snapshot_root is not None:
+            shutil.rmtree(snapshot_root, ignore_errors=True)
 
 
 def write_publish_error(status_path: Path, error: Exception) -> None:

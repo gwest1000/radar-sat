@@ -200,20 +200,32 @@ class OpsScriptTests(unittest.TestCase):
         self.assertNotIn("backfill_native_bc_satellite.py", satellite)
         self.assertNotIn("scripts/run_ingest.py", satellite)
         self.assertIn("publish_locked.zsh", satellite)
-        self.assertIn("publish_locked.zsh\" --fast", satellite)
+        self.assertIn(
+            "publish_locked.zsh\" --fast --whole-frame-only --recovery-hours 6",
+            satellite,
+        )
+        self.assertNotIn("build_raster_tiles.py", satellite)
         self.assertIn("try_acquire_heavy_satellite_lock", satellite)
 
-        self.assertIn("backfill_five_minute_bc_satellite.py", five_minute)
+        self.assertNotIn("backfill_five_minute_bc_satellite.py", five_minute)
         self.assertIn("backfill_noaa_star_geocolor.py", five_minute)
         self.assertIn("--sector pacus", five_minute)
-        self.assertIn("publish_locked.zsh\" --fast", five_minute)
+        self.assertIn("RADARSAT_NOAA_STAR_PACUS_MAX_FRAMES:-4", five_minute)
+        self.assertIn(
+            "publish_locked.zsh\" --fast --whole-frame-only --recovery-hours 6",
+            five_minute,
+        )
+        self.assertNotIn("build_raster_tiles.py", five_minute)
         self.assertIn("five-minute-satellite-cycle.lock", five_minute)
         self.assertNotIn("try_acquire_heavy_satellite_lock", five_minute)
 
         self.assertIn("RADARSAT_RAW_SAT_ENABLED=0", observations)
         self.assertIn("--spool-mode only", observations)
         self.assertIn("publish_locked.zsh", observations)
-        self.assertIn("publish_locked.zsh\" --fast", observations)
+        self.assertIn(
+            "publish_locked.zsh\" --fast --whole-frame-only --recovery-hours 6",
+            observations,
+        )
         self.assertIn("<string>10</string>", observation_plist)
 
         self.assertIn("--domain north-pacific", archive)
@@ -221,6 +233,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("RADARSAT_GOES_HAZARDS_ENABLED=0", archive)
         self.assertIn("RADARSAT_ARCHIVE_START_DELAY_SECONDS", archive)
         self.assertIn("try_acquire_heavy_satellite_lock", archive)
+        self.assertIn("build_raster_tiles.py", archive)
         self.assertIn("heavy-satellite.lock", heavy_lock)
         self.assertIn("for name in ingest five-minute observations archive health", install)
 

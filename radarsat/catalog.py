@@ -11,6 +11,8 @@ from .config import DOMAINS, LAYERS, LEGENDS, PRODUCTS
 
 
 UTC = dt.timezone.utc
+CANONICAL_FIVE_MINUTE_SOURCE = "NOAA/NESDIS/STAR"
+CANONICAL_FIVE_MINUTE_RENDER_VERSION = 4
 
 
 def retention_policy(tier: str) -> dict[str, int]:
@@ -44,6 +46,92 @@ def _frame_asset_exists(root: Path, frame: dict[str, Any]) -> bool:
         return (root / relative).is_file()
     except OSError:
         return False
+
+
+def _without_broken_tiles(root: Path, frame: dict[str, Any]) -> dict[str, Any]:
+    """Retain the whole-frame fallback when a tile manifest is unavailable."""
+    tiles = frame.get("tiles")
+    manifest_value = tiles.get("manifest") if isinstance(tiles, dict) else None
+    if not isinstance(manifest_value, str):
+        return frame
+    relative = Path(manifest_value)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        valid = False
+    else:
+        try:
+            valid = (root / relative).is_file()
+        except OSError:
+            valid = False
+    if valid:
+        try:
+            payload = json.loads((root / relative).read_text())
+            files = payload.get("files")
+            valid = isinstance(files, list) and bool(files)
+            if valid:
+                for value in files:
+                    tile = Path(str(value))
+                    if (
+                        tile.is_absolute()
+                        or not tile.parts
+                        or ".." in tile.parts
+                        or not (root / tile).is_file()
+                    ):
+                        valid = False
+                        break
+        except (OSError, json.JSONDecodeError):
+            valid = False
+    if valid:
+        return frame
+    sanitized = dict(frame)
+    sanitized.pop("tiles", None)
+    return sanitized
+
+
+def _parse_frame_time(value: object) -> dt.datetime | None:
+    try:
+        return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
+    except (TypeError, ValueError):
+        return None
+
+
+def _canonical_five_minute_frames(
+    domain_id: str,
+    layer_id: str,
+    frames: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Expose one resolution/source family with nondecreasing fallback time.
+
+    Raw NODD PACUS frames and STAR/CIRA GeoColor used to share this layer.
+    Switching between their projections and resolutions made clouds jump even
+    when valid times advanced. STAR is now the canonical public renderer; raw
+    products remain available as inputs for its northern full-disk fallback.
+    """
+    if domain_id != "bc" or layer_id != "raw-visir-5min":
+        return frames
+    canonical = [
+        frame
+        for frame in frames
+        if frame.get("source") == CANONICAL_FIVE_MINUTE_SOURCE
+        and frame.get("starRenderVersion") == CANONICAL_FIVE_MINUTE_RENDER_VERSION
+        and _parse_frame_time(frame.get("fallbackSourceTime")) is not None
+    ]
+    if not canonical:
+        return []
+    latest = canonical[-1]
+    dimensions = (latest.get("renderWidth"), latest.get("renderHeight"))
+    selected: list[dict[str, Any]] = []
+    previous_fallback: dt.datetime | None = None
+    for frame in canonical:
+        if (frame.get("renderWidth"), frame.get("renderHeight")) != dimensions:
+            continue
+        fallback = _parse_frame_time(frame.get("fallbackSourceTime"))
+        if fallback is None or (
+            previous_fallback is not None and fallback < previous_fallback
+        ):
+            continue
+        selected.append(frame)
+        previous_fallback = fallback
+    return selected
 
 
 def _previous_metadata(root: Path) -> tuple[int | None, dict[str, dict[str, Any]]]:
@@ -110,12 +198,12 @@ def read_metadata(
     # referenced asset, including incrementally reused entries, so a catalog
     # can never publish a path that has already disappeared.
     frames = [
-        frame
+        _without_broken_tiles(root, frame)
         for frame in frames_by_path.values()
         if _frame_asset_exists(root, frame)
     ]
     frames.sort(key=lambda item: item["validTime"])
-    return frames
+    return _canonical_five_minute_frames(domain_id, layer_id, frames)
 
 
 def build_catalog(root: Path) -> dict[str, Any]:
