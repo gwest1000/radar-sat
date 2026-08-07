@@ -277,6 +277,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
             "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
             "ECCC Datamart": "https://dd.weather.gc.ca/",
             "ECCC HRDPS Continental 2.5 km": "https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps-datamart_en/",
+            "ECMWF IFS Control": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
             "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf",
             "BC Wildfire Service": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0",
             "NIFC WFIGS": "https://www.arcgis.com/home/item.html?id=4181a117dc9e43db8598533e29972015",

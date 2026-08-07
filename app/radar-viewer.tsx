@@ -188,6 +188,7 @@ const SOURCE_SUMMARIES: Record<string, string> = {
   "ECCC GeoMet": "Canadian radar, precipitation type and ECCC-rendered satellite products.",
   "ECCC Datamart": "Native MSC GOES RGB satellite products and Canadian Lightning Detection Network observations.",
   "ECCC HRDPS Continental 2.5 km": "Hourly 500 hPa geopotential-height and mean sea-level-pressure model contours.",
+  "ECMWF IFS Control": "Three-hour 500 hPa geopotential-height and mean sea-level-pressure control-forecast contours on the large domains.",
   "NRCan CWFIS": "Timestamped satellite thermal detections and Canadian active-fire records.",
   "BC Wildfire Service": "Official BC active fires and Wildfires of Note.",
   "NIFC WFIGS": "Current U.S. ICS-209 large-incident locations.",
@@ -762,6 +763,12 @@ function rasterLayerId(
         ? "glm-lightning-hour"
         : recipeId
     : recipeId;
+  if (baseId === "model-hgt500") {
+    return product.domain === "bc" ? "hrdps-hgt500" : "ecmwf-hgt500";
+  }
+  if (baseId === "model-mslp") {
+    return product.domain === "bc" ? "hrdps-mslp" : "ecmwf-mslp";
+  }
   const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
   if (product.domain === "bc" && regionKey && ["lightning-trail", "lightning-hour", "hotspots"].includes(baseId)) {
     const candidate = `${baseId}-region-${regionKey}`;
@@ -1041,8 +1048,8 @@ function layerLabel(layerId: string): string {
   if (layerId === "ptype") return "PTYPE";
   if (layerId === "site-radar") return "RADAR";
   if (layerId === "hotspots") return "FIRE";
-  if (layerId === "hrdps-hgt500") return "H500";
-  if (layerId === "hrdps-mslp") return "MSLP";
+  if (["model-hgt500", "hrdps-hgt500", "ecmwf-hgt500"].includes(layerId)) return "H500";
+  if (["model-mslp", "hrdps-mslp", "ecmwf-mslp"].includes(layerId)) return "MSLP";
   if (
     ["daynight", "ir", "convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir"].includes(layerId)
     || layerId.startsWith("westwx-")
@@ -1072,8 +1079,8 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "radar-coverage") return "Radar coverage";
   if (layerId === "ptype-coverage") return "Precipitation-type coverage";
   if (layerId === "ptype") return "Precip type";
-  if (layerId === "hrdps-hgt500") return "HRDPS 500 hPa";
-  if (layerId === "hrdps-mslp") return "HRDPS MSLP";
+  if (layerId === "model-hgt500") return "500 hPa Height";
+  if (layerId === "model-mslp") return "MSLP";
   if (layerId === "lightning-trail") return "Lightning";
   if (layerId === "lightning") return "Flash density";
   if (layerId === "glm-lightning-trail") return "Lightning";
@@ -1371,8 +1378,8 @@ function SmokeLegend({ frame }: { frame?: Frame }) {
 function ModelContourLegend({ kind }: { kind: "hgt500" | "mslp" }) {
   const height = kind === "hgt500";
   const rows = height
-    ? [["≤ 570 dam", "#ff9f2f", 3], ["> 570 dam", "#ffd166", 3]] as const
-    : [["≤ 1024 hPa", "#ef4dff", 1.5], ["> 1024 hPa", "#42a5ff", 1.5]] as const;
+    ? [["≤ 570 dam", "#c98735", 3.75], ["> 570 dam", "#b95750", 3.75]] as const
+    : [["≤ 1024 hPa", "#ef4dff", 1.125], ["> 1024 hPa", "#42a5ff", 1.125]] as const;
   return (
     <div className="hotspot-legend" aria-label={height ? "500 hPa height contour legend" : "Mean sea-level pressure contour legend"}>
       {rows.map(([label, colour, width]) => (
@@ -1997,7 +2004,7 @@ export function RadarViewer() {
   if (error) {
     return (
       <main className="app-shell">
-        <h1 className="brand">Real-Time WX Display</h1>
+        <h1 className="brand">Real-Time Wx Display</h1>
         <div className="error-panel" role="alert">{error}</div>
       </main>
     );
@@ -2095,7 +2102,7 @@ export function RadarViewer() {
     <main className="app-shell">
       <header className="site-header">
         <div className="brand-row">
-          <h1 className="brand">Real-Time WX Display</h1>
+          <h1 className="brand">Real-Time Wx Display</h1>
         </div>
       </header>
 
@@ -2258,7 +2265,7 @@ export function RadarViewer() {
               </div>
             )}
             {hasCoverage && (
-              <div className="coverage-key"><span className="hatch-swatch" /> No radar coverage</div>
+              <div className="coverage-key"><span className="hatch-swatch" /> Radar coverage</div>
             )}
           </div>
         </div>
@@ -2284,11 +2291,6 @@ export function RadarViewer() {
                 <span className="layers-summary-heading">
                   <span className="selector-label">Layers</span>
                   <span className="layers-count">{activeLayerLabels.length} on</span>
-                </span>
-                <span className="active-layer-list">
-                  {activeLayerLabels.length ? activeLayerLabels.map((label) => (
-                    <span className="active-layer-item" key={label}>{label}</span>
-                  )) : <span className="active-layer-empty">None selected</span>}
                 </span>
                 <span className="layers-chevron" aria-hidden="true">⌄</span>
               </button>
@@ -2320,8 +2322,8 @@ export function RadarViewer() {
               if (legend.kind === "lightning-age") {
                 return <LightningLegend hourly={effectiveRangeHours > 24} key={legendId} />;
               }
-              if (legend.kind === "hrdps-hgt500") return <ModelContourLegend kind="hgt500" key={legendId} />;
-              if (legend.kind === "hrdps-mslp") return <ModelContourLegend kind="mslp" key={legendId} />;
+              if (legend.kind === "model-hgt500") return <ModelContourLegend kind="hgt500" key={legendId} />;
+              if (legend.kind === "model-mslp") return <ModelContourLegend kind="mslp" key={legendId} />;
               if (legend.kind === "smoke-confidence") {
                 const smokeFrame = composedLayers.find((layer) => layer.id === "smoke")?.frame;
                 return <SmokeLegend frame={smokeFrame} key={legendId} />;

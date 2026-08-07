@@ -55,9 +55,8 @@ def save_coverage(content: bytes, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     image = Image.open(io.BytesIO(content)).convert("RGBA")
     array = np.asarray(image).copy()
-    # GeoMet's ``*.INV``/``*-Inverted`` layers already paint the area with no
-    # radar estimate. Preserve that semantic: hatch their non-transparent
-    # pixels and leave valid radar footprints clear.
+    # GeoMet's coverage render paints the circular radar footprints. Hatch its
+    # non-transparent pixels and leave the area outside radar coverage clear.
     mask = array[:, :, 3] > 20
     y, x = np.indices(mask.shape)
     hatch = ((x + y) % 10) < 1

@@ -781,7 +781,7 @@ input:focus-visible {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 3px 7px;
   width: 100%;
-  min-height: 48px;
+  min-height: 34px;
   padding: 6px 24px 6px 8px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -803,46 +803,6 @@ input:focus-visible {
   color: var(--accent);
   font-size: 0.65rem;
   font-weight: 650;
-}
-
-.active-layer-list {
-  display: grid;
-  gap: 3px;
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 0.69rem;
-  line-height: 1.25;
-}
-
-.active-layer-item,
-.active-layer-empty {
-  min-width: 0;
-  overflow: hidden;
-  padding: 2px 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: rgba(4, 9, 13, 0.72);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.active-layer-item {
-  position: relative;
-  padding-left: 16px;
-  color: #dff9ff;
-}
-
-.active-layer-item::before {
-  position: absolute;
-  top: 50%;
-  left: 6px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 5px color-mix(in srgb, var(--accent) 65%, transparent);
-  content: "";
-  transform: translateY(-50%);
 }
 
 .layers-chevron {

@@ -27,6 +27,11 @@ class HrdpsContourTests(unittest.TestCase):
             model_filename("20260807T18Z", 4, mslp),
             "20260807T18Z_MSC_HRDPS_PRMSL_MSL_RLatLon0.0225_PT004H.grib2",
         )
+        self.assertAlmostEqual(height.linewidth, 2.15 * 1.75)
+        self.assertAlmostEqual(mslp.linewidth, 1.05 * 0.75)
+        self.assertEqual((height.lower_colour, height.upper_colour), ("#c98735", "#b95750"))
+        self.assertGreater(height.label_size, 7.2)
+        self.assertGreater(mslp.label_size, 6.4)
 
     def test_newest_covering_run_is_preferred(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

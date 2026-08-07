@@ -113,12 +113,13 @@ if [[ "${RADARSAT_WEB_TILES_ENABLED:-0}" == "1" ]]; then
     || print -u2 "Warning: archive raster-tile refresh failed; retaining whole-frame fallback."
 fi
 
-if [[ "${RADARSAT_HRDPS_CONTOURS_ENABLED:-1}" == "1" ]]; then
-  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_hrdps_contours.py" \
+if [[ "${RADARSAT_MODEL_CONTOURS_ENABLED:-${RADARSAT_HRDPS_CONTOURS_ENABLED:-1}}" == "1" ]]; then
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_model_contours.py" \
     --output-root "${OUTPUT_ROOT}" \
-    --data-root "${RADARSAT_HRDPS_DATA_ROOT:-${HOME}/projects/fcstGraphics/data/hrdps_continental}" \
-    --hours "${RADARSAT_HRDPS_CONTOUR_RECOVERY_HOURS:-12}" \
-    || print -u2 "Warning: HRDPS contour refresh failed; retaining existing model overlays."
+    --hrdps-root "${RADARSAT_HRDPS_DATA_ROOT:-${HOME}/projects/fcstGraphics/data/hrdps_continental}" \
+    --ecmwf-root "${RADARSAT_ECMWF_DATA_ROOT:-/Volumes/Greg1_2tb/concrete_fcst_data/raw/ecmwf/realtime}" \
+    --hours "${RADARSAT_MODEL_CONTOUR_RECOVERY_HOURS:-${RADARSAT_HRDPS_CONTOUR_RECOVERY_HOURS:-12}}" \
+    || print -u2 "Warning: model contour refresh failed; retaining existing overlays."
 fi
 
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"

@@ -229,8 +229,9 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("<string>10</string>", observation_plist)
 
         self.assertIn("--domain north-pacific", archive)
-        self.assertIn("backfill_hrdps_contours.py", archive)
-        self.assertIn("RADARSAT_HRDPS_CONTOURS_ENABLED", archive)
+        self.assertIn("backfill_model_contours.py", archive)
+        self.assertIn("RADARSAT_MODEL_CONTOURS_ENABLED", archive)
+        self.assertIn("RADARSAT_ECMWF_DATA_ROOT", archive)
         self.assertIn("--latest-only", archive)
         self.assertIn("RADARSAT_GOES_HAZARDS_ENABLED=0", archive)
         self.assertIn("RADARSAT_ARCHIVE_START_DELAY_SECONDS", archive)

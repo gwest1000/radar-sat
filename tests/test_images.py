@@ -12,9 +12,9 @@ from radarsat.images import save_coverage
 
 
 class CoverageRenderTests(unittest.TestCase):
-    def test_inverted_source_hatches_no_coverage_not_valid_footprint(self) -> None:
+    def test_source_hatches_valid_radar_footprint(self) -> None:
         source = np.zeros((4, 6, 4), dtype=np.uint8)
-        source[:, :3] = (181, 181, 181, 128)  # GeoMet no-coverage paint
+        source[:, :3] = (181, 181, 181, 128)  # GeoMet radar-coverage paint
         encoded = io.BytesIO()
         Image.fromarray(source).save(encoded, "PNG")
         with tempfile.TemporaryDirectory() as temporary:

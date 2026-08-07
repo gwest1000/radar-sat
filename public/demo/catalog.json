@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-07T23:09:16.259350Z",
+  "generatedAt": "2026-08-07T23:51:01.659821Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -4154,7 +4154,7 @@
           "format": "image/png"
         },
         "ptype-coverage": {
-          "title": "Precipitation-type no-coverage mask",
+          "title": "Precipitation-type coverage mask",
           "maxAgeMinutes": 30,
           "frames": [
             {
@@ -4309,7 +4309,7 @@
           "format": "image/png"
         },
         "radar-coverage": {
-          "title": "Radar no-coverage mask",
+          "title": "Radar coverage mask",
           "maxAgeMinutes": 20,
           "frames": [
             {
@@ -5002,13 +5002,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "hrdps-hgt500",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "hrdps-mslp",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5041,8 +5041,8 @@
       "legends": [
         "radar-rain",
         "ptype",
-        "hrdps-hgt500",
-        "hrdps-mslp",
+        "model-hgt500",
+        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5161,13 +5161,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "hrdps-hgt500",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "hrdps-mslp",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5200,8 +5200,8 @@
       "legends": [
         "radar-rain",
         "ptype",
-        "hrdps-hgt500",
-        "hrdps-mslp",
+        "model-hgt500",
+        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5321,13 +5321,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "hrdps-hgt500",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "hrdps-mslp",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5360,8 +5360,8 @@
       "legends": [
         "radar-rain",
         "ptype",
-        "hrdps-hgt500",
-        "hrdps-mslp",
+        "model-hgt500",
+        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5481,13 +5481,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "hrdps-hgt500",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "hrdps-mslp",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5520,8 +5520,8 @@
       "legends": [
         "radar-rain",
         "ptype",
-        "hrdps-hgt500",
-        "hrdps-mslp",
+        "model-hgt500",
+        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5641,13 +5641,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "hrdps-hgt500",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "hrdps-mslp",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5680,8 +5680,8 @@
       "legends": [
         "radar-rain",
         "ptype",
-        "hrdps-hgt500",
-        "hrdps-mslp",
+        "model-hgt500",
+        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5766,13 +5766,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "hrdps-hgt500",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "hrdps-mslp",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5802,8 +5802,8 @@
         "raw-ir",
         "radar-rain",
         "ptype",
-        "hrdps-hgt500",
-        "hrdps-mslp",
+        "model-hgt500",
+        "model-mslp",
         "glm-lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5886,13 +5886,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "hrdps-hgt500",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "hrdps-mslp",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5922,8 +5922,8 @@
         "westwx-ir",
         "radar-rain",
         "ptype",
-        "hrdps-hgt500",
-        "hrdps-mslp",
+        "model-hgt500",
+        "model-mslp",
         "glm-lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -6006,13 +6006,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "hrdps-hgt500",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "hrdps-mslp",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -6042,8 +6042,8 @@
         "raw-ir",
         "radar-rain",
         "ptype",
-        "hrdps-hgt500",
-        "hrdps-mslp",
+        "model-hgt500",
+        "model-mslp",
         "glm-lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -6103,13 +6103,13 @@
       "title": "BC transmission lines",
       "kind": "transmission-lines"
     },
-    "hrdps-hgt500": {
-      "title": "HRDPS 500 hPa height",
-      "kind": "hrdps-hgt500"
+    "model-hgt500": {
+      "title": "500 hPa height",
+      "kind": "model-hgt500"
     },
-    "hrdps-mslp": {
-      "title": "HRDPS MSLP",
-      "kind": "hrdps-mslp"
+    "model-mslp": {
+      "title": "Mean sea-level pressure",
+      "kind": "model-mslp"
     },
     "hotspots": {
       "title": "Active wildfires and thermal hotspots",
@@ -6128,6 +6128,7 @@
     "ECCC GeoMet": "https://eccc-msc.github.io/open-data/msc-geomet/",
     "ECCC Datamart": "https://dd.weather.gc.ca/",
     "ECCC HRDPS Continental 2.5 km": "https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps-datamart_en/",
+    "ECMWF IFS Control": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
     "NRCan CWFIS": "https://cwfis.cfs.nrcan.gc.ca/downloads/docs/en/references/cwfif/cwfis-data-placemat.pdf",
     "BC Wildfire Service": "https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0",
     "NIFC WFIGS": "https://www.arcgis.com/home/item.html?id=4181a117dc9e43db8598533e29972015",

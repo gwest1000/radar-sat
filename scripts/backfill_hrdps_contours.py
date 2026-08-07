@@ -29,7 +29,7 @@ def main() -> int:
         args.output_root.resolve(),
         args.data_root.resolve(),
         hours=max(0, args.hours),
-        domain_ids=args.domains or ("bc", "north-america", "north-pacific"),
+        domain_ids=args.domains or ("bc",),
         now=now,
         download=not args.no_download,
     )

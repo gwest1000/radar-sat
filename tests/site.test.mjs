@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("exports the operational viewer", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
-  assert.match(html, /Real-Time WX Display/);
+  assert.match(html, /Real-Time Wx Display/);
   assert.match(html, /href="\/radar-sat\/_next\//);
   assert.match(html, /href="\/radar-sat\/favicon\.svg"/);
   assert.match(html, /https:\/\/gwest1000\.github\.io\/radar-sat\/og-radar-sat\.png/);
@@ -53,6 +53,8 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
   assert.match(viewer, /AUTO_REFRESH_MS = 5 \* 60_000/);
+  assert.match(viewer, /> Radar coverage</);
+  assert.doesNotMatch(viewer, /> No radar coverage</);
   assert.match(viewer, /document\.visibilityState !== "visible"/);
   assert.match(viewer, /window\.location\.reload\(\)/);
   assert.match(viewer, /VIEWER_PREFERENCES_KEY/);
@@ -141,10 +143,10 @@ test("keeps a compact desktop control rail and gives the map the remaining width
   assert.match(styles, /\.product-switcher \.selector-options,[\s\S]*?\.range-selector \.selector-options\s*\{[\s\S]*?bottom: calc\(100% \+ 4px\)/);
   assert.match(styles, /\.product-switcher \.product-button,[\s\S]*?\.range-selector \.range-button\s*\{[\s\S]*?width: 100%/);
   assert.match(styles, /\.legend-content\s*\{[\s\S]*?border: 1px solid var\(--border-strong\)/);
-  assert.match(styles, /\.active-layer-list\s*\{[\s\S]*?display: grid/);
+  assert.doesNotMatch(styles, /\.active-layer-list\s*\{/);
   assert.match(styles, /\.product-switcher \.selector-current,[\s\S]*?\.range-selector \.selector-current\s*\{[\s\S]*?width: 100%/);
-  assert.match(viewer, /activeLayerLabels\.map\(\(label\) =>/);
-  assert.match(viewer, /className="active-layer-item"/);
+  assert.doesNotMatch(viewer, /activeLayerLabels\.map\(\(label\) =>/);
+  assert.doesNotMatch(viewer, /className="active-layer-item"/);
   assert.match(viewer, /aria-label=\{`Region: \$\{product\.shortTitle\}`\}/);
   assert.match(viewer, /aria-label=\{`Time span:/);
   assert.doesNotMatch(viewer, /Mixed freshness|live-summary|freshnessClock/);
@@ -183,10 +185,10 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "eccc-geocolor").defaultEnabled, false);
   assert.match(viewer, /layerId === "eccc-geocolor"\) return "MSC GeoColor"/);
   assert.equal(overlay.layers.find((layer) => layer.id === "snowfog").defaultEnabled, false);
-  assert.equal(overlay.layers.find((layer) => layer.id === "hrdps-hgt500").defaultEnabled, false);
-  assert.equal(overlay.layers.find((layer) => layer.id === "hrdps-mslp").optional, true);
-  assert.match(viewer, /HRDPS 500 hPa/);
-  assert.match(viewer, /HRDPS MSLP/);
+  assert.equal(overlay.layers.find((layer) => layer.id === "model-hgt500").defaultEnabled, false);
+  assert.equal(overlay.layers.find((layer) => layer.id === "model-mslp").optional, true);
+  assert.match(viewer, /500 hPa Height/);
+  assert.match(viewer, /ECMWF IFS Control/);
   assert.equal(demo.products.some((product) => product.group === "Snow / fog"), false);
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");
@@ -212,6 +214,7 @@ test("ships a runtime data configuration", async () => {
     ["westwx-visir", "westwx-ir"],
   );
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
+  assert.equal(northAmerica.layers.find((layer) => layer.id === "model-hgt500").optional, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-ir");
   assert.equal(northPacific.frameIntervalMinutes, 20);

@@ -33,7 +33,7 @@ UTC = dt.timezone.utc
 RUN_RE = re.compile(r"^\d{8}T(?:00|06|12|18)Z$")
 BASE_URL = "https://dd.weather.gc.ca/today/model_hrdps/continental/2.5km"
 GRID_TAG = "RLatLon0.0225"
-RENDER_VERSION = 1
+RENDER_VERSION = 2
 DEFAULT_DATA_ROOT = (
     Path(__file__).resolve().parents[2]
     / "fcstGraphics"
@@ -44,6 +44,7 @@ DEFAULT_DATA_ROOT = (
 
 @dataclass(frozen=True)
 class FieldStyle:
+    kind: str
     layer_id: str
     variable: str
     level_tag: str
@@ -54,7 +55,7 @@ class FieldStyle:
     lower_colour: str
     upper_colour: str
     linewidth: float
-    label_every: int
+    label_size: float
     contour_smooth_km: float
     smooth_km: float
     background_km: float
@@ -66,6 +67,7 @@ class FieldStyle:
 
 FIELD_STYLES = (
     FieldStyle(
+        kind="hgt500",
         layer_id="hrdps-hgt500",
         variable="HGT",
         level_tag="ISBL_0500",
@@ -73,10 +75,10 @@ FIELD_STYLES = (
         scale=0.1,
         levels=np.arange(450.0, 660.1, 6.0),
         threshold=570.0,
-        lower_colour="#ff9f2f",
-        upper_colour="#ffd166",
-        linewidth=2.15,
-        label_every=2,
+        lower_colour="#c98735",
+        upper_colour="#b95750",
+        linewidth=3.7625,
+        label_size=9.5,
         contour_smooth_km=18.0,
         smooth_km=90.0,
         background_km=450.0,
@@ -86,6 +88,7 @@ FIELD_STYLES = (
         centre_size=15.0,
     ),
     FieldStyle(
+        kind="mslp",
         layer_id="hrdps-mslp",
         variable="PRMSL",
         level_tag="MSL",
@@ -95,8 +98,8 @@ FIELD_STYLES = (
         threshold=1024.0,
         lower_colour="#ef4dff",
         upper_colour="#42a5ff",
-        linewidth=1.05,
-        label_every=2,
+        linewidth=0.7875,
+        label_size=8.5,
         contour_smooth_km=55.0,
         smooth_km=65.0,
         background_km=325.0,
@@ -306,6 +309,55 @@ def _colour(style: FieldStyle, value: float) -> str:
     return style.lower_colour if value <= style.threshold else style.upper_colour
 
 
+def _segment_midpoint(segment: np.ndarray) -> tuple[float, float] | None:
+    """Return the arc-length midpoint of one disconnected contour line."""
+    if segment.ndim != 2 or segment.shape[0] < 2:
+        return None
+    lengths = np.hypot(np.diff(segment[:, 0]), np.diff(segment[:, 1]))
+    total = float(np.sum(lengths))
+    if not math.isfinite(total) or total <= 0:
+        return None
+    target = total / 2.0
+    cumulative = np.cumsum(lengths)
+    index = int(np.searchsorted(cumulative, target, side="left"))
+    before = float(cumulative[index - 1]) if index else 0.0
+    fraction = (target - before) / max(float(lengths[index]), 1e-9)
+    point = segment[index] + fraction * (segment[index + 1] - segment[index])
+    return float(point[0]), float(point[1])
+
+
+def _label_every_contour(
+    ax: plt.Axes,
+    contours: object,
+    levels: np.ndarray,
+    style: FieldStyle,
+    output_scale: int,
+) -> list[object]:
+    """Place one label on every disconnected line, not merely every level."""
+    all_segments = getattr(contours, "allsegs", ())
+    positions: list[tuple[float, float]] = []
+    for index, level in enumerate(levels):
+        if index >= len(all_segments):
+            continue
+        positions.extend(
+            point
+            for segment in all_segments[index]
+            if (point := _segment_midpoint(np.asarray(segment))) is not None
+        )
+    if not positions:
+        return []
+    return ax.clabel(
+        contours,
+        levels=levels,
+        fmt=lambda value: f"{int(round(value))}",
+        inline=True,
+        inline_spacing=4,
+        fontsize=style.label_size * output_scale,
+        colors=[_colour(style, float(level)) for level in levels],
+        manual=positions,
+    )
+
+
 def render_contours(
     values: np.ndarray,
     domain: Domain,
@@ -346,16 +398,7 @@ def render_contours(
             path_effects.Stroke(linewidth=(style.linewidth + 1.15) * output_scale, foreground="#151822", alpha=0.82),
             path_effects.Normal(),
         ])
-        label_levels = levels[:: style.label_every]
-        labels = ax.clabel(
-            contours,
-            levels=label_levels,
-            fmt=lambda value: f"{int(round(value))}",
-            inline=True,
-            inline_spacing=3,
-            fontsize=(7.2 if style.layer_id == "hrdps-hgt500" else 6.4) * output_scale,
-            colors=[_colour(style, float(value)) for value in label_levels],
-        )
+        labels = _label_every_contour(ax, contours, levels, style, output_scale)
         for label in labels:
             label.set_path_effects([
                 path_effects.Stroke(linewidth=2.2 * output_scale, foreground="#151822", alpha=0.92),
@@ -371,27 +414,41 @@ def render_contours(
         prominence=style.prominence,
     )
     for centre in centres:
-        label = f"{centre.kind}\n{int(round(centre.value))}"
-        text = ax.text(
-            centre.x,
-            centre.y,
-            label,
+        colour = _colour(style, centre.value)
+        letter = ax.annotate(
+            centre.kind,
+            (centre.x, centre.y),
+            xytext=(0, 0),
+            textcoords="offset points",
             ha="center",
             va="center",
-            color=_colour(style, centre.value),
-            fontsize=style.centre_size * output_scale,
+            color=colour,
+            fontsize=style.centre_size * 2.0 * output_scale,
             fontweight=style.centre_weight,
-            linespacing=0.78,
             zorder=20,
         )
-        text.set_path_effects([
+        magnitude = ax.annotate(
+            f"{int(round(centre.value))}",
+            (centre.x, centre.y),
+            xytext=(0, -1.42 * style.centre_size * output_scale),
+            textcoords="offset points",
+            ha="center",
+            va="center",
+            color=colour,
+            fontsize=style.centre_size * output_scale,
+            fontweight=style.centre_weight,
+            zorder=20,
+        )
+        centre_effects = [
             path_effects.Stroke(
-                linewidth=(3.0 if style.layer_id == "hrdps-hgt500" else 2.2) * output_scale,
+                linewidth=(3.0 if style.kind == "hgt500" else 2.2) * output_scale,
                 foreground="#10131a",
                 alpha=0.96,
             ),
             path_effects.Normal(),
-        ])
+        ]
+        letter.set_path_effects(centre_effects)
+        magnitude.set_path_effects(centre_effects)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(destination, dpi=dpi, transparent=True, bbox_inches=None, pad_inches=0)
@@ -404,7 +461,7 @@ def render_contours(
         "outputHeight": output_height,
         "centreCount": len(centres),
         "centres": [centre.__dict__ for centre in centres],
-        "contourInterval": 6 if style.layer_id == "hrdps-hgt500" else 4,
+        "contourInterval": 6 if style.kind == "hgt500" else 4,
         "units": style.units,
     }
 
@@ -481,7 +538,7 @@ def update_recent(
     data_root: Path,
     *,
     hours: int = 12,
-    domain_ids: Iterable[str] = ("bc", "north-america", "north-pacific"),
+    domain_ids: Iterable[str] = ("bc",),
     now: dt.datetime | None = None,
     download: bool = True,
 ) -> list[dict[str, object]]:
