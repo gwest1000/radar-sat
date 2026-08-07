@@ -234,6 +234,11 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("RADARSAT_ARCHIVE_START_DELAY_SECONDS", archive)
         self.assertIn("try_acquire_heavy_satellite_lock", archive)
         self.assertIn("build_raster_tiles.py", archive)
+        self.assertIn('RADARSAT_WEB_TILES_ENABLED:-0', archive)
+        self.assertLess(
+            archive.index("release_heavy_satellite_lock"),
+            archive.index("build_raster_tiles.py"),
+        )
         self.assertIn("heavy-satellite.lock", heavy_lock)
         self.assertIn("for name in ingest five-minute observations archive health", install)
 

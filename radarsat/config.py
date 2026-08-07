@@ -369,11 +369,16 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     # A wider operational BC view. Relative to the previous crop, the added
     # context is weighted about 2:1 to the Pacific side while retaining enough
     # Alberta context for systems approaching from the east.
-    "small": {"left": 0.1320, "top": 0.1550, "width": 0.7600, "height": 0.6800},
-    "southwest": {"left": 0.3531, "top": 0.5300, "width": 0.3898, "height": 0.3438},
-    "southeast": {"left": 0.5518, "top": 0.4854, "width": 0.3550, "height": 0.3473},
-    "northeast": {"left": 0.4196, "top": 0.1525, "width": 0.4520, "height": 0.4422},
+    "small": {"left": 0.1070, "top": 0.1550, "width": 0.7850, "height": 0.6800},
+    "southwest": {"left": 0.3381, "top": 0.5300, "width": 0.4048, "height": 0.3438},
+    "southeast": {"left": 0.5268, "top": 0.4854, "width": 0.4050, "height": 0.3473},
+    "northeast": {"left": 0.3946, "top": 0.1525, "width": 0.5020, "height": 0.4422},
 }
+
+# BC XL already uses the complete east/west source raster. A slight vertical
+# trim makes the operational display wider without inventing pixels outside
+# the retained seven-day archive or shifting older frames onto new bounds.
+BC_XL_VIEWPORT = {"left": 0.0, "top": 0.0250, "width": 1.0, "height": 0.9500}
 
 
 def regional_layer_id(base_layer_id: str, region_id: str) -> str:
@@ -399,14 +404,14 @@ for _region_id in VIEWPORTS:
 BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
     # 170 E–102 W, 20–66 N: the eastern half of the North Pacific through the
     # eastern edge of Colorado, without Kamchatka or the far tropical Pacific.
-    "pacific-wna": {"left": 0.2941, "top": 0.1479, "width": 0.5176, "height": 0.7117},
+    "pacific-wna": {"left": 0.2341, "top": 0.1479, "width": 0.6076, "height": 0.7117},
     # Crop the continental display near 69 N and the eastern edge of Maine.
     # Keeping the source grid intact means satellite, radar and hazards remain
     # pixel-registered while the browser devotes its space to useful terrain.
-    "north-america": {"left": 0.0, "top": 0.1763, "width": 0.8272, "height": 0.8237},
+    "north-america": {"left": 0.0, "top": 0.1763, "width": 0.8772, "height": 0.8237},
     # Retain the full Pacific western edge, remove the high Arctic above 69 N,
     # and stop at 120 W along the straight BC–Alberta boundary.
-    "north-pacific": {"left": 0.0, "top": 0.065936, "width": 0.705882, "height": 0.934064},
+    "north-pacific": {"left": 0.0, "top": 0.075936, "width": 0.735882, "height": 0.924064},
 }
 
 
@@ -455,9 +460,9 @@ def _overlay_product(
         "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
             (
-                "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5°N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km."
+                "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5°N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback."
                 if five_minute
-                else "This view uses genuine ten-minute GOES-18 full-disk scans. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback."
+                else "This view prefers 0.5 km-grid NOAA STAR/CIRA full-disk GeoColor on genuine ten-minute GOES-18 scan times. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the automatic availability fallback."
             ),
             "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
             "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
@@ -536,7 +541,7 @@ def _broad_product(
 
 
 PRODUCTS: list[dict[str, object]] = [
-    _overlay_product("bc-large-overlay", "BC XL", "BC XL"),
+    _overlay_product("bc-large-overlay", "BC XL", "BC XL", BC_XL_VIEWPORT),
     _overlay_product("bc-small-overlay", "BC", "BC", VIEWPORTS["small"], five_minute=True, max_hours=24),
     _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"], five_minute=True, max_hours=24),
     _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"], five_minute=True, max_hours=24),

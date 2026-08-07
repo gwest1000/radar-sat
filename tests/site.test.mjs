@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("exports the operational viewer", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
-  assert.match(html, /Real-Time Weather Display/);
+  assert.match(html, /Real-Time WX Display/);
   assert.match(html, /href="\/radar-sat\/_next\//);
   assert.match(html, /href="\/radar-sat\/favicon\.svg"/);
   assert.match(html, /https:\/\/gwest1000\.github\.io\/radar-sat\/og-radar-sat\.png/);
@@ -127,7 +127,10 @@ test("keeps a compact desktop control rail and gives the map the remaining width
   assert.match(styles, /\.sidebar-layer-controls/);
   assert.match(styles, /\.layers-popover\s*\{[\s\S]*?position: absolute;[\s\S]*?inset: 0/);
   assert.match(styles, /\.layer-selector:hover \.layers-popover/);
+  assert.match(styles, /\.product-switcher \.selector-options\s*\{[\s\S]*?bottom: calc\(100% \+ 4px\)/);
+  assert.match(styles, /\.product-switcher \.product-button\s*\{[\s\S]*?width: 100%/);
   assert.match(viewer, /activeLayerLabels\.join\(" · "\)/);
+  assert.doesNotMatch(viewer, /Mixed freshness|live-summary|freshnessClock/);
   assert.match(viewer, /product-switcher/);
   assert.match(viewer, /className="sources-drawer"/);
 });
@@ -144,7 +147,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(small.shortTitle, "BC");
   assert.equal(small.anchorLayer, "raw-visir-5min");
   assert.equal(small.maxHours, 24);
-  assert.deepEqual(small.viewport, { left: 0.132, top: 0.155, width: 0.76, height: 0.68 });
+  assert.deepEqual(overlay.viewport, { left: 0, top: 0.025, width: 1, height: 0.95 });
+  assert.deepEqual(small.viewport, { left: 0.107, top: 0.155, width: 0.785, height: 0.68 });
   assert.equal(overlay.anchorLayer, "raw-visir");
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, false);
@@ -166,13 +170,15 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.some((product) => product.id === "bc-lightning"), false);
   assert.equal(demo.products.some((product) => product.id === "north-america-overlay"), true);
   assert.equal(demo.products.some((product) => product.id === "north-pacific-overlay"), true);
-  assert.equal(demo.products.find((product) => product.id === "pacific-wna-overlay").shortTitle, "Pacific/WNA");
+  const pacificWna = demo.products.find((product) => product.id === "pacific-wna-overlay");
+  assert.equal(pacificWna.shortTitle, "Pacific/WNA");
+  assert.deepEqual(pacificWna.viewport, { left: 0.2341, top: 0.1479, width: 0.6076, height: 0.7117 });
   const northAmerica = demo.products.find((product) => product.id === "north-america-overlay");
   const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
   assert.equal(northPacific.shortTitle, "Pacific");
   assert.equal(demo.domains["north-pacific"].title, "Pacific");
   assert.equal(northAmerica.anchorLayer, "westwx-ir");
-  assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.8272, height: 0.8237 });
+  assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.8772, height: 0.8237 });
   assert.deepEqual(
     northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
     ["westwx-visir", "westwx-ir"],
@@ -180,7 +186,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-ir");
-  assert.deepEqual(northPacific.viewport, { left: 0, top: 0.065936, width: 0.705882, height: 0.934064 });
+  assert.deepEqual(northPacific.viewport, { left: 0, top: 0.075936, width: 0.735882, height: 0.924064 });
   assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.ok(

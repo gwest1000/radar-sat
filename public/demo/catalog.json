@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-07T19:51:44.700282Z",
+  "generatedAt": "2026-08-07T20:18:31.442070Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -5027,13 +5027,19 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses genuine ten-minute GOES-18 full-disk scans. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
+        "This view prefers 0.5 km-grid NOAA STAR/CIRA full-disk GeoColor on genuine ten-minute GOES-18 scan times. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the automatic availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
-      ]
+      ],
+      "viewport": {
+        "left": 0.0,
+        "top": 0.025,
+        "width": 1.0,
+        "height": 0.95
+      }
     },
     {
       "id": "bc-small-overlay",
@@ -5156,7 +5162,7 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
+        "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -5164,9 +5170,9 @@
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.132,
+        "left": 0.107,
         "top": 0.155,
-        "width": 0.76,
+        "width": 0.785,
         "height": 0.68
       },
       "maxHours": 24
@@ -5292,7 +5298,7 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
+        "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -5300,9 +5306,9 @@
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.3531,
+        "left": 0.3381,
         "top": 0.53,
-        "width": 0.3898,
+        "width": 0.4048,
         "height": 0.3438
       },
       "maxHours": 24
@@ -5428,7 +5434,7 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses genuine five-minute GOES-18 PACUS scans south of 53.5\u00b0N, with the latest ten-minute full-disk image filling northern BC. Daylight ten-minute frames can substitute the 1 km composite; the five-minute source is 2 km.",
+        "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -5436,9 +5442,9 @@
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.5518,
+        "left": 0.5268,
         "top": 0.4854,
-        "width": 0.355,
+        "width": 0.405,
         "height": 0.3473
       },
       "maxHours": 24
@@ -5564,7 +5570,7 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses genuine ten-minute GOES-18 full-disk scans. Daylight NOAA VIS/IR can substitute a 1 km composite retained for 24 hours; the standard 2 km blend remains the automatic night and availability fallback.",
+        "This view prefers 0.5 km-grid NOAA STAR/CIRA full-disk GeoColor on genuine ten-minute GOES-18 scan times. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the automatic availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
@@ -5572,9 +5578,9 @@
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.4196,
+        "left": 0.3946,
         "top": 0.1525,
-        "width": 0.452,
+        "width": 0.502,
         "height": 0.4422
       },
       "maxHours": 24
@@ -5677,9 +5683,9 @@
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ],
       "viewport": {
-        "left": 0.2941,
+        "left": 0.2341,
         "top": 0.1479,
-        "width": 0.5176,
+        "width": 0.6076,
         "height": 0.7117
       }
     },
@@ -5783,7 +5789,7 @@
       "viewport": {
         "left": 0.0,
         "top": 0.1763,
-        "width": 0.8272,
+        "width": 0.8772,
         "height": 0.8237
       }
     },
@@ -5886,9 +5892,9 @@
       ],
       "viewport": {
         "left": 0.0,
-        "top": 0.065936,
-        "width": 0.705882,
-        "height": 0.934064
+        "top": 0.075936,
+        "width": 0.735882,
+        "height": 0.924064
       }
     }
   ],

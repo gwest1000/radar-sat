@@ -5,7 +5,7 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gwest1000.github.io/radar-sat/"),
-  title: "Real-Time Weather Display",
+  title: "Real-Time WX Display",
   description:
     "Operational satellite, radar, lightning, smoke, and fire loops for British Columbia, North America, and the Pacific.",
   icons: {
@@ -13,12 +13,12 @@ export const metadata: Metadata = {
     shortcut: `${basePath}/favicon.svg`,
   },
   openGraph: {
-    title: "Real-Time Weather Display",
+    title: "Real-Time WX Display",
     description:
       "Operational satellite, radar, lightning, smoke, and fire loops for British Columbia, North America, and the Pacific.",
     type: "website",
     url: "https://gwest1000.github.io/radar-sat/",
-    siteName: "Real-Time Weather Display",
+    siteName: "Real-Time WX Display",
     images: [
       {
         url: "https://gwest1000.github.io/radar-sat/og-radar-sat.png",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Real-Time Weather Display",
+    title: "Real-Time WX Display",
     description:
       "Operational satellite, radar, lightning, smoke, and fire loops for British Columbia, North America, and the Pacific.",
     images: ["https://gwest1000.github.io/radar-sat/og-radar-sat.png"],

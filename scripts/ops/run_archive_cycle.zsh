@@ -101,7 +101,11 @@ done
   --spool-mode off \
   --spool-hours "${RADARSAT_SPOOL_INGEST_HOURS:-12}"
 
-if [[ "${RADARSAT_WEB_TILES_ENABLED:-1}" == "1" ]]; then
+# Do not let an optional, CPU-heavy tile build hold the shared renderer lock.
+# The live viewer currently consumes whole-frame rasters, so tiles remain an
+# explicit opt-in experiment and rapid full-disk imagery gets priority.
+release_heavy_satellite_lock
+if [[ "${RADARSAT_WEB_TILES_ENABLED:-0}" == "1" ]]; then
   "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_raster_tiles.py" \
     --output-root "${OUTPUT_ROOT}" \
     --hours "${RADARSAT_WEB_TILE_HOURS:-3}" \
@@ -110,5 +114,4 @@ if [[ "${RADARSAT_WEB_TILES_ENABLED:-1}" == "1" ]]; then
 fi
 
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
-release_heavy_satellite_lock
 "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh"

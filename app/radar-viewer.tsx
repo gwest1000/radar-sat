@@ -959,12 +959,6 @@ function playbackStepFactor(frames: Frame[], currentIndex: number): number {
   return Number.isFinite(minutes) ? Math.max(1, Math.min(6, minutes / 5)) : 1;
 }
 
-function ageLabel(minutes: number): string {
-  if (!Number.isFinite(minutes)) return "unknown";
-  if (minutes < 1) return "<1m";
-  return `${Math.round(minutes)}m`;
-}
-
 function layerLabel(layerId: string): string {
   if (layerId.startsWith("radar")) return "RADAR";
   if (layerId.includes("lightning")) return "LTG";
@@ -1015,20 +1009,6 @@ function legendLayerId(legendId: string): string {
   if (legendId === "smoke-confidence") return "smoke";
   if (legendId === "lightning-density") return "lightning";
   return legendId;
-}
-
-function freshnessThresholds(layerId: string): [number, number] {
-  if (layerId.startsWith("radar") || layerId === "site-radar") return [15, 30];
-  if (layerId === "ptype") return [20, 35];
-  if (layerId.includes("lightning")) return [25, 45];
-  if (layerId === "smoke") return [30, 60];
-  if (layerId === "hotspots") return [30, 90];
-  if (["raw-visible", "raw-visir", "raw-visir-5min", "raw-ir"].includes(layerId)) return [25, 60];
-  if (layerId.startsWith("westwx-")) return [25, 45];
-  // The source valid time typically trails receipt by roughly 20–40 minutes;
-  // use source-aware limits so normal ECCC publication latency is not reported
-  // as a local ingest outage.
-  return [45, 75];
 }
 
 function ZapIcon() {
@@ -1393,7 +1373,6 @@ export function RadarViewer() {
   const [speedIndex, setSpeedIndex] = useState(3);
   const [rangeHours, setRangeHours] = useState(3);
   const [optionalLayers, setOptionalLayers] = useState<Record<string, boolean>>({});
-  const [freshnessClock, setFreshnessClock] = useState<number | null>(null);
   const [lightningMarkers, setLightningMarkers] = useState<LightningMarker[]>([]);
   const [ecccFallbackLightningMarkers, setEcccFallbackLightningMarkers] = useState<LightningMarker[]>([]);
   const [fireMarkers, setFireMarkers] = useState<FireMarker[]>([]);
@@ -1529,15 +1508,6 @@ export function RadarViewer() {
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", reloadIfDue);
-    };
-  }, []);
-
-  useEffect(() => {
-    const firstTick = window.setTimeout(() => setFreshnessClock(Date.now()), 0);
-    const interval = window.setInterval(() => setFreshnessClock(Date.now()), 60_000);
-    return () => {
-      window.clearTimeout(firstTick);
-      window.clearInterval(interval);
     };
   }, []);
 
@@ -1880,7 +1850,7 @@ export function RadarViewer() {
   if (error) {
     return (
       <main className="app-shell">
-        <h1 className="brand">Real-Time Weather Display</h1>
+        <h1 className="brand">Real-Time WX Display</h1>
         <div className="error-panel" role="alert">{error}</div>
       </main>
     );
@@ -1955,38 +1925,6 @@ export function RadarViewer() {
     const recipe = product.layers.find((layer) => layer.id === legendLayerId(legendId));
     return !recipe || isLayerEnabled(recipe);
   });
-  const activeSourceFreshness = product.layers
-    .filter(isLayerEnabled)
-    .flatMap((recipe) => {
-      const frames = domain.layers[recipe.id]?.frames ?? [];
-      const frame = frames[frames.length - 1];
-      const label = sourceLabel(recipe.id);
-      if (!frame || !label || freshnessClock === null) return [];
-      const age = Math.max(0, (freshnessClock - Date.parse(actualSourceTime(recipe.id, frame))) / 60_000);
-      const [currentLimit, delayedLimit] = freshnessThresholds(recipe.id);
-      return [{ label, age, currentLimit, delayedLimit }];
-    })
-    .filter((item, index, all) => all.findIndex((candidate) => candidate.label === item.label) === index);
-  const allSourcesCurrent = activeSourceFreshness.length > 0
-    && activeSourceFreshness.every((item) => item.age <= item.currentLimit);
-  const anySourceUsable = activeSourceFreshness.some((item) => item.age <= item.delayedLimit);
-  const liveState = freshnessClock === null
-    ? "Checking"
-    : allSourcesCurrent
-      ? "Current"
-      : anySourceUsable
-        ? "Delayed"
-      : "Archive";
-  const freshnessDetails = activeSourceFreshness
-    .map((item) => `${item.label} ${ageLabel(item.age)}`)
-    .join(" · ");
-  const liveSummaryLabel = freshnessClock === null
-    ? "Checking data freshness"
-    : liveState === "Current"
-      ? `Current${freshnessDetails ? ` · ${freshnessDetails}` : ""}`
-      : liveState === "Delayed"
-        ? `Mixed freshness${freshnessDetails ? ` · ${freshnessDetails}` : ""}`
-        : `Not live${freshnessDetails ? ` · ${freshnessDetails}` : ""}`;
   const selectedArchiveSpan = archiveSpan(anchorFrames);
   const viewport = product.viewport ?? FULL_VIEWPORT;
   const mapAspect = (domain.width * viewport.width) / (domain.height * viewport.height);
@@ -2003,11 +1941,7 @@ export function RadarViewer() {
     <main className="app-shell">
       <header className="site-header">
         <div className="brand-row">
-          <h1 className="brand">Real-Time Weather Display</h1>
-        </div>
-        <div className="live-summary" aria-live="polite">
-          <span className={`status-dot status-${liveState.toLowerCase()}`} aria-hidden="true" />
-          <span>{liveSummaryLabel} · catalog {utcClock(catalog.generatedAt)} UTC</span>
+          <h1 className="brand">Real-Time WX Display</h1>
         </div>
       </header>
 
