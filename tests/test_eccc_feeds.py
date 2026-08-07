@@ -37,6 +37,11 @@ class EcccFeedConfigTests(unittest.TestCase):
             self.assertTrue(any(re.search(pattern, sample) for pattern in settings["accept"]))
 
         satellite = check_eccc_feeds.parse_config(CONFIG_DIR / "radarsat_goes_west.conf")
+        geocolor = (
+            "https://dd.weather.gc.ca/20260720/WXO-DD/satellite/goes/west/23/"
+            "20260720T2330Z_MSC_GOES-West_GeoColor_1km.tif"
+        )
+        self.assertTrue(any(re.search(pattern, geocolor) for pattern in satellite["accept"]))
         unselected = (
             "https://dd.weather.gc.ca/20260720/WXO-DD/satellite/goes/west/23/"
             "20260720T2330Z_MSC_GOES-West_Ash_2km.tif"
@@ -50,6 +55,7 @@ class EcccFeedConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             spool = Path(temporary)
             tiffs = [
+                spool / "satellite" / f"{timestamp}_MSC_GOES-West_GeoColor_1km.tif",
                 spool / "satellite" / f"{timestamp}_MSC_GOES-West_DayVis-NightIR_1km.tif",
                 spool / "satellite" / f"{timestamp}_MSC_GOES-West_NightIR_2km.tif",
                 spool / "satellite" / (

@@ -142,6 +142,7 @@ test("keeps a compact desktop control rail and gives the map the remaining width
 });
 
 test("ships a runtime data configuration", async () => {
+  const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
   const config = JSON.parse(await readFile(new URL("../public/config.json", import.meta.url), "utf8"));
   assert.equal(typeof config.catalogUrl, "string");
   await access(new URL("../out/config.json", import.meta.url));
@@ -154,7 +155,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(small.anchorLayer, "raw-visir-5min");
   assert.equal(small.maxHours, 24);
   assert.deepEqual(overlay.viewport, { left: 0, top: 0.025, width: 1, height: 0.95 });
-  assert.deepEqual(small.viewport, { left: 0.107, top: 0.155, width: 0.785, height: 0.68 });
+  assert.deepEqual(small.viewport, { left: 0.16404, top: 0.22489, width: 0.670919, height: 0.581179 });
   assert.equal(overlay.anchorLayer, "raw-visir");
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, false);
@@ -164,8 +165,10 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-ir").choiceGroup, "satellite");
   assert.deepEqual(
     overlay.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
-    ["raw-visir", "raw-ir", "daynight", "ir", "convective", "snowfog"],
+    ["raw-visir", "raw-ir", "eccc-geocolor", "daynight", "ir", "convective", "snowfog"],
   );
+  assert.equal(overlay.layers.find((layer) => layer.id === "eccc-geocolor").defaultEnabled, false);
+  assert.match(viewer, /layerId === "eccc-geocolor"\) return "MSC GeoColor"/);
   assert.equal(overlay.layers.find((layer) => layer.id === "snowfog").defaultEnabled, false);
   assert.equal(demo.products.some((product) => product.group === "Snow / fog"), false);
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");

@@ -38,6 +38,14 @@ class FeedSpec:
 
 
 FEEDS: dict[str, FeedSpec] = {
+    "goes-geocolor": FeedSpec(
+        directory="satellite",
+        suffix=".tif",
+        max_age_minutes=45,
+        pattern=re.compile(
+            r"^(?P<time>\d{8}T\d{4}Z)_MSC_GOES-West_GeoColor_1km\.tif$"
+        ),
+    ),
     "goes-daynight": FeedSpec(
         directory="satellite",
         suffix=".tif",

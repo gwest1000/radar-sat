@@ -19,7 +19,7 @@ from .geomet import UTC, format_utc, parse_utc, projected_bbox
 
 NATIVE_SOURCE = "ECCC Datamart"
 NATIVE_LAYER_IDS = frozenset(
-    {"daynight", "ir", "convective", "snowfog", "lightning"}
+    {"daynight", "ir", "convective", "snowfog", "eccc-geocolor", "lightning"}
 )
 
 SATELLITE_PRODUCTS = {
@@ -27,6 +27,7 @@ SATELLITE_PRODUCTS = {
     "NightIR": ("ir", "2km"),
     "VisibleIRSandwich-NightMicrophysicsIR": ("convective", "1km"),
     "SnowFog-NightMicrophysics": ("snowfog", "1km"),
+    "GeoColor": ("eccc-geocolor", "1km"),
 }
 SATELLITE_RE = re.compile(
     r"^(?P<time>\d{8}T\d{4}Z)_MSC_GOES-West_(?P<product>"
@@ -51,6 +52,8 @@ STATIONS = {
 
 MAX_TIFF_BYTES = 80 * 1024 * 1024
 MAX_GIF_BYTES = 20 * 1024 * 1024
+MSC_GEOCOLOR_WIDTH = 3000
+MSC_GEOCOLOR_HEIGHT = 2300
 
 
 @dataclass(frozen=True)
@@ -286,7 +289,11 @@ def _destination_grid(domain: Domain) -> tuple[Any, int, int]:
 
 
 def render_satellite(native_file: NativeFile, destination: Path, domain: Domain) -> dt.datetime:
-    destination_transform, width, height = _destination_grid(domain)
+    if native_file.layer_id == "eccc-geocolor":
+        width, height = MSC_GEOCOLOR_WIDTH, MSC_GEOCOLOR_HEIGHT
+        destination_transform = from_bounds(*projected_bbox(domain), width, height)
+    else:
+        destination_transform, width, height = _destination_grid(domain)
     with rasterio.open(native_file.path) as source:
         if source.count < 3:
             raise ValueError(f"satellite GeoTIFF has {source.count} band(s), expected RGB")
@@ -543,6 +550,14 @@ def ingest_spool(
                     extra={
                         "sourceFormat": "GeoTIFF",
                         "sourceFiles": [native_file.path.name],
+                        **(
+                            {
+                                "renderWidth": MSC_GEOCOLOR_WIDTH,
+                                "renderHeight": MSC_GEOCOLOR_HEIGHT,
+                            }
+                            if layer_id == "eccc-geocolor"
+                            else {}
+                        ),
                     },
                 )
                 if layer_id == "lightning":

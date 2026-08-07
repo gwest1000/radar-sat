@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-07T20:18:31.442070Z",
+  "generatedAt": "2026-08-07T21:26:08.146579Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -4935,6 +4935,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "eccc-geocolor",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
@@ -5030,6 +5037,7 @@
         "This view prefers 0.5 km-grid NOAA STAR/CIRA full-disk GeoColor on genuine ten-minute GOES-18 scan times. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the automatic availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
@@ -5070,6 +5078,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "eccc-geocolor",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
@@ -5165,15 +5180,16 @@
         "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.107,
-        "top": 0.155,
-        "width": 0.785,
-        "height": 0.68
+        "left": 0.16404,
+        "top": 0.22489,
+        "width": 0.670919,
+        "height": 0.581179
       },
       "maxHours": 24
     },
@@ -5206,6 +5222,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "eccc-geocolor",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
@@ -5301,6 +5324,7 @@
         "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
@@ -5342,6 +5366,13 @@
           "choiceGroup": "satellite"
         },
         {
+          "id": "eccc-geocolor",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
@@ -5437,6 +5468,7 @@
         "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
@@ -5472,6 +5504,13 @@
         },
         {
           "id": "raw-ir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
+          "choiceGroup": "satellite"
+        },
+        {
+          "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
@@ -5573,6 +5612,7 @@
         "This view prefers 0.5 km-grid NOAA STAR/CIRA full-disk GeoColor on genuine ten-minute GOES-18 scan times. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the automatic availability fallback.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."

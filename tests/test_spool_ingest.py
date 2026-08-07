@@ -32,10 +32,12 @@ from radarsat.pipeline import (
 from radarsat.spool import (
     NATIVE_LAYER_IDS,
     NATIVE_SOURCE,
+    NativeFile,
     SpoolIngestResult,
     _lightning_rgba,
     discover_spool,
     ingest_spool,
+    render_satellite,
 )
 
 
@@ -116,6 +118,8 @@ class NativeDiscoveryTests(unittest.TestCase):
             spool = Path(temporary)
             completed = spool / "satellite" / "20260721T0012Z_MSC_GOES-West_DayVis-NightIR_1km.tif"
             write_satellite(completed)
+            geocolor = spool / "satellite" / "20260721T0012Z_MSC_GOES-West_GeoColor_1km.tif"
+            write_satellite(geocolor)
             hidden = spool / "satellite" / ".20260721T0012Z_MSC_GOES-West_NaturalColor_1km.tif"
             write_satellite(hidden)
             symlink = spool / "lightning" / "20260721T0012Z_MSC_Lightning_2.5km.tif"
@@ -126,7 +130,10 @@ class NativeDiscoveryTests(unittest.TestCase):
 
             files, rejected = discover_spool(spool, now=VALID)
 
-            self.assertEqual([(item.layer_id, item.path.name) for item in files], [("daynight", completed.name)])
+            self.assertEqual(
+                [(item.layer_id, item.path.name) for item in files],
+                [("daynight", completed.name), ("eccc-geocolor", geocolor.name)],
+            )
             self.assertEqual(len(rejected), 2)
             self.assertTrue(any("non-symlink" in value for value in rejected))
             self.assertTrue(any("signature" in value for value in rejected))
@@ -146,6 +153,26 @@ class NativeDiscoveryTests(unittest.TestCase):
 
 
 class NativeRenderTests(unittest.TestCase):
+    def test_msc_geocolor_uses_its_higher_resolution_bc_render_grid(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "20260721T0012Z_MSC_GOES-West_GeoColor_1km.tif"
+            destination = root / "geocolor.webp"
+            write_satellite(source)
+            native = NativeFile(
+                path=source,
+                valid_time=VALID,
+                layer_id="eccc-geocolor",
+                source_layer="satellite/goes/west/GeoColor",
+            )
+            with (
+                mock.patch("radarsat.spool.MSC_GEOCOLOR_WIDTH", 150),
+                mock.patch("radarsat.spool.MSC_GEOCOLOR_HEIGHT", 115),
+            ):
+                render_satellite(native, destination, test_domain())
+            with Image.open(destination) as image:
+                self.assertEqual(image.size, (150, 115))
+
     def test_precipitation_overlays_use_screen_sharp_render_grids(self) -> None:
         bc = precipitation_render_domain(Domain(
             id="bc",

@@ -63,7 +63,7 @@ HOTSPOT_POINT_RENDER_VERSION = 2
 ACTIVE_FIRE_POINT_RENDER_VERSION = 3
 FIRE_OVERLAY_RENDER_VERSION = 2
 FIRE_BROAD_OVERLAY_RENDER_VERSION = 3
-FIRE_REGIONAL_RENDER_VERSION = 3
+FIRE_REGIONAL_RENDER_VERSION = 4
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
@@ -1148,7 +1148,7 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
             regional_symbol_reference_width = (
                 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
                 if detailed_region
-                else 960
+                else 1120
             )
             render_output_width = (
                 domain.width * BROAD_HAZARD_SCALE

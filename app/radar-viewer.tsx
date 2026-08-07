@@ -178,7 +178,7 @@ const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA Open Data": "Public cloud distribution for GOES ABI Level-2 satellite source files.",
   "NOAA/NESDIS/STAR": "Full-resolution CIRA GeoColor imagery distributed by NOAA/NESDIS/STAR; the raw NOAA feed remains the automatic fallback.",
   "ECCC GeoMet": "Canadian radar, precipitation type and ECCC-rendered satellite products.",
-  "ECCC Datamart": "Canadian Lightning Detection Network gridded lightning-density observations.",
+  "ECCC Datamart": "Native MSC GOES RGB satellite products and Canadian Lightning Detection Network observations.",
   "NRCan CWFIS": "Timestamped satellite thermal detections and Canadian active-fire records.",
   "BC Wildfire Service": "Official BC active fires and Wildfires of Note.",
   "NIFC WFIGS": "Current U.S. ICS-209 large-incident locations.",
@@ -728,7 +728,7 @@ function activeAnchorLayer(product: Product, optionalLayers: Record<string, bool
     const recipe = product.layers.find((candidate) => candidate.id === id);
     return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
   };
-  return ["raw-visir-5min", "raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "daynight", "ir", "convective", "snowfog", "radar-rain", "ptype", "lightning-trail", "hotspots"]
+  return ["raw-visir-5min", "raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "eccc-geocolor", "daynight", "ir", "convective", "snowfog", "radar-rain", "ptype", "lightning-trail", "hotspots"]
     .find(enabled) ?? product.anchorLayer;
 }
 
@@ -839,7 +839,7 @@ function actualSourceTime(layerId: string, frame: Frame): string {
       .sort((left, right) => Date.parse(right) - Date.parse(left));
     if (values[0]) return values[0];
   }
-  if (["raw-ir", "raw-visir", "raw-visir-5min"].includes(layerId) && frame.sourceTimes) {
+  if (["raw-ir", "raw-visir", "raw-visir-5min", "eccc-geocolor"].includes(layerId) && frame.sourceTimes) {
     const values = Object.values(frame.sourceTimes)
       .filter((value) => Number.isFinite(Date.parse(value)))
       .sort((left, right) => Date.parse(right) - Date.parse(left));
@@ -967,7 +967,7 @@ function layerLabel(layerId: string): string {
   if (layerId === "site-radar") return "RADAR";
   if (layerId === "hotspots") return "FIRE";
   if (
-    ["daynight", "ir", "convective", "snowfog", "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir"].includes(layerId)
+    ["daynight", "ir", "convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir"].includes(layerId)
     || layerId.startsWith("westwx-")
   ) return "SAT";
   return layerId.toUpperCase();
@@ -980,6 +980,7 @@ function sourceLabel(layerId: string): string | null {
 }
 
 function layerControlLabel(layerId: string): string {
+  if (layerId === "eccc-geocolor") return "MSC GeoColor";
   if (layerId === "ir") return "ECCC IR";
   if (layerId === "daynight") return "ECCC VIS/IR";
   if (layerId === "convective") return "ECCC Convective";
@@ -2065,7 +2066,7 @@ export function RadarViewer() {
                   ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
                   opacity: layer.opacity,
                   filter: ["Overlay", "Broad"].includes(product.group)
-                    && ["ir", "daynight", "convective", "snowfog", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
+                    && ["ir", "daynight", "convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
                     && (composedLayerIds.has("radar-rain") || composedLayerIds.has("ptype"))
                     ? "saturate(0.52) brightness(0.78) contrast(1.06)"
                     : undefined,

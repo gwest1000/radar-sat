@@ -129,6 +129,16 @@ LAYERS: dict[str, Layer] = {
         role="background",
         max_age_minutes=40,
     ),
+    "eccc-geocolor": Layer(
+        id="eccc-geocolor",
+        title="MSC GOES-West GeoColor",
+        source_layer=None,
+        image_format="image/webp",
+        extension="webp",
+        role="background",
+        source="ECCC Datamart",
+        max_age_minutes=45,
+    ),
     "radar-rain": Layer(
         id="radar-rain",
         title="Radar rain rate",
@@ -369,7 +379,11 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     # A wider operational BC view. Relative to the previous crop, the added
     # context is weighted about 2:1 to the Pacific side while retaining enough
     # Alberta context for systems approaching from the east.
-    "small": {"left": 0.1070, "top": 0.1550, "width": 0.7850, "height": 0.6800},
+    # North reaches the projected position of BC's northeast corner at 60 N;
+    # south bisects the Strait of Juan de Fuca between Vancouver Island and
+    # the Olympic Mountains. East/west were symmetrically tightened to retain
+    # the previous 1.506:1 display aspect ratio.
+    "small": {"left": 0.164040, "top": 0.224890, "width": 0.670919, "height": 0.581179},
     "southwest": {"left": 0.3381, "top": 0.5300, "width": 0.4048, "height": 0.3438},
     "southeast": {"left": 0.5268, "top": 0.4854, "width": 0.4050, "height": 0.3473},
     "northeast": {"left": 0.3946, "top": 0.1525, "width": 0.5020, "height": 0.4422},
@@ -442,6 +456,7 @@ def _overlay_product(
             {"id": "base-dark", "opacity": 1.0},
             {"id": visir_layer, "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite"},
             {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
+            {"id": "eccc-geocolor", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "daynight", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
             {"id": "convective", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite"},
@@ -466,6 +481,7 @@ def _overlay_product(
             ),
             "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
             "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
+            "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
             "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
             "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
             "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters.",
