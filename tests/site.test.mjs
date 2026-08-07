@@ -38,9 +38,17 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /setPageVisible\(document\.visibilityState === "visible"\)/);
   assert.doesNotMatch(viewer, /document\.hasFocus\(\)/);
   assert.doesNotMatch(viewer, /window\.addEventListener\("blur"/);
-  assert.match(viewer, /IMAGE_FRAME_CACHE_LIMIT = 96/);
+  assert.match(viewer, /IMAGE_FRAME_CACHE_LIMIT = 16/);
+  assert.match(viewer, /image: HTMLImageElement/);
+  assert.match(viewer, /releasePreloadedImage\(loadedSrc\)/);
   assert.match(viewer, /function StableMapImage/);
-  assert.match(viewer, /setDisplayedSrc\(src\)/);
+  assert.match(viewer, /imageFrameCache\.delete\(url\)/);
+  assert.match(viewer, /advanceWhenReady/);
+  assert.match(viewer, /criticalUrls/);
+  assert.match(viewer, /PLAYBACK_IMAGE_RETRIES/);
+  assert.match(viewer, /setActiveSlot\(slotIndex\)/);
+  assert.match(viewer, /data-buffer-state=/);
+  assert.match(viewer, /requestedSrcRef\.current !== loadedSrc/);
   assert.match(viewer, /atOrBefore\(nativeLayer\?\.frames \?\? \[\], anchor\.validTime/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
@@ -68,7 +76,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /typically only[\s\S]*7–12 KB/);
   assert.match(viewer, /<FireCanvas/);
   assert.match(viewer, /data-marker-count=\{markers\.length\}/);
-  assert.match(viewer, /lookaheadCount = 6/);
+  assert.match(viewer, /lookaheadCount = 2/);
   assert.match(viewer, /preloadImageFrame/);
   assert.match(viewer, /targetDomain === "north-pacific"/);
   assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
@@ -128,6 +136,8 @@ test("keeps a compact desktop control rail and gives the map the remaining width
   assert.match(styles, /\.sidebar-layer-controls/);
   assert.match(styles, /\.layers-popover\s*\{[\s\S]*?position: absolute;[\s\S]*?inset: 0/);
   assert.match(styles, /\.layer-selector:hover \.layers-popover/);
+  assert.match(viewer, /event\.currentTarget\.contains\(focused\)/);
+  assert.match(viewer, /focused\.blur\(\)/);
   assert.match(styles, /\.product-switcher \.selector-options,[\s\S]*?\.range-selector \.selector-options\s*\{[\s\S]*?bottom: calc\(100% \+ 4px\)/);
   assert.match(styles, /\.product-switcher \.product-button,[\s\S]*?\.range-selector \.range-button\s*\{[\s\S]*?width: 100%/);
   assert.match(styles, /\.legend-content\s*\{[\s\S]*?border: 1px solid var\(--border-strong\)/);

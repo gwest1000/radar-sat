@@ -168,11 +168,19 @@ const WEB_MERCATOR_RADIUS = 6_378_137;
 const WGS84_ECCENTRICITY = 0.08181919084262149;
 const NORTH_AMERICA_BOUNDS = [-21_051_700.011, 557_305.257, -4_551_782.871, 12_932_243.112] as const;
 const NORTH_PACIFIC_BOUNDS = [-3_339_584.7, 764_000, 15_584_728.7, 11_413_000] as const;
-const imageFrameCache = new Map<string, Promise<boolean>>();
+type ImageFrameCacheEntry = {
+  image: HTMLImageElement;
+  promise: Promise<boolean>;
+};
+
+const imageFrameCache = new Map<string, ImageFrameCacheEntry>();
 const lightningMarkerCache = new Map<string, Promise<LightningMarker[]>>();
 const fireMarkerCache = new Map<string, Promise<FireMarker[]>>();
-const IMAGE_FRAME_CACHE_LIMIT = 96;
+const IMAGE_FRAME_CACHE_LIMIT = 16;
 const MARKER_CACHE_LIMIT = 96;
+const IMAGE_LOAD_TIMEOUT_MS = 10_000;
+const PLAYBACK_IMAGE_RETRIES = 2;
+const PLAYBACK_IMAGE_RETRY_DELAY_MS = 240;
 const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA GOES-18": "Calibrated ABI satellite imagery, GLM total lightning and smoke-detection products.",
   "NOAA Open Data": "Public cloud distribution for GOES ABI Level-2 satellite source files.",
@@ -295,19 +303,25 @@ function frameUrl(frame: Frame, base: string): string {
   return url.toString();
 }
 
-function preloadImageFrame(url: string): Promise<boolean> {
+function preloadImageFrame(
+  url: string,
+  priority: "high" | "low" | "auto" = "auto",
+): Promise<boolean> {
   const existing = imageFrameCache.get(url);
   if (existing) {
     imageFrameCache.delete(url);
     imageFrameCache.set(url, existing);
-    return existing;
+    return existing.promise;
   }
+  const image = new Image();
   const request = new Promise<boolean>((resolve) => {
-    const image = new Image();
     let finished = false;
     const finish = (loaded: boolean) => {
       if (finished) return;
       finished = true;
+      window.clearTimeout(timeout);
+      image.onload = null;
+      image.onerror = null;
       if (loaded && typeof image.decode === "function") {
         void image.decode()
           .then(() => resolve(true))
@@ -316,18 +330,35 @@ function preloadImageFrame(url: string): Promise<boolean> {
         resolve(loaded);
       }
     };
+    const timeout = window.setTimeout(() => finish(false), IMAGE_LOAD_TIMEOUT_MS);
+    image.decoding = "async";
+    image.fetchPriority = priority;
     image.onload = () => finish(true);
     image.onerror = () => finish(false);
     image.src = url;
     if (image.complete) finish(image.naturalWidth > 0);
   });
-  imageFrameCache.set(url, request);
+  const entry = { image, promise: request };
+  imageFrameCache.set(url, entry);
+  // A transient R2/network failure must not poison this URL for the rest of
+  // the browser session. Removing failed promises lets the playback gate
+  // retry them on the next pass instead of leaving the raster permanently
+  // stuck while lightweight lightning overlays continue to advance.
+  void request.then((loaded) => {
+    if (!loaded && imageFrameCache.get(url) === entry) {
+      imageFrameCache.delete(url);
+    }
+  });
   while (imageFrameCache.size > IMAGE_FRAME_CACHE_LIMIT) {
     const oldest = imageFrameCache.keys().next().value;
     if (typeof oldest !== "string") break;
     imageFrameCache.delete(oldest);
   }
   return request;
+}
+
+function releasePreloadedImage(url: string): void {
+  imageFrameCache.delete(url);
 }
 
 function StableMapImage({
@@ -341,32 +372,59 @@ function StableMapImage({
   style: CSSProperties;
   layerId: string;
 }) {
-  const [displayedSrc, setDisplayedSrc] = useState(src);
+  const [slots, setSlots] = useState<[string, string]>([src, src]);
+  const [activeSlot, setActiveSlot] = useState(0);
+  const activeSlotRef = useRef(0);
+  const requestedSrcRef = useRef(src);
 
   useEffect(() => {
-    if (displayedSrc === src) return;
-    let current = true;
-    void preloadImageFrame(src).then((loaded) => {
-      if (current && loaded) setDisplayedSrc(src);
+    requestedSrcRef.current = src;
+    if (slots[activeSlotRef.current] === src) return;
+    const loadingSlot = activeSlotRef.current === 0 ? 1 : 0;
+    setSlots((current) => {
+      if (current[loadingSlot] === src) return current;
+      const next: [string, string] = [...current];
+      next[loadingSlot] = src;
+      return next;
     });
-    return () => {
-      current = false;
-    };
-  }, [displayedSrc, src]);
+  }, [slots, src]);
 
-  // Keep the previous decoded raster visible until the replacement is ready.
-  // This preserves the exact animation clock without showing a blank layer
-  // during a slower satellite download or decode.
+  const revealLoadedSlot = (slotIndex: number, loadedSrc: string) => {
+    if (requestedSrcRef.current !== loadedSrc) return;
+    activeSlotRef.current = slotIndex;
+    setActiveSlot(slotIndex);
+    // The persistent DOM buffer now owns this decoded surface. Keeping the
+    // temporary preload object as well would let a long-running loop retain
+    // many full-resolution satellite/radar frames and invite memory pressure.
+    releasePreloadedImage(loadedSrc);
+  };
+
+  // Two persistent DOM images make the swap atomic: the decoded front raster
+  // stays painted while the back raster loads, then their opacity flips only
+  // after the back image's own load event. A separate preload alone is not
+  // sufficient on memory-constrained browsers, which may evict its decoded
+  // surface before React assigns the same URL to the visible image.
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      className={className}
-      src={displayedSrc}
-      alt=""
-      aria-hidden="true"
-      data-layer-id={layerId}
-      style={style}
-    />
+    <>
+      {slots.map((slotSrc, slotIndex) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className={className}
+          src={slotSrc}
+          alt=""
+          aria-hidden="true"
+          data-buffer-state={slotIndex === activeSlot ? "active" : "standby"}
+          data-layer-id={slotIndex === activeSlot ? layerId : `${layerId}-standby`}
+          key={slotIndex}
+          onLoad={() => revealLoadedSlot(slotIndex, slotSrc)}
+          style={{
+            ...style,
+            opacity: slotIndex === activeSlot ? style.opacity : 0,
+            pointerEvents: "none",
+          }}
+        />
+      ))}
+    </>
   );
 }
 
@@ -1828,37 +1886,69 @@ export function RadarViewer() {
       }
       return references;
     };
-    const lookaheadCount = 6;
+    const lookaheadCount = 2;
     const lookahead = Array.from({ length: Math.min(lookaheadCount, anchorFrames.length - 1) }, (_, offset) => {
       const index = (currentFrameIndex + offset + 1) % anchorFrames.length;
       const candidate = anchorFrames[index];
+      const layers = composeLayers(
+        product,
+        domain,
+        candidate,
+        catalogBase,
+        optionalLayers,
+        effectiveRangeHours > 24,
+      );
       return {
-        urls: composeLayers(
-          product,
-          domain,
-          candidate,
-          catalogBase,
-          optionalLayers,
-          effectiveRangeHours > 24,
-        ).map((layer) => layer.url),
+        // Satellite, radar, smoke and model rasters must be decoded before
+        // the display clock moves. Hazard rasters are intentionally excluded:
+        // they are tiny, and a delayed lightning/fire request should not hold
+        // an otherwise complete meteorological frame. Coverage hatching is
+        // also non-blocking because the much larger radar/ptype data raster is
+        // the authoritative image for that observation.
+        criticalUrls: layers
+          .filter((layer) => (
+            layer.frame
+            && !layer.arrival
+            && !LIGHTNING_CONTROLLERS.has(layer.id)
+            && layer.id !== "hotspots"
+            && !layer.id.endsWith("coverage")
+          ))
+          .map((layer) => layer.url),
         pointReferences: pointReferencesFor(candidate),
       };
     });
     if (!lookahead.length) return;
 
-    // Keep a modest six-frame decode buffer, but never let network/decode
-    // variance alter the display clock. Every frame advances on its product's
-    // selected ten-, twenty-, or sixty-minute wall-clock interval.
-    lookahead.forEach((candidate) => {
-      candidate.urls.forEach((url) => void preloadImageFrame(url));
+    // Prime the immediately following frame at high priority and retain a
+    // small low-priority buffer. Starting too many full-resolution rasters at
+    // once competes with the frame that actually needs to be displayed.
+    lookahead.forEach((candidate, index) => {
+      candidate.criticalUrls.forEach((url) => void preloadImageFrame(url, index === 0 ? "high" : "low"));
       candidate.pointReferences.forEach((reference) => preloadPointFrame(reference.url));
     });
     const finalFrame = currentFrameIndex === anchorFrames.length - 1;
     const delay = (110 * stepFactor + (finalFrame ? 215 : 0)) / speed;
-    const timer = window.setTimeout(() => advance(1), delay);
+    let cancelled = false;
+    let timer: number | undefined;
+    const advanceWhenReady = async (attempt = 0) => {
+      const ready = await Promise.all(
+        lookahead[0].criticalUrls.map((url) => preloadImageFrame(url, "high")),
+      );
+      if (cancelled) return;
+      if (ready.some((loaded) => !loaded) && attempt < PLAYBACK_IMAGE_RETRIES) {
+        timer = window.setTimeout(
+          () => { void advanceWhenReady(attempt + 1); },
+          PLAYBACK_IMAGE_RETRY_DELAY_MS,
+        );
+        return;
+      }
+      timer = window.setTimeout(() => advance(1), delay);
+    };
+    void advanceWhenReady();
 
     return () => {
-      window.clearTimeout(timer);
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [
     advance,
@@ -2177,7 +2267,13 @@ export function RadarViewer() {
           {optional.length > 0 && (
             <div
               className={`layer-selector${layersMenuOpen ? " is-open" : ""}`}
-              onMouseLeave={() => setLayersMenuOpen(false)}
+              onMouseLeave={(event) => {
+                setLayersMenuOpen(false);
+                const focused = document.activeElement;
+                if (focused instanceof HTMLElement && event.currentTarget.contains(focused)) {
+                  focused.blur();
+                }
+              }}
             >
               <button
                 className="layers-summary"
