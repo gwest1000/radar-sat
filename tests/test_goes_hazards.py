@@ -255,6 +255,30 @@ class HazardRenderTests(unittest.TestCase):
             rgba = np.asarray(Image.open(trail).convert("RGBA"))
             self.assertGreater(int(np.count_nonzero(rgba[:, :, 3])), 100)
 
+    def test_hourly_glm_aggregate_uses_six_ten_minute_bins(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = projected_domain(width=100, height=60)
+            anchor = VALID.replace(minute=0)
+            for index in range(6):
+                valid = anchor - dt.timedelta(minutes=10 * index)
+                source = frame_path(root, domain, LAYERS["glm-lightning"], valid)
+                source.parent.mkdir(parents=True, exist_ok=True)
+                image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+                image.putpixel((15 + index * 12, 30), (255, 255, 255, 255))
+                image.save(source, "PNG")
+                write_metadata(root, domain, LAYERS["glm-lightning"], valid, source)
+
+            derive_glm_lightning_trails(root, domain, hours=2)
+
+            layer = LAYERS["glm-lightning-hour"]
+            self.assertTrue(frame_path(root, domain, layer, anchor).is_file())
+            payload = json.loads(metadata_path(root, domain, layer, anchor).read_text())
+            self.assertEqual(
+                set(payload["sourceTimes"]),
+                {"age0", "age10", "age20", "age30", "age40", "age50"},
+            )
+
 
 class FakeHazardClient:
     def __init__(self) -> None:

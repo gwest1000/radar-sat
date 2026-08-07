@@ -220,14 +220,18 @@ def lightning_trail(
         )
 
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
-    # Source order is current, 10–20 and 20–30 minutes. Draw oldest first so a
-    # new flash wins where intervals overlap. These are the same illuminated
-    # white-to-yellow bolt symbols used before lightning moved to a lightweight
-    # transparent raster; the dark outline remains visible over bright cloud.
+    # Source order is current followed by successive ten-minute bins. Draw the
+    # oldest first so a new flash wins where intervals overlap. These are the
+    # same illuminated white-to-yellow bolt symbols used before lightning moved
+    # to a lightweight transparent raster; the dark outline remains visible
+    # over bright cloud.
     styles = [
         ((255, 254, 240, 255), (255, 255, 255, 180), round(6 * symbol_scale)),
         ((255, 242, 154, 210), (255, 255, 255, 120), round(5.25 * symbol_scale)),
         ((255, 224, 100, 145), (255, 255, 255, 70), round(4.5 * symbol_scale)),
+        ((246, 212, 81, 112), (255, 250, 190, 42), round(4.1 * symbol_scale)),
+        ((232, 195, 70, 82), (255, 246, 180, 28), round(3.8 * symbol_scale)),
+        ((215, 178, 62, 58), (255, 240, 165, 18), round(3.5 * symbol_scale)),
     ]
     for age_index, (mask, (fill, glow, half_height)) in reversed(list(enumerate(zip(masks, styles)))):
         if mask is None or (arrival_only and age_index != 0):

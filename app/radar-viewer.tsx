@@ -129,7 +129,6 @@ type SiteConfig = {
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 const FIVE_MINUTES_MS = 5 * 60_000;
-const HIGH_FREQUENCY_ARCHIVE_MS = 24 * 60 * 60_000;
 const AUTO_REFRESH_MS = 5 * 60_000;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
@@ -236,11 +235,10 @@ function playbackFrames(
   archiveFrameIntervalMinutes = 30,
 ): Frame[] {
   if (!sourceFrames.length) return [];
-  const frameIntervalMs = Math.max(5, frameIntervalMinutes) * 60_000;
-  const archiveFrameIntervalMs = Math.max(
-    frameIntervalMinutes,
-    archiveFrameIntervalMinutes,
-  ) * 60_000;
+  const selectedIntervalMinutes = rangeHours > 24
+    ? Math.max(frameIntervalMinutes, archiveFrameIntervalMinutes)
+    : Math.max(5, frameIntervalMinutes);
+  const frameIntervalMs = selectedIntervalMinutes * 60_000;
   const parsed = sourceFrames
     .map((frame) => ({ frame, time: Date.parse(frame.validTime) }))
     .filter((item) => Number.isFinite(item.time))
@@ -250,16 +248,8 @@ function playbackFrames(
   const requestedStart = newest - rangeHours * 60 * 60_000;
   const availableStart = Math.ceil(parsed[0].time / frameIntervalMs) * frameIntervalMs;
   const start = Math.max(requestedStart, availableStart);
-  const recentStart = Math.max(start, newest - HIGH_FREQUENCY_ARCHIVE_MS);
   const times: number[] = [];
-  if (rangeHours > 24 && start < recentStart) {
-    let historic = Math.ceil(start / archiveFrameIntervalMs) * archiveFrameIntervalMs;
-    while (historic < recentStart) {
-      times.push(historic);
-      historic += archiveFrameIntervalMs;
-    }
-  }
-  let current = Math.ceil(recentStart / frameIntervalMs) * frameIntervalMs;
+  let current = Math.ceil(start / frameIntervalMs) * frameIntervalMs;
   while (current <= newest) {
     times.push(current);
     current += frameIntervalMs;
@@ -700,13 +690,25 @@ type ComposedLayer = {
   stageAligned?: boolean;
 };
 
-function rasterLayerId(recipeId: string, product: Product, domain: Domain): string {
+function rasterLayerId(
+  recipeId: string,
+  product: Product,
+  domain: Domain,
+  hourlyLightning = false,
+): string {
+  const baseId = hourlyLightning
+    ? recipeId === "lightning-trail"
+      ? "lightning-hour"
+      : recipeId === "glm-lightning-trail"
+        ? "glm-lightning-hour"
+        : recipeId
+    : recipeId;
   const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
-  if (product.domain === "bc" && regionKey && ["lightning-trail", "hotspots"].includes(recipeId)) {
-    const candidate = `${recipeId}-region-${regionKey}`;
+  if (product.domain === "bc" && regionKey && ["lightning-trail", "lightning-hour", "hotspots"].includes(baseId)) {
+    const candidate = `${baseId}-region-${regionKey}`;
     if (domain.layers[candidate]?.frames?.length) return candidate;
   }
-  return recipeId;
+  return baseId;
 }
 
 function lightningFlashLayerId(recipeId: string, product: Product, domain: Domain): string | undefined {
@@ -749,6 +751,7 @@ function composeLayers(
   anchor: Frame,
   catalogBase: string,
   optionalLayers: Record<string, boolean>,
+  hourlyLightning = false,
 ): ComposedLayer[] {
   return product.layers.flatMap((recipe) => {
     if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
@@ -771,7 +774,7 @@ function composeLayers(
         opacity: recipe.opacity,
       }];
     }
-    const renderedLayerId = rasterLayerId(recipe.id, product, domain);
+    const renderedLayerId = rasterLayerId(recipe.id, product, domain, hourlyLightning);
     let dynamicLayer = domain.layers[renderedLayerId];
     let frames = dynamicLayer?.frames ?? [];
     if (product.domain === "bc" && recipe.id === "raw-visir-5min") {
@@ -815,7 +818,9 @@ function composeLayers(
       frame,
       stageAligned: renderedLayerId.includes("-region-"),
     }];
-    const flashLayerId = lightningFlashLayerId(recipe.id, product, domain);
+    const flashLayerId = hourlyLightning
+      ? undefined
+      : lightningFlashLayerId(recipe.id, product, domain);
     const flashFrame = flashLayerId
       ? domain.layers[flashLayerId]?.frames.find((candidate) => candidate.validTime === frame.validTime)
       : undefined;
@@ -1243,12 +1248,12 @@ function FlameIcon({ filled = true, highlighted = false }: { filled?: boolean; h
   );
 }
 
-function LightningLegend() {
+function LightningLegend({ hourly = false }: { hourly?: boolean }) {
   const rows = [
     ["0–10 min", "age-0"],
     ["10–20 min", "age-1"],
     ["20–30 min", "age-2"],
-    ["30+ min", "age-3"],
+    [hourly ? "30–60 min" : "30+ min", "age-3"],
   ];
   return (
     <div className="lightning-legend" aria-label="Lightning age legend">
@@ -1797,15 +1802,22 @@ export function RadarViewer() {
       const index = (currentFrameIndex + offset + 1) % anchorFrames.length;
       const candidate = anchorFrames[index];
       return {
-        urls: composeLayers(product, domain, candidate, catalogBase, optionalLayers).map((layer) => layer.url),
+        urls: composeLayers(
+          product,
+          domain,
+          candidate,
+          catalogBase,
+          optionalLayers,
+          effectiveRangeHours > 24,
+        ).map((layer) => layer.url),
         pointReferences: pointReferencesFor(candidate),
       };
     });
     if (!lookahead.length) return;
 
     // Keep a modest six-frame decode buffer, but never let network/decode
-    // variance alter the display clock. Every recent frame advances on the
-    // same five-minute wall-clock interval.
+    // variance alter the display clock. Every frame advances on its product's
+    // selected ten-, twenty-, or sixty-minute wall-clock interval.
     lookahead.forEach((candidate) => {
       candidate.urls.forEach((url) => void preloadImageFrame(url));
       candidate.pointReferences.forEach((reference) => preloadPointFrame(reference.url));
@@ -1824,6 +1836,7 @@ export function RadarViewer() {
     catalogBase,
     currentFrameIndex,
     domain,
+    effectiveRangeHours,
     isAnimating,
     optionalLayers,
     product,
@@ -1873,7 +1886,14 @@ export function RadarViewer() {
   const isLayerEnabled = (recipe: ProductLayer) =>
     isProductLayerEnabled(recipe, optionalLayers, product.layers);
   const composedLayers = anchor
-    ? composeLayers(product, domain, anchor, catalogBase, optionalLayers)
+    ? composeLayers(
+        product,
+        domain,
+        anchor,
+        catalogBase,
+        optionalLayers,
+        effectiveRangeHours > 24,
+      )
     : [];
   const pointSourceTimes = [
     lightningPointReferences.length || ecccFallbackPointReferences.length
@@ -2170,7 +2190,9 @@ export function RadarViewer() {
             {visibleLegends.map((legendId) => {
               const legend = catalog.legends[legendId];
               if (!legend) return null;
-              if (legend.kind === "lightning-age") return <LightningLegend key={legendId} />;
+              if (legend.kind === "lightning-age") {
+                return <LightningLegend hourly={effectiveRangeHours > 24} key={legendId} />;
+              }
               if (legend.kind === "smoke-confidence") {
                 const smokeFrame = composedLayers.find((layer) => layer.id === "smoke")?.frame;
                 return <SmokeLegend frame={smokeFrame} key={legendId} />;

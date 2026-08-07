@@ -91,7 +91,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /resilientActiveFireFrameReferences/);
   assert.match(viewer, /usesRasterLightning\(product\)/);
   assert.match(viewer, /usesRasterFire\(product\)/);
-  assert.match(viewer, /`\$\{recipeId\}-region-\$\{regionKey\}`/);
+  assert.match(viewer, /`\$\{baseId\}-region-\$\{regionKey\}`/);
   assert.match(viewer, /`lightning-flash-region-\$\{regionKey\}`/);
   assert.match(viewer, /stageAligned: renderedLayerId\.includes\("-region-"\)/);
   assert.match(viewer, /lightning-arrival-layer/);
@@ -155,8 +155,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(small.shortTitle, "BC");
   assert.equal(small.anchorLayer, "raw-visir-5min");
   assert.equal(small.frameIntervalMinutes, 10);
-  assert.equal(small.archiveFrameIntervalMinutes, 30);
-  assert.equal(small.maxHours, 24);
+  assert.equal(small.archiveFrameIntervalMinutes, 60);
+  assert.equal(small.maxHours, 168);
   assert.deepEqual(overlay.viewport, { left: 0, top: 0.025, width: 1, height: 0.95 });
   assert.deepEqual(small.viewport, { left: 0.16404, top: 0.22489, width: 0.670919, height: 0.581179 });
   assert.equal(overlay.anchorLayer, "raw-visir");
@@ -201,6 +201,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-ir");
   assert.equal(northPacific.frameIntervalMinutes, 20);
+  assert.match(viewer, /"lightning-hour"/);
+  assert.match(viewer, /"glm-lightning-hour"/);
   assert.deepEqual(northPacific.viewport, { left: 0, top: 0.075936, width: 0.735882, height: 0.924064 });
   assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);

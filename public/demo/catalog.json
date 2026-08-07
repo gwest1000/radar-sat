@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-07T22:39:55.832584Z",
+  "generatedAt": "2026-08-07T22:53:56.911072Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -4914,7 +4914,7 @@
       "domain": "bc",
       "anchorLayer": "raw-visir",
       "frameIntervalMinutes": 10,
-      "archiveFrameIntervalMinutes": 30,
+      "archiveFrameIntervalMinutes": 60,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5059,7 +5059,7 @@
       "domain": "bc",
       "anchorLayer": "raw-visir-5min",
       "frameIntervalMinutes": 10,
-      "archiveFrameIntervalMinutes": 30,
+      "archiveFrameIntervalMinutes": 60,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5195,7 +5195,7 @@
         "width": 0.670919,
         "height": 0.581179
       },
-      "maxHours": 24
+      "maxHours": 168
     },
     {
       "id": "bc-southwest-overlay",
@@ -5205,7 +5205,7 @@
       "domain": "bc",
       "anchorLayer": "raw-visir-5min",
       "frameIntervalMinutes": 10,
-      "archiveFrameIntervalMinutes": 30,
+      "archiveFrameIntervalMinutes": 60,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5341,7 +5341,7 @@
         "width": 0.4048,
         "height": 0.3438
       },
-      "maxHours": 24
+      "maxHours": 168
     },
     {
       "id": "bc-southeast-overlay",
@@ -5351,7 +5351,7 @@
       "domain": "bc",
       "anchorLayer": "raw-visir-5min",
       "frameIntervalMinutes": 10,
-      "archiveFrameIntervalMinutes": 30,
+      "archiveFrameIntervalMinutes": 60,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5487,7 +5487,7 @@
         "width": 0.405,
         "height": 0.3473
       },
-      "maxHours": 24
+      "maxHours": 168
     },
     {
       "id": "bc-northeast-overlay",
@@ -5497,7 +5497,7 @@
       "domain": "bc",
       "anchorLayer": "raw-visir",
       "frameIntervalMinutes": 10,
-      "archiveFrameIntervalMinutes": 30,
+      "archiveFrameIntervalMinutes": 60,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5633,7 +5633,7 @@
         "width": 0.502,
         "height": 0.4422
       },
-      "maxHours": 24
+      "maxHours": 168
     },
     {
       "id": "pacific-wna-overlay",

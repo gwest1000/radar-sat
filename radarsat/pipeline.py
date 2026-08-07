@@ -54,8 +54,10 @@ from .point_frames import (
 
 UTC = dt.timezone.utc
 LIGHTNING_TRAIL_RENDER_VERSION = 7
+LIGHTNING_HOUR_RENDER_VERSION = 1
 LIGHTNING_FLASH_RENDER_VERSION = 9
 LIGHTNING_REGIONAL_RENDER_VERSION = 4
+LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 1
 LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 10
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
@@ -69,6 +71,7 @@ RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
 GLM_LIGHTNING_RENDER_VERSION = 2
 GLM_LIGHTNING_TRAIL_RENDER_VERSION = 8
+GLM_LIGHTNING_HOUR_RENDER_VERSION = 1
 GLM_LIGHTNING_FLASH_RENDER_VERSION = 10
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 3
@@ -765,6 +768,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 all_anchors.add(lightning_time)
     anchors = sorted(value for value in all_anchors if value >= cutoff)
     output_layer = LAYERS["lightning-trail"]
+    hour_layer = LAYERS["lightning-hour"]
     flash_layer = LAYERS["lightning-flash"]
     regional_trail_layers = (
         {
@@ -777,6 +781,14 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
     regional_flash_layers = (
         {
             region_id: LAYERS[regional_layer_id("lightning-flash", region_id)]
+            for region_id in VIEWPORTS
+        }
+        if domain.id == "bc"
+        else {}
+    )
+    regional_hour_layers = (
+        {
+            region_id: LAYERS[regional_layer_id("lightning-hour", region_id)]
             for region_id in VIEWPORTS
         }
         if domain.id == "bc"
@@ -907,10 +919,13 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             },
         )
 
-    for anchor in anchors:
+    def selected_sources(
+        anchor: dt.datetime,
+        offsets: tuple[int, ...],
+    ) -> tuple[list[dt.datetime | None], list[Path | None]]:
         source_times: list[dt.datetime | None] = []
         used: set[dt.datetime] = set()
-        for offset in (0, 10, 20):
+        for offset in offsets:
             target = anchor - dt.timedelta(minutes=offset)
             selected = at_or_before(lightning_times, target)
             if selected is not None and target - selected > dt.timedelta(minutes=10):
@@ -922,6 +937,10 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             source_times.append(selected)
         paths = [frame_path(root, domain, source_layer, value) if value else None for value in source_times]
         existing = [path if path and path.exists() else None for path in paths]
+        return source_times, existing
+
+    for anchor in anchors:
+        source_times, existing = selected_sources(anchor, (0, 10, 20))
         if not any(existing):
             for layer in derived_layers:
                 frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
@@ -953,6 +972,41 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         else:
             frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
             metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
+        if anchor.minute == 0 and anchor >= regional_cutoff:
+            hour_source_times, hour_existing = selected_sources(
+                anchor,
+                (0, 10, 20, 30, 40, 50),
+            )
+            if any(hour_existing):
+                write_derived(
+                    hour_layer,
+                    anchor,
+                    hour_existing,
+                    hour_source_times,
+                    render_version=LIGHTNING_HOUR_RENDER_VERSION,
+                )
+                for region_id, regional_hour_layer in regional_hour_layers.items():
+                    viewport = VIEWPORTS[region_id]
+                    detailed_region = region_id != "small"
+                    write_derived(
+                        regional_hour_layer,
+                        anchor,
+                        hour_existing,
+                        hour_source_times,
+                        render_version=LIGHTNING_REGIONAL_HOUR_RENDER_VERSION,
+                        viewport=viewport,
+                        output_width=(
+                            DETAILED_REGIONAL_HAZARD_WIDTH
+                            if detailed_region
+                            else REGIONAL_HAZARD_WIDTH
+                        ),
+                        symbol_reference_width=(
+                            DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
+                            if detailed_region
+                            else 960
+                        ),
+                        blur_glow=not detailed_region,
+                    )
         if anchor < regional_cutoff:
             continue
         for region_id in regional_trail_layers:
@@ -1247,11 +1301,13 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
     """Turn exact ten-minute GLM bins into the common fading bolt symbols."""
     source_layer = LAYERS["glm-lightning"]
     output_layer = LAYERS["glm-lightning-trail"]
+    hour_layer = LAYERS["glm-lightning-hour"]
     flash_layer = LAYERS["glm-lightning-flash"]
     source_times = _archived_layer_times(root, domain, source_layer)
     if not source_times:
         return
     cutoff = max(source_times) - dt.timedelta(hours=hours)
+    hour_cutoff = max(source_times) - dt.timedelta(hours=24)
     anchors = [value for value in source_times if value >= cutoff]
     source_set = set(source_times)
     broad_view = domain.tier == "broad"
@@ -1326,6 +1382,82 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
                     ),
                 },
             )
+        if anchor.minute == 0 and anchor >= hour_cutoff:
+            hour_selected = [
+                value if value in source_set else None
+                for value in (
+                    anchor,
+                    anchor - dt.timedelta(minutes=10),
+                    anchor - dt.timedelta(minutes=20),
+                    anchor - dt.timedelta(minutes=30),
+                    anchor - dt.timedelta(minutes=40),
+                    anchor - dt.timedelta(minutes=50),
+                )
+            ]
+            hour_paths = [
+                frame_path(root, domain, source_layer, value) if value is not None else None
+                for value in hour_selected
+            ]
+            hour_existing = [
+                path if path is not None and path.is_file() else None
+                for path in hour_paths
+            ]
+            if any(hour_existing):
+                hour_destination = frame_path(root, domain, hour_layer, anchor)
+                hour_metadata = metadata_path(root, domain, hour_layer, anchor)
+                hour_sources = {
+                    f"age{index * 10}": format_utc(value)
+                    for index, value in enumerate(hour_selected)
+                    if value is not None
+                }
+                current_hour_sources: dict[str, str] = {}
+                current_hour_version: int | None = None
+                if hour_metadata.is_file():
+                    try:
+                        hour_payload = json.loads(hour_metadata.read_text())
+                        current_hour_sources = hour_payload.get("sourceTimes", {})
+                        current_hour_version = hour_payload.get("renderVersion")
+                    except (OSError, json.JSONDecodeError):
+                        pass
+                if not (
+                    hour_destination.is_file()
+                    and current_hour_sources == hour_sources
+                    and current_hour_version == GLM_LIGHTNING_HOUR_RENDER_VERSION
+                ):
+                    lightning_trail(
+                        hour_existing,
+                        hour_destination,
+                        output_width=render_output_width,
+                        symbol_reference_width=render_symbol_reference_width,
+                        blur_glow=render_blur_glow,
+                    )
+                    write_metadata(
+                        root,
+                        domain,
+                        hour_layer,
+                        anchor,
+                        hour_destination,
+                        {
+                            f"age{index * 10}": value
+                            for index, value in enumerate(hour_selected)
+                            if value is not None
+                        },
+                        source="NOAA GOES-18",
+                        source_layer="GLM-L2-LCFA hourly aggregate",
+                        extra={
+                            "renderVersion": GLM_LIGHTNING_HOUR_RENDER_VERSION,
+                            "aggregateWindowMinutes": 60,
+                            **(
+                                {
+                                    "outputWidth": render_output_width,
+                                    "symbolReferenceWidth": render_symbol_reference_width,
+                                    "blurGlow": render_blur_glow,
+                                }
+                                if broad_view
+                                else {}
+                            ),
+                        },
+                    )
         if existing[0] is None or selected[0] is None:
             frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
             metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)

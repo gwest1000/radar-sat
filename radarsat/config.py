@@ -199,6 +199,12 @@ LAYERS: dict[str, Layer] = {
         # five-minute display frames.
         max_age_minutes=30,
     ),
+    "lightning-hour": Layer(
+        id="lightning-hour",
+        title="CLDN hourly lightning aggregate",
+        source_layer=None,
+        max_age_minutes=70,
+    ),
     "lightning-flash": Layer(
         id="lightning-flash",
         title="CLDN newest-lightning arrival flash",
@@ -218,6 +224,13 @@ LAYERS: dict[str, Layer] = {
         source_layer=None,
         source="NOAA GOES-18",
         max_age_minutes=30,
+    ),
+    "glm-lightning-hour": Layer(
+        id="glm-lightning-hour",
+        title="GOES-18 GLM hourly total-lightning aggregate",
+        source_layer=None,
+        source="NOAA GOES-18",
+        max_age_minutes=70,
     ),
     "glm-lightning-flash": Layer(
         id="glm-lightning-flash",
@@ -402,6 +415,7 @@ def regional_layer_id(base_layer_id: str, region_id: str) -> str:
 for _region_id in VIEWPORTS:
     for _base_layer_id, _title, _max_age in (
         ("lightning-trail", "CLDN 30-minute age trail", 30),
+        ("lightning-hour", "CLDN hourly lightning aggregate", 70),
         ("lightning-flash", "CLDN newest-lightning arrival flash", 6),
         ("hotspots", "Active-wildfire and thermal-hotspot overlay", 30),
     ):
@@ -447,7 +461,7 @@ def _overlay_product(
         "domain": "bc",
         "anchorLayer": visir_layer,
         "frameIntervalMinutes": 10,
-        "archiveFrameIntervalMinutes": 30,
+        "archiveFrameIntervalMinutes": 60,
         "defaultHours": 3,
         "description": (
             "A configurable satellite, radar or precipitation-type overlay with "
@@ -562,10 +576,10 @@ def _broad_product(
 
 PRODUCTS: list[dict[str, object]] = [
     _overlay_product("bc-large-overlay", "BC XL", "BC XL", BC_XL_VIEWPORT),
-    _overlay_product("bc-small-overlay", "BC", "BC", VIEWPORTS["small"], five_minute=True, max_hours=24),
-    _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"], five_minute=True, max_hours=24),
-    _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"], five_minute=True, max_hours=24),
-    _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"], max_hours=24),
+    _overlay_product("bc-small-overlay", "BC", "BC", VIEWPORTS["small"], five_minute=True, max_hours=168),
+    _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"], five_minute=True, max_hours=168),
+    _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"], five_minute=True, max_hours=168),
+    _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"], max_hours=168),
     _broad_product(
         "pacific-wna-overlay",
         "Eastern Pacific / Western North America",

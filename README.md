@@ -26,10 +26,12 @@ The BC, southwest and southeast displays can use genuine five-minute GOES-18
 PACUS imagery south of its scan edge with ten-minute full-disk imagery farther
 north, but every BC product is presented on one consistent ten-minute loop
 clock. Pacific/WNA, North America and Pacific use a twenty-minute loop clock.
-The rapid-source finals are retained for 24 hours, and BC XL keeps the
-seven-day archive. All regional displays crop the shared aligned BC grid,
-gaining on-screen detail without
-storing duplicate regional rasters. The watershed overlay uses
+Selecting seven days switches every product to a consistent hourly clock; its
+lightning layer aggregates the six preceding ten-minute detection bins. The
+rapid-source finals are retained for 24 hours, while the standard source feeds
+all BC views through the seven-day archive. All regional displays crop the
+shared aligned BC grid, gaining on-screen detail without storing duplicate
+regional rasters. The watershed overlay uses
 the same 54-polygon BC Hydro boundary source as the forecast-model plots.
 
 Every map shows the real source timestamps. Old data is never silently relabelled
@@ -60,14 +62,15 @@ GitHub Pages static viewer ◀────────────────�
 ```
 
 - BC grid: EPSG:3005, 1920×1472, approximately 145–108°W and 45–63°N.
-- BC retention: all observations for 24 hours, then `:00`/`:30` through day 7
-  (432 ten-minute or 528 six-minute times per layer).
+- BC presentation: ten-minute frames through 24 hours; selecting seven days
+  uses hourly frames for the complete loop.
 - Five-minute BC PACUS finals require about 0.18 GB for a full 24-hour archive
   at the observed 0.61 MB/frame. Source transfer is about 15 GB/day, but the
   53 MB working file is deleted after each render.
-- North America satellite target: 10 minutes for 24 hours, then hourly through
-  day 7. The Himawari-9/GOES-18 North Pacific blend remains 30 minutes for 24
-  hours, then hourly; GOES-18 smoke and total lightning use a 10-minute clock.
+- North America and Pacific presentation: 20 minutes through 24 hours, then
+  hourly for the complete seven-day loop. The Himawari-9/GOES-18 North Pacific
+  blend remains 30 minutes for 24 hours, then hourly; GOES-18 smoke and total
+  lightning use a 10-minute clock.
 - The ECCC 1 km North American radar composite is retained at its genuine
   six-minute clock for 24 hours, then hourly through day 7.
 - The viewer uses server-rendered transparent lightning-trail PNGs (normally
