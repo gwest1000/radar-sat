@@ -179,6 +179,7 @@ const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA/NESDIS/STAR": "Full-resolution CIRA GeoColor imagery distributed by NOAA/NESDIS/STAR; the raw NOAA feed remains the automatic fallback.",
   "ECCC GeoMet": "Canadian radar, precipitation type and ECCC-rendered satellite products.",
   "ECCC Datamart": "Native MSC GOES RGB satellite products and Canadian Lightning Detection Network observations.",
+  "ECCC HRDPS Continental 2.5 km": "Hourly 500 hPa geopotential-height and mean sea-level-pressure model contours.",
   "NRCan CWFIS": "Timestamped satellite thermal detections and Canadian active-fire records.",
   "BC Wildfire Service": "Official BC active fires and Wildfires of Note.",
   "NIFC WFIGS": "Current U.S. ICS-209 large-incident locations.",
@@ -356,8 +357,8 @@ function StableMapImage({
   // Keep the previous decoded raster visible until the replacement is ready.
   // This preserves the exact animation clock without showing a blank layer
   // during a slower satellite download or decode.
-  // eslint-disable-next-line @next/next/no-img-element
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       className={className}
       src={displayedSrc}
@@ -982,6 +983,8 @@ function layerLabel(layerId: string): string {
   if (layerId === "ptype") return "PTYPE";
   if (layerId === "site-radar") return "RADAR";
   if (layerId === "hotspots") return "FIRE";
+  if (layerId === "hrdps-hgt500") return "H500";
+  if (layerId === "hrdps-mslp") return "MSLP";
   if (
     ["daynight", "ir", "convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir"].includes(layerId)
     || layerId.startsWith("westwx-")
@@ -992,7 +995,7 @@ function layerLabel(layerId: string): string {
 function sourceLabel(layerId: string): string | null {
   if (layerId.includes("coverage")) return null;
   const label = layerLabel(layerId);
-  return ["SAT", "RADAR", "PTYPE", "LTG", "FIRE", "SMOKE"].includes(label) ? label : null;
+  return ["SAT", "RADAR", "PTYPE", "LTG", "FIRE", "SMOKE", "H500", "MSLP"].includes(label) ? label : null;
 }
 
 function layerControlLabel(layerId: string): string {
@@ -1011,6 +1014,8 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "radar-coverage") return "Radar coverage";
   if (layerId === "ptype-coverage") return "Precipitation-type coverage";
   if (layerId === "ptype") return "Precip type";
+  if (layerId === "hrdps-hgt500") return "HRDPS 500 hPa";
+  if (layerId === "hrdps-mslp") return "HRDPS MSLP";
   if (layerId === "lightning-trail") return "Lightning";
   if (layerId === "lightning") return "Flash density";
   if (layerId === "glm-lightning-trail") return "Lightning";
@@ -1301,6 +1306,32 @@ function SmokeLegend({ frame }: { frame?: Frame }) {
           ? "Unavailable for this scene"
           : "Daylight, sufficiently clear sky only; absence is not proof of clear air"}
       </p>
+    </div>
+  );
+}
+
+function ModelContourLegend({ kind }: { kind: "hgt500" | "mslp" }) {
+  const height = kind === "hgt500";
+  const rows = height
+    ? [["≤ 570 dam", "#ff9f2f", 3], ["> 570 dam", "#ffd166", 3]] as const
+    : [["≤ 1024 hPa", "#ef4dff", 1.5], ["> 1024 hPa", "#42a5ff", 1.5]] as const;
+  return (
+    <div className="hotspot-legend" aria-label={height ? "500 hPa height contour legend" : "Mean sea-level pressure contour legend"}>
+      {rows.map(([label, colour, width]) => (
+        <div className="hotspot-key-row" key={label}>
+          <span
+            aria-hidden="true"
+            style={{
+              display: "inline-block",
+              width: "27px",
+              borderTop: `${width}px solid ${colour}`,
+              boxShadow: "0 1px 0 #151822",
+            }}
+          />
+          <span>{label}</span>
+        </div>
+      ))}
+      <p>{height ? "6 dam interval · bold H/L centres" : "4 hPa interval · light H/L centres"}</p>
     </div>
   );
 }
@@ -2193,6 +2224,8 @@ export function RadarViewer() {
               if (legend.kind === "lightning-age") {
                 return <LightningLegend hourly={effectiveRangeHours > 24} key={legendId} />;
               }
+              if (legend.kind === "hrdps-hgt500") return <ModelContourLegend kind="hgt500" key={legendId} />;
+              if (legend.kind === "hrdps-mslp") return <ModelContourLegend kind="mslp" key={legendId} />;
               if (legend.kind === "smoke-confidence") {
                 const smokeFrame = composedLayers.find((layer) => layer.id === "smoke")?.frame;
                 return <SmokeLegend frame={smokeFrame} key={legendId} />;

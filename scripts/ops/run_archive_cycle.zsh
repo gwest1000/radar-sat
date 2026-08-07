@@ -113,5 +113,13 @@ if [[ "${RADARSAT_WEB_TILES_ENABLED:-0}" == "1" ]]; then
     || print -u2 "Warning: archive raster-tile refresh failed; retaining whole-frame fallback."
 fi
 
+if [[ "${RADARSAT_HRDPS_CONTOURS_ENABLED:-1}" == "1" ]]; then
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_hrdps_contours.py" \
+    --output-root "${OUTPUT_ROOT}" \
+    --data-root "${RADARSAT_HRDPS_DATA_ROOT:-${HOME}/projects/fcstGraphics/data/hrdps_continental}" \
+    --hours "${RADARSAT_HRDPS_CONTOUR_RECOVERY_HOURS:-12}" \
+    || print -u2 "Warning: HRDPS contour refresh failed; retaining existing model overlays."
+fi
+
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
 "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh"

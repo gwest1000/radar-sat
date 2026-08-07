@@ -173,6 +173,10 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "eccc-geocolor").defaultEnabled, false);
   assert.match(viewer, /layerId === "eccc-geocolor"\) return "MSC GeoColor"/);
   assert.equal(overlay.layers.find((layer) => layer.id === "snowfog").defaultEnabled, false);
+  assert.equal(overlay.layers.find((layer) => layer.id === "hrdps-hgt500").defaultEnabled, false);
+  assert.equal(overlay.layers.find((layer) => layer.id === "hrdps-mslp").optional, true);
+  assert.match(viewer, /HRDPS 500 hPa/);
+  assert.match(viewer, /HRDPS MSLP/);
   assert.equal(demo.products.some((product) => product.group === "Snow / fog"), false);
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");

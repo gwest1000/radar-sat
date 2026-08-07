@@ -172,6 +172,20 @@ LAYERS: dict[str, Layer] = {
         source_layer="Radar-Coverage_SfcPrecipType-Inverted",
         max_age_minutes=30,
     ),
+    "hrdps-hgt500": Layer(
+        id="hrdps-hgt500",
+        title="HRDPS 500 hPa geopotential height",
+        source_layer=None,
+        source="ECCC HRDPS Continental 2.5 km",
+        max_age_minutes=90,
+    ),
+    "hrdps-mslp": Layer(
+        id="hrdps-mslp",
+        title="HRDPS mean sea-level pressure",
+        source_layer=None,
+        source="ECCC HRDPS Continental 2.5 km",
+        max_age_minutes=90,
+    ),
     "lightning": Layer(
         id="lightning",
         title="CLDN 10-minute flash density",
@@ -482,13 +496,15 @@ def _overlay_product(
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
+            {"id": "hrdps-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "hrdps-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "watersheds", "opacity": 1.0},
             {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
             {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
         ],
-        "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
+        "legends": ["radar-rain", "ptype", "hrdps-hgt500", "hrdps-mslp", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
             (
                 "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5°N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback."
@@ -542,6 +558,8 @@ def _broad_product(
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
+            {"id": "hrdps-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "hrdps-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
@@ -551,6 +569,8 @@ def _broad_product(
             anchor_layer,
             "radar-rain",
             "ptype",
+            "hrdps-hgt500",
+            "hrdps-mslp",
             "glm-lightning-age",
             "smoke-confidence",
             "hotspots",
@@ -655,6 +675,14 @@ LEGENDS: dict[str, dict[str, str]] = {
     "transmission-lines": {
         "title": "BC transmission lines",
         "kind": "transmission-lines",
+    },
+    "hrdps-hgt500": {
+        "title": "HRDPS 500 hPa height",
+        "kind": "hrdps-hgt500",
+    },
+    "hrdps-mslp": {
+        "title": "HRDPS MSLP",
+        "kind": "hrdps-mslp",
     },
     "hotspots": {
         "title": "Active wildfires and thermal hotspots",

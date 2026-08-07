@@ -44,6 +44,12 @@ Hollow, age-fading coral flames are archived ten-minute snapshots of NRCan
 CWFIS satellite thermal detections; they are not fire perimeters or confirmation
 of an active wildfire.
 
+Optional HRDPS Continental 2.5-km overlays add hourly 500-hPa height contours
+(6 dam) and MSLP contours (4 hPa). The renderer reuses fields already required
+by fcstGraphics and downloads only the two intermediate hourly GRIBs. High/low
+centres use smoothed neighborhood extrema, broad-background prominence and
+physical-distance suppression so weak gridscale extrema are not labelled.
+
 The browser refreshes its catalog every minute and performs a visibility-aware
 page reload every five minutes. A visible window keeps looping when another
 window or application has focus; only a genuinely hidden tab pauses playback.
