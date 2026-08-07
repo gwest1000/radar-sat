@@ -129,7 +129,10 @@ test("keeps a compact desktop control rail and gives the map the remaining width
   assert.match(styles, /\.layer-selector:hover \.layers-popover/);
   assert.match(styles, /\.product-switcher \.selector-options\s*\{[\s\S]*?bottom: calc\(100% \+ 4px\)/);
   assert.match(styles, /\.product-switcher \.product-button\s*\{[\s\S]*?width: 100%/);
-  assert.match(viewer, /activeLayerLabels\.join\(" · "\)/);
+  assert.match(styles, /\.active-layer-list\s*\{[\s\S]*?display: grid/);
+  assert.match(styles, /\.product-switcher \.selector-current,[\s\S]*?\.range-selector \.selector-current\s*\{[\s\S]*?width: 100%/);
+  assert.match(viewer, /activeLayerLabels\.map\(\(label\) =>/);
+  assert.match(viewer, /className="active-layer-item"/);
   assert.doesNotMatch(viewer, /Mixed freshness|live-summary|freshnessClock/);
   assert.match(viewer, /product-switcher/);
   assert.match(viewer, /className="sources-drawer"/);

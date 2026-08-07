@@ -2126,7 +2126,9 @@ export function RadarViewer() {
                   <span className="layers-count">{activeLayerLabels.length} on</span>
                 </span>
                 <span className="active-layer-list">
-                  {activeLayerLabels.length ? activeLayerLabels.join(" · ") : "None selected"}
+                  {activeLayerLabels.length ? activeLayerLabels.map((label) => (
+                    <span className="active-layer-item" key={label}>{label}</span>
+                  )) : <span className="active-layer-empty">None selected</span>}
                 </span>
                 <span className="layers-chevron" aria-hidden="true">⌄</span>
               </button>
