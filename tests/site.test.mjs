@@ -21,9 +21,10 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /actualSourceTime\(item\.id, item\.frame\)/);
   assert.match(viewer, /RANGE_OPTIONS = \[3, 6, 12, 24, 168\]/);
   assert.match(viewer, /function playbackFrames/);
+  assert.match(viewer, /product\.frameIntervalMinutes/);
+  assert.match(viewer, /product\.archiveFrameIntervalMinutes/);
   assert.match(viewer, /FIVE_MINUTES_MS = 5 \* 60_000/);
-  assert.match(viewer, /THIRTY_MINUTES_MS = 30 \* 60_000/);
-  assert.match(viewer, /return playbackFrames\(frames, effectiveRangeHours\)/);
+  assert.match(viewer, /return playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
   assert.doesNotMatch(viewer, /Promise\.all\(loads\)/);
   assert.match(viewer, /flashDisplayAge < FIVE_MINUTES_MS/);
   assert.match(viewer, /atOrBeforeSourceTime/);
@@ -153,6 +154,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.shortTitle, "BC XL");
   assert.equal(small.shortTitle, "BC");
   assert.equal(small.anchorLayer, "raw-visir-5min");
+  assert.equal(small.frameIntervalMinutes, 10);
+  assert.equal(small.archiveFrameIntervalMinutes, 30);
   assert.equal(small.maxHours, 24);
   assert.deepEqual(overlay.viewport, { left: 0, top: 0.025, width: 1, height: 0.95 });
   assert.deepEqual(small.viewport, { left: 0.16404, top: 0.22489, width: 0.670919, height: 0.581179 });
@@ -187,6 +190,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northPacific.shortTitle, "Pacific");
   assert.equal(demo.domains["north-pacific"].title, "Pacific");
   assert.equal(northAmerica.anchorLayer, "westwx-ir");
+  assert.equal(northAmerica.frameIntervalMinutes, 20);
+  assert.equal(northAmerica.archiveFrameIntervalMinutes, 60);
   assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.8772, height: 0.8237 });
   assert.deepEqual(
     northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
@@ -195,6 +200,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-ir");
+  assert.equal(northPacific.frameIntervalMinutes, 20);
   assert.deepEqual(northPacific.viewport, { left: 0, top: 0.075936, width: 0.735882, height: 0.924064 });
   assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-07T21:26:08.146579Z",
+  "generatedAt": "2026-08-07T22:39:55.832584Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -4913,6 +4913,8 @@
       "group": "Overlay",
       "domain": "bc",
       "anchorLayer": "raw-visir",
+      "frameIntervalMinutes": 10,
+      "archiveFrameIntervalMinutes": 30,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5056,6 +5058,8 @@
       "group": "Overlay",
       "domain": "bc",
       "anchorLayer": "raw-visir-5min",
+      "frameIntervalMinutes": 10,
+      "archiveFrameIntervalMinutes": 30,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5200,6 +5204,8 @@
       "group": "Overlay",
       "domain": "bc",
       "anchorLayer": "raw-visir-5min",
+      "frameIntervalMinutes": 10,
+      "archiveFrameIntervalMinutes": 30,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5344,6 +5350,8 @@
       "group": "Overlay",
       "domain": "bc",
       "anchorLayer": "raw-visir-5min",
+      "frameIntervalMinutes": 10,
+      "archiveFrameIntervalMinutes": 30,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5488,6 +5496,8 @@
       "group": "Overlay",
       "domain": "bc",
       "anchorLayer": "raw-visir",
+      "frameIntervalMinutes": 10,
+      "archiveFrameIntervalMinutes": 30,
       "defaultHours": 3,
       "description": "A configurable satellite, radar or precipitation-type overlay with a 30-minute lightning trail, active wildfires, satellite thermal hotspots and BC Hydro watershed boundaries.",
       "layers": [
@@ -5632,6 +5642,8 @@
       "group": "Broad",
       "domain": "north-pacific",
       "anchorLayer": "raw-ir",
+      "frameIntervalMinutes": 20,
+      "archiveFrameIntervalMinutes": 60,
       "defaultHours": 24,
       "description": "A focused Eastern Pacific and Western North America satellite view with real West Coast radar coverage.",
       "layers": [
@@ -5736,6 +5748,8 @@
       "group": "Broad",
       "domain": "north-america",
       "anchorLayer": "westwx-ir",
+      "frameIntervalMinutes": 20,
+      "archiveFrameIntervalMinutes": 60,
       "defaultHours": 24,
       "description": "Ten-minute GOES-18 calibrated satellite imagery with the ECCC continental radar composite.",
       "layers": [
@@ -5840,6 +5854,8 @@
       "group": "Broad",
       "domain": "north-pacific",
       "anchorLayer": "raw-ir",
+      "frameIntervalMinutes": 20,
+      "archiveFrameIntervalMinutes": 60,
       "defaultHours": 24,
       "description": "Ten-minute NOAA GOES-18 GeoColor imagery with real West Coast radar coverage.",
       "layers": [

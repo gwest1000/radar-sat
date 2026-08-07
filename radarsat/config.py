@@ -446,6 +446,8 @@ def _overlay_product(
         "group": "Overlay",
         "domain": "bc",
         "anchorLayer": visir_layer,
+        "frameIntervalMinutes": 10,
+        "archiveFrameIntervalMinutes": 30,
         "defaultHours": 3,
         "description": (
             "A configurable satellite, radar or precipitation-type overlay with "
@@ -513,6 +515,8 @@ def _broad_product(
         "group": "Broad",
         "domain": domain,
         "anchorLayer": anchor_layer,
+        "frameIntervalMinutes": 20,
+        "archiveFrameIntervalMinutes": 60,
         "defaultHours": 24,
         "description": description,
         "layers": [

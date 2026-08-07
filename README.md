@@ -22,11 +22,13 @@ Public site: <https://gwest1000.github.io/radar-sat/>
 - **North Pacific:** Himawari-9/GOES-18 true colour or enhanced IR on a
   dateline-safe grid, with the real West Coast radar footprint.
 
-The BC, southwest and southeast displays merge genuine five-minute GOES-18
+The BC, southwest and southeast displays can use genuine five-minute GOES-18
 PACUS imagery south of its scan edge with ten-minute full-disk imagery farther
-north. Those five-minute finals are retained for 24 hours only; BC XL and BC NE
-remain ten-minute displays, and BC XL keeps the seven-day archive. All regional
-displays crop the shared aligned BC grid, gaining on-screen detail without
+north, but every BC product is presented on one consistent ten-minute loop
+clock. Pacific/WNA, North America and Pacific use a twenty-minute loop clock.
+The rapid-source finals are retained for 24 hours, and BC XL keeps the
+seven-day archive. All regional displays crop the shared aligned BC grid,
+gaining on-screen detail without
 storing duplicate regional rasters. The watershed overlay uses
 the same 54-polygon BC Hydro boundary source as the forecast-model plots.
 

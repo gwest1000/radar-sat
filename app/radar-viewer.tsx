@@ -95,6 +95,8 @@ type Product = {
   group: string;
   domain: string;
   anchorLayer: string;
+  frameIntervalMinutes?: number;
+  archiveFrameIntervalMinutes?: number;
   defaultHours: number;
   maxHours?: number;
   description: string;
@@ -127,7 +129,6 @@ type SiteConfig = {
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 const FIVE_MINUTES_MS = 5 * 60_000;
-const THIRTY_MINUTES_MS = 30 * 60_000;
 const HIGH_FREQUENCY_ARCHIVE_MS = 24 * 60 * 60_000;
 const AUTO_REFRESH_MS = 5 * 60_000;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
@@ -228,30 +229,40 @@ function mergedFrames(...collections: Frame[][]): Frame[] {
   ));
 }
 
-function playbackFrames(sourceFrames: Frame[], rangeHours: number): Frame[] {
+function playbackFrames(
+  sourceFrames: Frame[],
+  rangeHours: number,
+  frameIntervalMinutes = 5,
+  archiveFrameIntervalMinutes = 30,
+): Frame[] {
   if (!sourceFrames.length) return [];
+  const frameIntervalMs = Math.max(5, frameIntervalMinutes) * 60_000;
+  const archiveFrameIntervalMs = Math.max(
+    frameIntervalMinutes,
+    archiveFrameIntervalMinutes,
+  ) * 60_000;
   const parsed = sourceFrames
     .map((frame) => ({ frame, time: Date.parse(frame.validTime) }))
     .filter((item) => Number.isFinite(item.time))
     .sort((left, right) => left.time - right.time);
   if (!parsed.length) return [];
-  const newest = Math.floor(parsed[parsed.length - 1].time / FIVE_MINUTES_MS) * FIVE_MINUTES_MS;
+  const newest = Math.floor(parsed[parsed.length - 1].time / frameIntervalMs) * frameIntervalMs;
   const requestedStart = newest - rangeHours * 60 * 60_000;
-  const availableStart = Math.ceil(parsed[0].time / FIVE_MINUTES_MS) * FIVE_MINUTES_MS;
+  const availableStart = Math.ceil(parsed[0].time / frameIntervalMs) * frameIntervalMs;
   const start = Math.max(requestedStart, availableStart);
   const recentStart = Math.max(start, newest - HIGH_FREQUENCY_ARCHIVE_MS);
   const times: number[] = [];
   if (rangeHours > 24 && start < recentStart) {
-    let historic = Math.ceil(start / THIRTY_MINUTES_MS) * THIRTY_MINUTES_MS;
+    let historic = Math.ceil(start / archiveFrameIntervalMs) * archiveFrameIntervalMs;
     while (historic < recentStart) {
       times.push(historic);
-      historic += THIRTY_MINUTES_MS;
+      historic += archiveFrameIntervalMs;
     }
   }
-  let current = Math.ceil(recentStart / FIVE_MINUTES_MS) * FIVE_MINUTES_MS;
+  let current = Math.ceil(recentStart / frameIntervalMs) * frameIntervalMs;
   while (current <= newest) {
     times.push(current);
-    current += FIVE_MINUTES_MS;
+    current += frameIntervalMs;
   }
   let sourceIndex = 0;
   return times.flatMap((time): Frame[] => {
@@ -1543,7 +1554,12 @@ export function RadarViewer() {
         )
       : domain.layers[activeAnchorId]?.frames ?? [];
     if (!frames.length) return [];
-    return playbackFrames(frames, effectiveRangeHours);
+    return playbackFrames(
+      frames,
+      effectiveRangeHours,
+      product.frameIntervalMinutes,
+      product.archiveFrameIntervalMinutes,
+    );
   }, [activeAnchorId, domain, effectiveRangeHours, product]);
 
   const availableRangeOptions = useMemo(
