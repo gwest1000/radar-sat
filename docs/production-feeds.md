@@ -190,7 +190,7 @@ half-hour-then-hourly Pacific times per layer. The shared rapid source download
 already serves WestWX, so Radar-Sat adds only the compact visible WebP rather
 than another raw ABI transfer. Broad radar plus coverage masks are only tens of kilobytes per
 time. These layers therefore remain well inside the existing 4 GB warning and
-5 GB hard publication guards; they do not rely on the account's nominal 10 GB
+5.5 GB hard publication guards; they do not rely on the account's nominal 10 GB
 ceiling for safety.
 
 The `site-radar` layer is a 2×2 PNG montage of DPQPE **rain** GIFs from CASAG, CASHP, CASSS, and CASPG. A frame is emitted only when all four sites have the exact same source timestamp. Primary imagery wins when primary and contingency files coexist; a same-time contingency image is accepted when primary is absent and is labelled in the panel and metadata. A newer scan from only one to three sites never creates a mixed-time frame. Snow DPQPE and CAPPI files remain available in the raw spool for future dedicated products but are not silently mixed into this display.

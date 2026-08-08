@@ -128,13 +128,13 @@ duration. See [R2 pricing](https://developers.cloudflare.com/r2/pricing/).
 Guardrails are deliberately lower than the allowance:
 
 - warn at 4 GB in the `radar-sat` bucket;
-- refuse growth above 5 GB;
+- refuse growth above 5.5 GB;
 - review Cloudflare's account-wide storage usage as well as the bucket guard;
 - keep a 9-day `frames/` lifecycle rule as a failure backstop;
 - upload reusable layers once and compose products in the browser;
 - never upload native GOES GeoTIFFs or raw spool files.
 
-The 4/5 GB publisher guard is a bucket-growth check, not an account-wide alert
+The 4/5.5 GB publisher guard is a bucket-growth check, not an account-wide alert
 service. Configure Cloudflare billing notifications separately. On the ingest
 host, reserve roughly 8–10 GB free for the processed archive plus the local raw
 spool and monitor both paths; the supplied local byte thresholds cover processed
