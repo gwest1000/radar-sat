@@ -15,6 +15,7 @@ from radarsat.pipeline import (
     derive_lightning_trails,
     frame_path,
     metadata_path,
+    prune,
     retained_times,
     safe_archive_path,
     write_metadata,
@@ -28,7 +29,7 @@ from radarsat.r2 import (
     publish,
     size_guard,
 )
-from radarsat.retention import keep_frame
+from radarsat.retention import keep_frame, keep_layer_frame
 
 
 UTC = dt.timezone.utc
@@ -152,6 +153,42 @@ class RetentionTests(unittest.TestCase):
         now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
         latest = now - dt.timedelta(days=8, minutes=10)
         self.assertEqual(retained_times([latest], 168, True, now, "bc"), [latest])
+
+    def test_ecmwf_is_hourly_for_one_day_then_three_hourly(self) -> None:
+        now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
+        recent_off_cycle = dt.datetime(2026, 7, 19, 13, tzinfo=UTC)
+        old_off_cycle = dt.datetime(2026, 7, 19, 11, tzinfo=UTC)
+        old_synoptic = dt.datetime(2026, 7, 19, 9, tzinfo=UTC)
+
+        self.assertTrue(
+            keep_layer_frame(recent_off_cycle, now, "broad", "ecmwf-hgt500")
+        )
+        self.assertFalse(
+            keep_layer_frame(old_off_cycle, now, "broad", "ecmwf-hgt500")
+        )
+        self.assertTrue(
+            keep_layer_frame(old_synoptic, now, "broad", "ecmwf-hgt500")
+        )
+        self.assertTrue(
+            keep_layer_frame(old_off_cycle, now, "broad", "radar-rain")
+        )
+
+    def test_local_prune_thins_old_ecmwf_interpolated_hours(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = DOMAINS["north-america"]
+            layer = LAYERS["ecmwf-hgt500"]
+            now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
+            old_off_cycle = dt.datetime(2026, 7, 19, 11, tzinfo=UTC)
+            old_synoptic = dt.datetime(2026, 7, 19, 9, tzinfo=UTC)
+            for valid in (old_off_cycle, old_synoptic):
+                frame = frame_path(root, domain, layer, valid)
+                write_png(frame)
+                write_metadata(root, domain, layer, valid, frame)
+
+            self.assertEqual(prune(root, now), 1)
+            self.assertFalse(frame_path(root, domain, layer, old_off_cycle).exists())
+            self.assertTrue(frame_path(root, domain, layer, old_synoptic).exists())
 
 
 class LightningCleanupTests(unittest.TestCase):
@@ -297,11 +334,18 @@ class PublisherTests(unittest.TestCase):
             "frames/bc/radar-rain/2026/07/20/20260720T1100Z.png": 1,
             "frames/bc/radar-rain/2026/07/18/20260718T1012Z.png": 1,
             "metadata/bc/radar-rain/2026/07/18/20260718T1030Z.json": 1,
+            "frames/north-america/ecmwf-hgt500/2026/07/19/20260719T0900Z.png": 1,
+            "frames/north-america/ecmwf-hgt500/2026/07/19/20260719T1100Z.png": 1,
+            "metadata/north-america/ecmwf-hgt500/2026/07/19/20260719T1100Z.json": 1,
             "static/bc/base-dark.png": 1,
         }
         self.assertEqual(
             expired_remote_keys(remote, now),
-            ["frames/bc/radar-rain/2026/07/18/20260718T1012Z.png"],
+            [
+                "frames/bc/radar-rain/2026/07/18/20260718T1012Z.png",
+                "frames/north-america/ecmwf-hgt500/2026/07/19/20260719T1100Z.png",
+                "metadata/north-america/ecmwf-hgt500/2026/07/19/20260719T1100Z.json",
+            ],
         )
 
     def test_catalog_referenced_object_is_never_deleted(self) -> None:

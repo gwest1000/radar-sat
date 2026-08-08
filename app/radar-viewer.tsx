@@ -155,9 +155,9 @@ const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
   height: `${BC_ON_NORTH_AMERICA.height * 100}%`,
 };
 const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]);
-// The derived lightning trails are transparent indexed PNGs (typically only
-// 7–12 KB). Prefer them to downloading point JSON and repainting hundreds of
-// symbols in the browser on every animation frame.
+// The derived lightning trails are compact transparent PNGs. Prefer them to
+// downloading point JSON and repainting hundreds of symbols in the browser on
+// every animation frame, but still decode them before advancing the clock.
 const RASTER_LIGHTNING_OVERLAYS = true;
 // Active-fire and hotspot point payloads remain available for crisp regional
 // rendering, but overview loops use a precomposed transparent PNG to avoid
@@ -187,7 +187,7 @@ const SOURCE_SUMMARIES: Record<string, string> = {
   "ECCC GeoMet": "Canadian radar, precipitation type and ECCC-rendered satellite products.",
   "ECCC Datamart": "Native MSC GOES RGB satellite products and Canadian Lightning Detection Network observations.",
   "ECCC HRDPS Continental 2.5 km": "Hourly 500 hPa geopotential-height and mean sea-level-pressure model contours.",
-  "ECMWF IFS Control": "Hourly 500 hPa geopotential-height and mean sea-level-pressure contours, linearly interpolated from three-hour control-forecast fields on the large domains.",
+  "ECMWF IFS Control": "Contours linearly interpolated from three-hour control-forecast fields: hourly for 24 hours, then three-hourly through day seven on the large domains.",
   "NRCan CWFIS": "Timestamped satellite thermal detections and Canadian active-fire records.",
   "BC Wildfire Service": "Official BC active fires and Wildfires of Note.",
   "NIFC WFIGS": "Current U.S. ICS-209 large-incident locations.",
@@ -1861,7 +1861,7 @@ export function RadarViewer() {
       }
       return references;
     };
-    const lookaheadCount = 2;
+    const lookaheadCount = 3;
     const lookahead = Array.from({ length: Math.min(lookaheadCount, anchorFrames.length - 1) }, (_, offset) => {
       const index = (currentFrameIndex + offset + 1) % anchorFrames.length;
       const candidate = anchorFrames[index];
@@ -1874,19 +1874,21 @@ export function RadarViewer() {
         effectiveRangeHours > 24,
       );
       return {
-        // Satellite, radar, smoke and model rasters must be decoded before
-        // the display clock moves. Hazard rasters are intentionally excluded:
-        // they are tiny, and a delayed lightning/fire request should not hold
-        // an otherwise complete meteorological frame. Coverage hatching is
-        // also non-blocking because the much larger radar/ptype data raster is
-        // the authoritative image for that observation.
+        // Satellite, radar, smoke, model and lightning rasters must be decoded
+        // before the display clock moves. In particular, advancing without a
+        // ready lightning raster makes the two-slot image buffer retain an
+        // older overlay for several fast frames. Fire and coverage remain
+        // non-blocking: fire changes slowly, while the radar/ptype data raster
+        // is authoritative for the coverage observation.
         criticalUrls: layers
           .filter((layer) => (
             layer.frame
-            && !LIGHTNING_CONTROLLERS.has(layer.id)
             && layer.id !== "hotspots"
             && !layer.id.endsWith("coverage")
           ))
+          .map((layer) => layer.url),
+        lightningUrls: layers
+          .filter((layer) => layer.frame && LIGHTNING_CONTROLLERS.has(layer.id))
           .map((layer) => layer.url),
         pointReferences: pointReferencesFor(candidate),
       };
@@ -1897,7 +1899,14 @@ export function RadarViewer() {
     // small low-priority buffer. Starting too many full-resolution rasters at
     // once competes with the frame that actually needs to be displayed.
     lookahead.forEach((candidate, index) => {
-      candidate.criticalUrls.forEach((url) => void preloadImageFrame(url, index === 0 ? "high" : "low"));
+      // Decode all rasters for the next two timestamps. Lightning is small on
+      // the wire, so keep three timestamps ready without starting three copies
+      // of the much larger satellite and radar backgrounds.
+      if (index < 2) {
+        candidate.criticalUrls.forEach((url) => void preloadImageFrame(url, index === 0 ? "high" : "low"));
+      } else {
+        candidate.lightningUrls.forEach((url) => void preloadImageFrame(url, "low"));
+      }
       candidate.pointReferences.forEach((reference) => preloadPointFrame(reference.url));
     });
     const finalFrame = currentFrameIndex === anchorFrames.length - 1;

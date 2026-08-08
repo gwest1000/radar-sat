@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 from PIL import Image
@@ -16,6 +17,7 @@ from radarsat.ecmwf_contours import (
     available_runs,
     interpolate_global_field,
     interpolate_in_time,
+    update_recent,
 )
 from radarsat.hrdps_contours import FIELD_STYLES, render_contours
 
@@ -123,6 +125,20 @@ class EcmwfContourTests(unittest.TestCase):
             np.asarray([[10.0, 40.0], [70.0, np.nan]], dtype=np.float32),
             equal_nan=True,
         )
+
+    def test_recovery_renders_hourly_for_one_day_then_three_hourly(self) -> None:
+        now = dt.datetime(2026, 8, 7, 12, tzinfo=UTC)
+        with mock.patch(
+            "radarsat.ecmwf_contours.render_valid_time",
+            return_value={"status": "unchanged"},
+        ) as render:
+            update_recent(Path("output"), Path("data"), hours=30, now=now)
+
+        valid_times = [call.args[2] for call in render.call_args_list]
+        self.assertEqual(len(valid_times), 27)
+        self.assertIn(now - dt.timedelta(hours=24), valid_times)
+        self.assertIn(dt.datetime(2026, 8, 6, 9, tzinfo=UTC), valid_times)
+        self.assertNotIn(dt.datetime(2026, 8, 6, 11, tzinfo=UTC), valid_times)
 
 
 if __name__ == "__main__":

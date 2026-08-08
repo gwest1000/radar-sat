@@ -22,7 +22,7 @@ from typing import Any, Iterable, Mapping
 from .config import DOMAINS
 from .geomet import format_utc
 from .pipeline import write_status
-from .retention import keep_frame
+from .retention import keep_layer_frame
 from .westwx_catalog import build_westwx_catalog
 
 
@@ -616,7 +616,9 @@ def expired_remote_keys(remote: Mapping[str, int], now: dt.datetime) -> list[str
         if parsed is None:
             continue
         valid_time, tier = parsed
-        if not keep_frame(valid_time, now, tier):
+        parts = Path(key).parts
+        layer_id = parts[2] if len(parts) > 2 else ""
+        if not keep_layer_frame(valid_time, now, tier, layer_id):
             expired.append(key)
     return sorted(expired)
 

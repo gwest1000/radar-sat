@@ -19,6 +19,7 @@ from radarsat.config import LAYERS, VIEWPORTS, Domain, regional_layer_id
 from radarsat.hotspots import render_fire_overlay, render_hotspots
 from radarsat.images import lightning_trail, render_transmission_overlay, render_watershed_overlay
 from radarsat.pipeline import (
+    BC_LIGHTNING_WIDTH,
     derive_lightning_trails,
     frame_path,
     geomet_render_version,
@@ -666,7 +667,7 @@ class NativeRenderTests(unittest.TestCase):
     def test_new_strike_halo_is_embedded_only_in_the_first_display_frame(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
-            domain = test_domain()
+            domain = replace(test_domain(), id="bc")
             first_time = VALID.replace(minute=10)
             source = frame_path(output, domain, LAYERS["lightning"], first_time)
             source.parent.mkdir(parents=True, exist_ok=True)
@@ -708,6 +709,7 @@ class NativeRenderTests(unittest.TestCase):
                 first_time,
             )) as first_frame:
                 self.assertEqual(first_frame.mode, "RGBA")
+                self.assertEqual(first_frame.width, BC_LIGHTNING_WIDTH)
             with Image.open(frame_path(
                 output,
                 domain,
@@ -715,6 +717,14 @@ class NativeRenderTests(unittest.TestCase):
                 next_time,
             )) as next_frame:
                 self.assertEqual(next_frame.mode, "P")
+            regional_layer = LAYERS[regional_layer_id("lightning-trail", "small")]
+            with Image.open(frame_path(
+                output,
+                domain,
+                regional_layer,
+                first_time,
+            )) as regional_frame:
+                self.assertEqual(regional_frame.width, BC_LIGHTNING_WIDTH)
 
     def test_hourly_lightning_aggregate_uses_six_ten_minute_bins(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

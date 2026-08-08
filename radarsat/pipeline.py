@@ -41,7 +41,7 @@ from .images import (
     save_overlay,
     save_satellite,
 )
-from .retention import keep_frame
+from .retention import keep_frame, keep_layer_frame
 from .point_frames import (
     glm_point_rows,
     normalized_pixel,
@@ -53,11 +53,11 @@ from .point_frames import (
 
 
 UTC = dt.timezone.utc
-LIGHTNING_TRAIL_RENDER_VERSION = 9
-LIGHTNING_HOUR_RENDER_VERSION = 3
+LIGHTNING_TRAIL_RENDER_VERSION = 10
+LIGHTNING_HOUR_RENDER_VERSION = 4
 LIGHTNING_FLASH_RENDER_VERSION = 9
-LIGHTNING_REGIONAL_RENDER_VERSION = 7
-LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 4
+LIGHTNING_REGIONAL_RENDER_VERSION = 8
+LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 5
 LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 11
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
@@ -78,6 +78,7 @@ COVERAGE_RENDER_VERSION = 3
 PRECIP_OVERLAY_RENDER_VERSION = 1
 REGIONAL_HAZARD_WIDTH = 3840
 DETAILED_REGIONAL_HAZARD_WIDTH = 3840
+BC_LIGHTNING_WIDTH = 2560
 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH = 1440
 BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH = 1600
 BC_SMALL_NOTABLE_FIRE_SCALE = 0.85
@@ -958,7 +959,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
                 metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
             continue
-        base_output_width = domain.width * 2
+        base_output_width = BC_LIGHTNING_WIDTH if domain.id == "bc" else domain.width * 2
         base_symbol_reference_width = (
             domain.width if domain.id == "bc" else round(domain.width * 1.5)
         )
@@ -1010,11 +1011,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                         hour_source_times,
                         render_version=LIGHTNING_REGIONAL_HOUR_RENDER_VERSION,
                         viewport=viewport,
-                        output_width=(
-                            DETAILED_REGIONAL_HAZARD_WIDTH
-                            if detailed_region
-                            else REGIONAL_HAZARD_WIDTH
-                        ),
+                        output_width=BC_LIGHTNING_WIDTH,
                         symbol_reference_width=(
                             DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
                             if detailed_region
@@ -1028,11 +1025,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         for region_id in regional_trail_layers:
             viewport = VIEWPORTS[region_id]
             detailed_region = region_id != "small"
-            regional_output_width = (
-                DETAILED_REGIONAL_HAZARD_WIDTH
-                if detailed_region
-                else REGIONAL_HAZARD_WIDTH
-            )
+            regional_output_width = BC_LIGHTNING_WIDTH
             regional_symbol_reference_width = (
                 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
                 if detailed_region
@@ -2427,7 +2420,7 @@ def prune(root: Path, now: dt.datetime) -> int:
                 meta_path.unlink(missing_ok=True)
                 removed += 1
                 continue
-            if keep_frame(valid_time, now, domain.tier):
+            if keep_layer_frame(valid_time, now, domain.tier, layer_id):
                 continue
             image_path.unlink(missing_ok=True)
             meta_path.unlink(missing_ok=True)

@@ -15,6 +15,7 @@ from .config import DOMAINS, LAYERS, Domain
 from .geomet import projected_bbox
 from .hrdps_contours import FIELD_STYLES, RENDER_VERSION, UTC, FieldStyle, render_contours
 from .pipeline import frame_path, metadata_path, write_metadata
+from .retention import ECMWF_HOURLY_RETENTION_HOURS, ECMWF_SOURCE_INTERVAL_HOURS
 
 
 DEFAULT_DATA_ROOT = Path("/Volumes/Greg1_2tb/concrete_fcst_data/raw/ecmwf/realtime")
@@ -365,12 +366,22 @@ def update_recent(
     now: dt.datetime | None = None,
 ) -> list[dict[str, object]]:
     current = (now or dt.datetime.now(UTC)).astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+    valid_times = [
+        current - dt.timedelta(hours=offset)
+        for offset in range(max(0, hours), -1, -1)
+        if (
+            offset <= ECMWF_HOURLY_RETENTION_HOURS
+            or (current - dt.timedelta(hours=offset)).hour
+            % ECMWF_SOURCE_INTERVAL_HOURS
+            == 0
+        )
+    ]
     return [
         render_valid_time(
             output_root,
             data_root,
-            current - dt.timedelta(hours=offset),
+            valid_time,
             domain_ids=domain_ids,
         )
-        for offset in range(max(0, hours), -1, -1)
+        for valid_time in valid_times
     ]

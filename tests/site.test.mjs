@@ -74,11 +74,13 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /<LightningCanvas/);
   assert.match(viewer, /RASTER_LIGHTNING_OVERLAYS = true/);
   assert.match(viewer, /RASTER_FIRE_OVERLAYS = true/);
-  assert.match(viewer, /typically only[\s\S]*7–12 KB/);
+  assert.match(viewer, /derived lightning trails are compact transparent PNGs/);
   assert.match(viewer, /<FireCanvas/);
   assert.match(viewer, /data-marker-count=\{markers\.length\}/);
-  assert.match(viewer, /lookaheadCount = 2/);
+  assert.match(viewer, /lookaheadCount = 3/);
   assert.match(viewer, /preloadImageFrame/);
+  assert.match(viewer, /lightningUrls/);
+  assert.doesNotMatch(viewer, /&& !LIGHTNING_CONTROLLERS\.has\(layer\.id\)/);
   assert.match(viewer, /targetDomain === "north-pacific"/);
   assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
   assert.match(viewer, /active-fire-marker/);
