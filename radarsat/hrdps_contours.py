@@ -33,7 +33,7 @@ UTC = dt.timezone.utc
 RUN_RE = re.compile(r"^\d{8}T(?:00|06|12|18)Z$")
 BASE_URL = "https://dd.weather.gc.ca/today/model_hrdps/continental/2.5km"
 GRID_TAG = "RLatLon0.0225"
-RENDER_VERSION = 2
+RENDER_VERSION = 3
 DEFAULT_DATA_ROOT = (
     Path(__file__).resolve().parents[2]
     / "fcstGraphics"
@@ -332,6 +332,7 @@ def _label_every_contour(
     levels: np.ndarray,
     style: FieldStyle,
     output_scale: int,
+    text_scale: float = 1.0,
 ) -> list[object]:
     """Place one label on every disconnected line, not merely every level."""
     all_segments = getattr(contours, "allsegs", ())
@@ -352,7 +353,7 @@ def _label_every_contour(
         fmt=lambda value: f"{int(round(value))}",
         inline=True,
         inline_spacing=4,
-        fontsize=style.label_size * output_scale,
+        fontsize=style.label_size * output_scale * text_scale,
         colors=[_colour(style, float(level)) for level in levels],
         manual=positions,
     )
@@ -369,7 +370,14 @@ def render_contours(
         values * style.scale,
         max(0.55, style.contour_smooth_km / pixel_km),
     )
-    output_scale = 2 if domain.id == "bc" else 1
+    ecmwf_overview = style.layer_id.startswith("ecmwf-")
+    output_scale = 2
+    line_scale = 1.0
+    if ecmwf_overview:
+        line_scale = 0.75 if style.kind == "hgt500" else 0.90
+    label_scale = 0.90 if ecmwf_overview else 1.0
+    centre_scale = 0.50 if ecmwf_overview else 1.0
+    rendered_linewidth = style.linewidth * line_scale
     output_width = domain.width * output_scale
     output_height = domain.height * output_scale
     dpi = 100
@@ -391,14 +399,17 @@ def render_contours(
             scaled,
             levels=levels,
             colors=colours,
-            linewidths=style.linewidth * output_scale,
+            linewidths=rendered_linewidth * output_scale,
             antialiased=True,
         )
-        contours.set_path_effects([
-            path_effects.Stroke(linewidth=(style.linewidth + 1.15) * output_scale, foreground="#151822", alpha=0.82),
-            path_effects.Normal(),
-        ])
-        labels = _label_every_contour(ax, contours, levels, style, output_scale)
+        labels = _label_every_contour(
+            ax,
+            contours,
+            levels,
+            style,
+            output_scale,
+            label_scale,
+        )
         for label in labels:
             label.set_path_effects([
                 path_effects.Stroke(linewidth=2.2 * output_scale, foreground="#151822", alpha=0.92),
@@ -423,25 +434,25 @@ def render_contours(
             ha="center",
             va="center",
             color=colour,
-            fontsize=style.centre_size * 2.0 * output_scale,
+            fontsize=style.centre_size * 2.0 * output_scale * centre_scale,
             fontweight=style.centre_weight,
             zorder=20,
         )
         magnitude = ax.annotate(
             f"{int(round(centre.value))}",
             (centre.x, centre.y),
-            xytext=(0, -1.42 * style.centre_size * output_scale),
+            xytext=(0, -1.42 * style.centre_size * output_scale * centre_scale),
             textcoords="offset points",
             ha="center",
             va="center",
             color=colour,
-            fontsize=style.centre_size * output_scale,
+            fontsize=style.centre_size * output_scale * centre_scale,
             fontweight=style.centre_weight,
             zorder=20,
         )
         centre_effects = [
             path_effects.Stroke(
-                linewidth=(3.0 if style.kind == "hgt500" else 2.2) * output_scale,
+                linewidth=(3.0 if style.kind == "hgt500" else 2.2) * output_scale * centre_scale,
                 foreground="#10131a",
                 alpha=0.96,
             ),
@@ -462,6 +473,9 @@ def render_contours(
         "centreCount": len(centres),
         "centres": [centre.__dict__ for centre in centres],
         "contourInterval": 6 if style.kind == "hgt500" else 4,
+        "lineWidth": rendered_linewidth,
+        "labelScale": label_scale,
+        "centreScale": centre_scale,
         "units": style.units,
     }
 

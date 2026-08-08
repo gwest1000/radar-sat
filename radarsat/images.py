@@ -129,6 +129,7 @@ def lightning_trail(
     symbol_reference_width: int = 960,
     blur_glow: bool = True,
     arrival_only: bool = False,
+    new_strike_halo: bool = True,
 ) -> None:
     """Render age-fading lightning clusters or a dedicated arrival flash."""
     if scale < 1:
@@ -232,14 +233,15 @@ def lightning_trail(
         ((232, 195, 70, 82), (255, 246, 180, 28), round(3.8 * symbol_scale)),
         ((215, 178, 62, 58), (255, 240, 165, 18), round(3.5 * symbol_scale)),
     ]
+    rendered_new_strike_glow = False
     for age_index, (mask, (fill, glow, half_height)) in reversed(list(enumerate(zip(masks, styles)))):
         if mask is None or (arrival_only and age_index != 0):
             continue
         bolt_layer = Image.new("RGBA", size, (0, 0, 0, 0))
         bolt_draw = ImageDraw.Draw(bolt_layer, "RGBA")
-        arrival_glow = (
+        new_strike_glow = (
             Image.new("RGBA", size, (0, 0, 0, 0))
-            if arrival_only and age_index == 0
+            if age_index == 0 and new_strike_halo
             else None
         )
         for source_x, source_y, area in component_centres(mask):
@@ -260,7 +262,7 @@ def lightning_trail(
                 (x + round(width * 0.18), y - round(height * 0.18)),
             ]
             closed_bolt = bolt + [bolt[0]]
-            if arrival_only and arrival_glow is not None:
+            if new_strike_glow is not None:
                 # Blur only a small patch around each new strike. This keeps
                 # the raster cheap to generate while producing a genuinely
                 # diffuse halo rather than visible concentric rings or a
@@ -305,11 +307,13 @@ def lightning_trail(
                         clipped_right - destination_left,
                         clipped_bottom - destination_top,
                     )
-                    arrival_glow.alpha_composite(
+                    new_strike_glow.alpha_composite(
                         patch.crop(source_box),
                         (clipped_left, clipped_top),
                     )
-                continue
+                    rendered_new_strike_glow = True
+                if arrival_only:
+                    continue
             bolt_draw.line(
                 closed_bolt,
                 fill=(2, 7, 11, min(225, fill[3])),
@@ -323,24 +327,20 @@ def lightning_trail(
                 joint="curve",
             )
             bolt_draw.polygon(bolt, fill=fill)
-        if arrival_glow is not None:
-            canvas.alpha_composite(arrival_glow)
+        if new_strike_glow is not None:
+            canvas.alpha_composite(new_strike_glow)
         canvas.alpha_composite(bolt_layer)
-    if arrival_only:
-        # Preserve straight-alpha white RGB values. FASTOCTREE premultiplies
-        # these very translucent pixels and turns the halo into a dark disk
-        # when the browser composites it over satellite imagery.
+    if arrival_only or rendered_new_strike_glow:
+        # Preserve straight-alpha white RGB values in the diffuse age-zero
+        # halo. FASTOCTREE premultiplies translucent pixels and turns it into
+        # a dark disk when composited over satellite imagery.
         canvas.save(destination, "PNG", optimize=True)
     else:
         canvas.quantize(
             colors=32,
             method=Image.Quantize.FASTOCTREE,
             dither=Image.Dither.NONE,
-        ).save(
-            destination,
-            "PNG",
-            optimize=True,
-        )
+        ).save(destination, "PNG", optimize=True)
 
 
 def render_watershed_overlay(

@@ -23,10 +23,9 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /function playbackFrames/);
   assert.match(viewer, /product\.frameIntervalMinutes/);
   assert.match(viewer, /product\.archiveFrameIntervalMinutes/);
-  assert.match(viewer, /FIVE_MINUTES_MS = 5 \* 60_000/);
   assert.match(viewer, /return playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
   assert.doesNotMatch(viewer, /Promise\.all\(loads\)/);
-  assert.match(viewer, /flashDisplayAge < FIVE_MINUTES_MS/);
+  assert.doesNotMatch(viewer, /lightningFlashLayerId|flashDisplayAge/);
   assert.match(viewer, /atOrBeforeSourceTime/);
   assert.match(viewer, /sourceCount > selectedSourceCount/);
   assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.25, 0\.5, 0\.75, 1, 1\.5, 2, 3, 4\]/);
@@ -102,9 +101,8 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /usesRasterLightning\(product\)/);
   assert.match(viewer, /usesRasterFire\(product\)/);
   assert.match(viewer, /`\$\{baseId\}-region-\$\{regionKey\}`/);
-  assert.match(viewer, /`lightning-flash-region-\$\{regionKey\}`/);
   assert.match(viewer, /stageAligned: renderedLayerId\.includes\("-region-"\)/);
-  assert.match(viewer, /lightning-arrival-layer/);
+  assert.doesNotMatch(viewer, /lightning-arrival-layer/);
   assert.match(viewer, /usesRasterFire\(product\) && recipe\.id === "hotspots"/);
   assert.match(viewer, /createRadialGradient/);
   assert.match(viewer, /layerId\.startsWith\("westwx-"\)/);
@@ -115,7 +113,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(styles, /\.fire-count/);
   assert.match(styles, /\.hotspot-fire-marker svg/);
   assert.match(styles, /\.eccc-north-fallback/);
-  assert.match(styles, /\.lightning-arrival-layer/);
+  assert.doesNotMatch(styles, /\.lightning-arrival-layer/);
   assert.doesNotMatch(styles, /lightning-raster-arrival/);
   assert.match(styles, /\.transmission-symbol[\s\S]*?border-top: 2px solid #fff/);
   assert.match(styles, /\.lightning-marker\.age-3 \{ color: #f6d451/);
@@ -234,6 +232,14 @@ test("ships a runtime data configuration", async () => {
   assert.ok(
     northPacific.layers.findIndex((layer) => layer.id === "glm-lightning-trail")
       > northPacific.layers.findIndex((layer) => layer.id === "transmission-lines"),
+  );
+  assert.equal(
+    northPacific.layers.find((layer) => layer.id === "lightning-trail").enabledWith,
+    "glm-lightning-trail",
+  );
+  assert.ok(
+    northPacific.layers.findIndex((layer) => layer.id === "model-mslp")
+      < northPacific.layers.findIndex((layer) => layer.id === "model-hgt500"),
   );
 });
 

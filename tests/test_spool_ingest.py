@@ -455,11 +455,13 @@ class NativeRenderTests(unittest.TestCase):
 
             rendered = np.asarray(Image.open(destination).convert("RGBA"))
             alpha = rendered[:, :, 3]
-            y, x = np.where(alpha > 0)
-            self.assertGreater(len(x), 80)
-            self.assertLess(len(x), 400)
-            # The asymmetric lightning silhouette is taller than it is wide.
-            self.assertGreater(y.max() - y.min(), x.max() - x.min())
+            _, x = np.where(alpha > 0)
+            self.assertGreater(len(x), 400)
+            self.assertLess(len(x), 1_000)
+            # The opaque bolt core remains distinct inside the diffuse halo.
+            _, core_x = np.where(alpha > 220)
+            self.assertGreater(len(core_x), 20)
+            self.assertLess(len(core_x), len(x))
             white_core = (
                 (rendered[:, :, 0] >= 240)
                 & (rendered[:, :, 1] >= 240)
@@ -467,6 +469,11 @@ class NativeRenderTests(unittest.TestCase):
                 & (alpha > 0)
             )
             self.assertTrue(np.any(white_core))
+            # The age-zero bolt and its diffuse halo share one raster, so
+            # their timestamp and position cannot drift independently.
+            diffuse = (alpha > 0) & (alpha < 120)
+            self.assertTrue(np.any(diffuse))
+            self.assertTrue(np.all(rendered[diffuse, :3] >= 230))
 
             hires_destination = root / "trail-hires.png"
             lightning_trail([source, None, None], hires_destination, scale=2)
@@ -495,10 +502,9 @@ class NativeRenderTests(unittest.TestCase):
             )[:, :, 3]
             halo_pixels = np.count_nonzero(flash_alpha > 8)
             self.assertGreater(halo_pixels, 60)
-            self.assertGreater(halo_pixels, np.count_nonzero(alpha > 8))
             self.assertLess(
                 halo_pixels,
-                round(np.count_nonzero(alpha > 8) * 3),
+                np.count_nonzero(alpha > 0),
             )
             self.assertTrue(np.any((flash_alpha > 0) & (flash_alpha < 120)))
             self.assertGreater(int(flash_alpha.max()), 120)
@@ -657,6 +663,58 @@ class NativeRenderTests(unittest.TestCase):
             self.assertFalse(stale_trail.exists())
             self.assertFalse(metadata_path(output, domain, LAYERS["lightning-trail"], VALID).exists())
 
+    def test_new_strike_halo_is_embedded_only_in_the_first_display_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            domain = test_domain()
+            source = frame_path(output, domain, LAYERS["lightning"], VALID)
+            source.parent.mkdir(parents=True, exist_ok=True)
+            image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+            image.putpixel((60, 45), (0, 45, 255, 255))
+            image.save(source, "PNG")
+            write_metadata(output, domain, LAYERS["lightning"], VALID, source)
+            for radar_time in (VALID, VALID + dt.timedelta(minutes=6)):
+                radar = frame_path(output, domain, LAYERS["radar-rain"], radar_time)
+                radar.parent.mkdir(parents=True, exist_ok=True)
+                Image.new(
+                    "RGBA",
+                    (domain.width, domain.height),
+                    (0, 0, 0, 0),
+                ).save(radar, "PNG")
+                write_metadata(output, domain, LAYERS["radar-rain"], radar_time, radar)
+
+            derive_lightning_trails(output, domain, {}, hours=1)
+
+            first_meta = json.loads(metadata_path(
+                output,
+                domain,
+                LAYERS["lightning-trail"],
+                VALID,
+            ).read_text())
+            next_time = VALID + dt.timedelta(minutes=6)
+            next_meta = json.loads(metadata_path(
+                output,
+                domain,
+                LAYERS["lightning-trail"],
+                next_time,
+            ).read_text())
+            self.assertTrue(first_meta["newStrikeHalo"])
+            self.assertFalse(next_meta["newStrikeHalo"])
+            with Image.open(frame_path(
+                output,
+                domain,
+                LAYERS["lightning-trail"],
+                VALID,
+            )) as first_frame:
+                self.assertEqual(first_frame.mode, "RGBA")
+            with Image.open(frame_path(
+                output,
+                domain,
+                LAYERS["lightning-trail"],
+                next_time,
+            )) as next_frame:
+                self.assertEqual(next_frame.mode, "P")
+
     def test_hourly_lightning_aggregate_uses_six_ten_minute_bins(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
@@ -703,7 +761,7 @@ class NativeRenderTests(unittest.TestCase):
             self.assertTrue(
                 frame_path(output, domain, LAYERS["lightning-trail"], old).exists()
             )
-            self.assertTrue(
+            self.assertFalse(
                 frame_path(output, domain, LAYERS["lightning-flash"], old).exists()
             )
             regional_layer = LAYERS[regional_layer_id("lightning-trail", "small")]
@@ -821,6 +879,38 @@ class NativeRenderTests(unittest.TestCase):
 
 
 class PipelineIntegrationTests(unittest.TestCase):
+    def test_broad_domains_ingest_and_derive_canadian_lightning(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            catalog = output / "catalog.json"
+            with (
+                mock.patch("radarsat.pipeline.GeoMetClient") as client_class,
+                mock.patch("radarsat.pipeline.ensure_static_assets"),
+                mock.patch("radarsat.pipeline.ingest_geomet", return_value={}) as geomet,
+                mock.patch("radarsat.pipeline.derive_lightning_trails") as derive_lightning,
+                mock.patch("radarsat.pipeline.ingest_hotspot_snapshot", return_value={}),
+                mock.patch("radarsat.pipeline.ingest_active_fire_snapshot", return_value={}),
+                mock.patch("radarsat.pipeline.derive_fire_overlays", return_value={}),
+                mock.patch("radarsat.pipeline.ingest_raw_satellite", return_value={"status": "unchanged"}),
+                mock.patch("radarsat.pipeline.ingest_goes_hazards", return_value={"status": "unchanged"}),
+                mock.patch("radarsat.pipeline.prune"),
+                mock.patch("radarsat.pipeline.write_catalog", return_value=catalog),
+            ):
+                client_class.return_value.__enter__.return_value = object()
+                run(output, ["north-america"], 3, False, spool_mode="off")
+
+            self.assertEqual(geomet.call_count, 2)
+            self.assertNotIn(
+                "lightning",
+                geomet.call_args_list[0].kwargs["include_layers"],
+            )
+            self.assertEqual(
+                geomet.call_args_list[1].kwargs["include_layers"],
+                ("lightning",),
+            )
+            derive_lightning.assert_called_once()
+            self.assertEqual(derive_lightning.call_args.args[1].id, "north-america")
+
     def test_native_rejection_is_visible_while_good_catalog_still_publishes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "output"

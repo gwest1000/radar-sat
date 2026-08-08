@@ -3,15 +3,67 @@ from __future__ import annotations
 import datetime as dt
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
 
 from radarsat.config import Domain
 from radarsat.ecmwf_contours import UTC, available_runs, interpolate_global_field
+from radarsat.hrdps_contours import FIELD_STYLES, render_contours
 
 
 class EcmwfContourTests(unittest.TestCase):
+    def test_overview_contours_render_at_double_resolution_with_compact_styling(self) -> None:
+        domain = Domain(
+            id="north-america",
+            title="North America",
+            west=-170,
+            south=10,
+            east=-50,
+            north=75,
+            crs="EPSG:4326",
+            width=160,
+            height=120,
+            tier="broad",
+        )
+        y, x = np.mgrid[: domain.height, : domain.width]
+        height_values = 552 + x * 0.20 + y * 0.08
+        pressure_values = 99_600 + x * 9 + y * 5
+        height_style = replace(FIELD_STYLES[0], layer_id="ecmwf-hgt500")
+        pressure_style = replace(FIELD_STYLES[1], layer_id="ecmwf-mslp")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            height_path = root / "hgt500.png"
+            pressure_path = root / "mslp.png"
+            height_summary = render_contours(
+                height_values,
+                domain,
+                height_style,
+                height_path,
+            )
+            pressure_summary = render_contours(
+                pressure_values,
+                domain,
+                pressure_style,
+                pressure_path,
+            )
+
+            with Image.open(height_path) as rendered:
+                self.assertEqual(rendered.size, (320, 240))
+            self.assertAlmostEqual(
+                height_summary["lineWidth"],
+                FIELD_STYLES[0].linewidth * 0.75,
+            )
+            self.assertAlmostEqual(
+                pressure_summary["lineWidth"],
+                FIELD_STYLES[1].linewidth * 0.90,
+            )
+            self.assertEqual(height_summary["labelScale"], 0.90)
+            self.assertEqual(height_summary["centreScale"], 0.50)
+
     def test_newest_three_hour_covering_run_is_preferred(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

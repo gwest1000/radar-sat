@@ -291,11 +291,6 @@ input:focus-visible {
   user-select: none;
 }
 
-.lightning-arrival-layer {
-  z-index: 13;
-  mix-blend-mode: screen;
-}
-
 .point-symbol-layer {
   position: absolute;
   z-index: 12;
@@ -1300,11 +1295,6 @@ input:focus-visible {
   *::after {
     scroll-behavior: auto !important;
     transition: none !important;
-  }
-
-  .lightning-arrival-layer {
-    animation: none !important;
-    opacity: 0;
   }
 
 }

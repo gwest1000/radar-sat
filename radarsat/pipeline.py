@@ -53,30 +53,30 @@ from .point_frames import (
 
 
 UTC = dt.timezone.utc
-LIGHTNING_TRAIL_RENDER_VERSION = 7
-LIGHTNING_HOUR_RENDER_VERSION = 1
+LIGHTNING_TRAIL_RENDER_VERSION = 8
+LIGHTNING_HOUR_RENDER_VERSION = 2
 LIGHTNING_FLASH_RENDER_VERSION = 9
-LIGHTNING_REGIONAL_RENDER_VERSION = 5
-LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 2
+LIGHTNING_REGIONAL_RENDER_VERSION = 6
+LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 3
 LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 11
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
 HOTSPOT_POINT_RENDER_VERSION = 2
 ACTIVE_FIRE_POINT_RENDER_VERSION = 3
-FIRE_OVERLAY_RENDER_VERSION = 2
+FIRE_OVERLAY_RENDER_VERSION = 3
 FIRE_BROAD_OVERLAY_RENDER_VERSION = 3
-FIRE_REGIONAL_RENDER_VERSION = 5
+FIRE_REGIONAL_RENDER_VERSION = 6
 RAW_SATELLITE_RENDER_VERSION = 1
 RAW_VISIR_RENDER_VERSION = 4
 SMOKE_RENDER_VERSION = 3
 GLM_LIGHTNING_RENDER_VERSION = 2
-GLM_LIGHTNING_TRAIL_RENDER_VERSION = 8
-GLM_LIGHTNING_HOUR_RENDER_VERSION = 1
+GLM_LIGHTNING_TRAIL_RENDER_VERSION = 9
+GLM_LIGHTNING_HOUR_RENDER_VERSION = 2
 GLM_LIGHTNING_FLASH_RENDER_VERSION = 10
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
 COVERAGE_RENDER_VERSION = 3
 PRECIP_OVERLAY_RENDER_VERSION = 1
-REGIONAL_HAZARD_WIDTH = 1920
+REGIONAL_HAZARD_WIDTH = 3840
 DETAILED_REGIONAL_HAZARD_WIDTH = 3840
 DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH = 1440
 BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH = 1600
@@ -856,6 +856,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         symbol_reference_width: int = 960,
         blur_glow: bool = True,
         arrival_only: bool = False,
+        new_strike_halo: bool = True,
     ) -> None:
         destination = frame_path(root, domain, layer, anchor)
         meta = metadata_path(root, domain, layer, anchor)
@@ -868,6 +869,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         current_render_version: int | None = None
         current_region: dict[str, float] | None = None
         current_arrival_only: bool | None = None
+        current_new_strike_halo: bool | None = None
         if meta.exists():
             try:
                 current_metadata = json.loads(meta.read_text())
@@ -875,6 +877,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 current_render_version = current_metadata.get("renderVersion")
                 current_region = current_metadata.get("regionalViewport")
                 current_arrival_only = current_metadata.get("arrivalOnly", False)
+                current_new_strike_halo = current_metadata.get("newStrikeHalo", True)
             except (OSError, json.JSONDecodeError):
                 pass
         if (
@@ -883,6 +886,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             and current_render_version == render_version
             and current_region == viewport
             and current_arrival_only == arrival_only
+            and current_new_strike_halo == new_strike_halo
         ):
             return
         lightning_trail(
@@ -893,6 +897,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             symbol_reference_width=symbol_reference_width,
             blur_glow=blur_glow,
             arrival_only=arrival_only,
+            new_strike_halo=new_strike_halo,
         )
         write_metadata(
             root,
@@ -908,6 +913,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             extra={
                 "renderVersion": render_version,
                 "arrivalOnly": arrival_only,
+                "newStrikeHalo": new_strike_halo,
                 **(
                     {
                         "regionalViewport": viewport,
@@ -915,7 +921,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                         "symbolReferenceWidth": symbol_reference_width,
                         "blurGlow": blur_glow,
                     }
-                    if viewport is not None
+                    if viewport is not None or output_width is not None
                     else {}
                 ),
             },
@@ -948,6 +954,11 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
                 metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
             continue
+        base_output_width = domain.width * 2
+        base_symbol_reference_width = (
+            domain.width if domain.id == "bc" else round(domain.width * 1.5)
+        )
+        base_blur_glow = domain.tier != "broad"
         fresh_arrival = (
             existing[0] is not None
             and source_times[0] is not None
@@ -959,21 +970,15 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
             existing,
             source_times,
             render_version=LIGHTNING_TRAIL_RENDER_VERSION,
+            output_width=base_output_width,
+            symbol_reference_width=base_symbol_reference_width,
+            blur_glow=base_blur_glow,
+            new_strike_halo=fresh_arrival,
         )
-        if fresh_arrival:
-            flash_sources = [source_times[0], None, None]
-            flash_paths = [existing[0], None, None]
-            write_derived(
-                flash_layer,
-                anchor,
-                flash_paths,
-                flash_sources,
-                render_version=LIGHTNING_FLASH_RENDER_VERSION,
-                arrival_only=True,
-            )
-        else:
-            frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
-            metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
+        # The diffuse new-strike halo is now composited into the same raster as
+        # its bolt, eliminating separate-frame timing and registration drift.
+        frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
+        metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
         if anchor.minute == 0 and anchor >= regional_cutoff:
             hour_source_times, hour_existing = selected_sources(
                 anchor,
@@ -986,6 +991,10 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                     hour_existing,
                     hour_source_times,
                     render_version=LIGHTNING_HOUR_RENDER_VERSION,
+                    output_width=base_output_width,
+                    symbol_reference_width=base_symbol_reference_width,
+                    blur_glow=base_blur_glow,
+                    new_strike_halo=False,
                 )
                 for region_id, regional_hour_layer in regional_hour_layers.items():
                     viewport = VIEWPORTS[region_id]
@@ -1008,6 +1017,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                             else BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH
                         ),
                         blur_glow=not detailed_region,
+                        new_strike_halo=False,
                     )
         if anchor < regional_cutoff:
             continue
@@ -1034,24 +1044,11 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                 output_width=regional_output_width,
                 symbol_reference_width=regional_symbol_reference_width,
                 blur_glow=not detailed_region,
+                new_strike_halo=fresh_arrival,
             )
             regional_flash_layer = regional_flash_layers[region_id]
-            if fresh_arrival:
-                write_derived(
-                    regional_flash_layer,
-                    anchor,
-                    [existing[0], None, None],
-                    [source_times[0], None, None],
-                    render_version=LIGHTNING_REGIONAL_FLASH_RENDER_VERSION,
-                    viewport=viewport,
-                    output_width=regional_output_width,
-                    symbol_reference_width=regional_symbol_reference_width,
-                    blur_glow=not detailed_region,
-                    arrival_only=True,
-                )
-            else:
-                frame_path(root, domain, regional_flash_layer, anchor).unlink(missing_ok=True)
-                metadata_path(root, domain, regional_flash_layer, anchor).unlink(missing_ok=True)
+            frame_path(root, domain, regional_flash_layer, anchor).unlink(missing_ok=True)
+            metadata_path(root, domain, regional_flash_layer, anchor).unlink(missing_ok=True)
 
 
 def _rendered_frame_ready(
@@ -1196,6 +1193,7 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
         for layer, viewport, render_version, region_id in outputs:
             detailed_region = region_id is not None and region_id != "small"
             broad_view = viewport is None and domain.tier == "broad"
+            bc_full_view = viewport is None and domain.id == "bc"
             regional_output_width = (
                 DETAILED_REGIONAL_HAZARD_WIDTH
                 if detailed_region
@@ -1209,12 +1207,17 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
             render_output_width = (
                 domain.width * BROAD_HAZARD_SCALE
                 if broad_view
+                else domain.width * 2 if bc_full_view
                 else regional_output_width if viewport is not None else None
             )
             render_symbol_reference_width = (
                 BROAD_FIRE_SYMBOL_REFERENCE_WIDTH
                 if broad_view
+                else 1280 if bc_full_view
                 else regional_symbol_reference_width
+            )
+            render_symbol_size_scale = (
+                0.85 if bc_full_view or region_id == "small" else 1.0
             )
             render_blur_glow = not (detailed_region or broad_view)
             destination = frame_path(root, domain, layer, anchor)
@@ -1244,6 +1247,7 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                     if region_id == "small"
                     else 1.0
                 ),
+                symbol_size_scale=render_symbol_size_scale,
                 supersample=1,
                 blur_glow=render_blur_glow,
             )
@@ -1279,10 +1283,11 @@ def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dic
                             if region_id == "small"
                             else 1.0
                         ),
+                        "symbolSizeScale": render_symbol_size_scale,
                         "supersample": 1,
                         "blurGlow": render_blur_glow,
                     }
-                    if viewport is not None or broad_view
+                    if viewport is not None or broad_view or bc_full_view
                     else {}
                 ),
             })
@@ -1442,6 +1447,7 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
                         output_width=render_output_width,
                         symbol_reference_width=render_symbol_reference_width,
                         blur_glow=render_blur_glow,
+                        new_strike_halo=False,
                     )
                     write_metadata(
                         root,
@@ -1470,58 +1476,8 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
                             ),
                         },
                     )
-        if existing[0] is None or selected[0] is None:
-            frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
-            metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
-            continue
-        flash_destination = frame_path(root, domain, flash_layer, anchor)
-        flash_metadata = metadata_path(root, domain, flash_layer, anchor)
-        flash_sources = {"age0": format_utc(selected[0])}
-        current_flash_sources: dict[str, str] = {}
-        current_flash_version: int | None = None
-        if flash_metadata.is_file():
-            try:
-                flash_payload = json.loads(flash_metadata.read_text())
-                current_flash_sources = flash_payload.get("sourceTimes", {})
-                current_flash_version = flash_payload.get("renderVersion")
-            except (OSError, json.JSONDecodeError):
-                pass
-        if (
-            flash_destination.is_file()
-            and current_flash_sources == flash_sources
-            and current_flash_version == GLM_LIGHTNING_FLASH_RENDER_VERSION
-        ):
-            continue
-        lightning_trail(
-            [existing[0], None, None],
-            flash_destination,
-            output_width=render_output_width,
-            symbol_reference_width=render_symbol_reference_width,
-            blur_glow=render_blur_glow,
-            arrival_only=True,
-        )
-        write_metadata(
-            root,
-            domain,
-            flash_layer,
-            anchor,
-            flash_destination,
-            {"age0": selected[0]},
-            source="NOAA GOES-18",
-            source_layer="GLM-L2-LCFA newest-flash arrival overlay",
-            extra={
-                "renderVersion": GLM_LIGHTNING_FLASH_RENDER_VERSION,
-                **(
-                    {
-                        "outputWidth": render_output_width,
-                        "symbolReferenceWidth": render_symbol_reference_width,
-                        "blurGlow": render_blur_glow,
-                    }
-                    if broad_view
-                    else {}
-                ),
-            },
-        )
+        frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
+        metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
 
 
 def ingest_goes_smoke_archive(
@@ -2529,11 +2485,41 @@ def run(
                 exclude_layers=excluded,
                 include_layers=None
                 if domain.id == "bc"
-                else ("radar-rain", "radar-coverage", "ptype", "ptype-coverage"),
+                else (
+                    "radar-rain",
+                    "radar-coverage",
+                    "ptype",
+                    "ptype-coverage",
+                ),
             )
-            if domain.id == "bc":
-                trail_hours = spool_hours if spool_mode != "off" else hours
-                derive_lightning_trails(output_root, domain, timelines, max(hours, trail_hours))
+            if domain.id != "bc":
+                try:
+                    timelines.update(ingest_geomet(
+                        client,
+                        output_root,
+                        domain,
+                        hours,
+                        latest_only,
+                        include_layers=("lightning",),
+                    ))
+                except Exception as error:
+                    # CLDN supplements GLM over Canada, but must not prevent
+                    # satellite/radar publication when GeoMet is unavailable.
+                    auxiliary_warnings.append(
+                        "ECCC broad-domain lightning unavailable: "
+                        f"{type(error).__name__}: {error}"
+                    )
+            trail_hours = (
+                spool_hours
+                if domain.id == "bc" and spool_mode != "off"
+                else hours
+            )
+            derive_lightning_trails(
+                output_root,
+                domain,
+                timelines,
+                max(hours, trail_hours),
+            )
             if domain.id in {"bc", "north-america", "north-pacific"}:
                 try:
                     hotspot_status[domain.id] = ingest_hotspot_snapshot(output_root, domain)

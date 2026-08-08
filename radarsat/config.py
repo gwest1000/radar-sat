@@ -572,11 +572,12 @@ def _broad_product(
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
-            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "lightning-trail", "opacity": 1.0, "enabledWith": "glm-lightning-trail"},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
         ],
         "legends": [

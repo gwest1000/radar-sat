@@ -128,7 +128,6 @@ type SiteConfig = {
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
-const FIVE_MINUTES_MS = 5 * 60_000;
 const AUTO_REFRESH_MS = 5 * 60_000;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
@@ -746,7 +745,6 @@ type ComposedLayer = {
   url: string;
   opacity: number;
   frame?: Frame;
-  arrival?: boolean;
   stageAligned?: boolean;
 };
 
@@ -775,18 +773,6 @@ function rasterLayerId(
     if (domain.layers[candidate]?.frames?.length) return candidate;
   }
   return baseId;
-}
-
-function lightningFlashLayerId(recipeId: string, product: Product, domain: Domain): string | undefined {
-  if (recipeId === "lightning-trail") {
-    const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
-    const regionalId = regionKey ? `lightning-flash-region-${regionKey}` : undefined;
-    return regionalId && domain.layers[regionalId]?.frames?.length
-      ? regionalId
-      : "lightning-flash";
-  }
-  if (recipeId === "glm-lightning-trail") return "glm-lightning-flash";
-  return undefined;
 }
 
 function isProductLayerEnabled(
@@ -876,7 +862,7 @@ function composeLayers(
       ? atOrBeforeSourceTime(renderedLayerId, frames, anchor.validTime, dynamicLayer?.maxAgeMinutes)
       : atOrBefore(frames, anchor.validTime, dynamicLayer?.maxAgeMinutes);
     if (!frame) return [];
-    const layers: ComposedLayer[] = [{
+    return [{
       id: recipe.id,
       renderId: renderedLayerId,
       url: frameUrl(frame, catalogBase),
@@ -884,33 +870,6 @@ function composeLayers(
       frame,
       stageAligned: renderedLayerId.includes("-region-"),
     }];
-    const flashLayerId = hourlyLightning
-      ? undefined
-      : lightningFlashLayerId(recipe.id, product, domain);
-    const flashFrame = flashLayerId
-      ? domain.layers[flashLayerId]?.frames.find((candidate) => candidate.validTime === frame.validTime)
-      : undefined;
-    const flashDisplayAge = flashFrame
-      ? Date.parse(anchor.validTime) - Date.parse(flashFrame.validTime)
-      : Number.POSITIVE_INFINITY;
-    if (
-      flashLayerId
-      && flashFrame
-      && flashDisplayAge >= 0
-      && flashDisplayAge < FIVE_MINUTES_MS
-      && actualSourceTime(flashLayerId, flashFrame) === actualSourceTime(renderedLayerId, frame)
-    ) {
-      layers.push({
-        id: flashLayerId,
-        renderId: flashLayerId,
-        url: frameUrl(flashFrame, catalogBase),
-        opacity: 1,
-        frame: flashFrame,
-        arrival: true,
-        stageAligned: flashLayerId.includes("-region-"),
-      });
-    }
-    return layers;
   });
 }
 
@@ -1915,7 +1874,6 @@ export function RadarViewer() {
         criticalUrls: layers
           .filter((layer) => (
             layer.frame
-            && !layer.arrival
             && !LIGHTNING_CONTROLLERS.has(layer.id)
             && layer.id !== "hotspots"
             && !layer.id.endsWith("coverage")
@@ -2060,7 +2018,12 @@ export function RadarViewer() {
     composedLayerIds.add(fireController.id);
   }
   const missingLayers = product.layers
-    .filter((recipe) => isLayerEnabled(recipe) && !domain.staticLayers[recipe.id] && !composedLayerIds.has(recipe.id))
+    .filter((recipe) => (
+      isLayerEnabled(recipe)
+      && !recipe.enabledWith
+      && !domain.staticLayers[recipe.id]
+      && !composedLayerIds.has(recipe.id)
+    ))
     .map((recipe) => layerControlLabel(recipe.id))
     .filter((label, index, all) => all.indexOf(label) === index);
   const hasCoverage = composedLayers.some((layer) => layer.id.includes("coverage"));
@@ -2220,12 +2183,10 @@ export function RadarViewer() {
             {!anchor && <div className="map-loading">No frames are available for this product yet.</div>}
             {composedLayers.map((layer) => (
               <StableMapImage
-                className={`map-layer${layer.arrival ? " lightning-arrival-layer" : ""}`}
+                className="map-layer"
                 src={layer.url}
                 layerId={layer.renderId ?? layer.id}
-                key={layer.arrival
-                  ? `${product.id}-${layer.id}-${layer.frame ? actualSourceTime(layer.id, layer.frame) : layer.url}`
-                  : `${product.id}-${layer.id}`}
+                key={`${product.id}-${layer.id}`}
                 style={{
                   ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
                   opacity: layer.opacity,

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-07T23:51:01.659821Z",
+  "generatedAt": "2026-08-08T00:23:02.833812Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -5766,13 +5766,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-hgt500",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "model-mslp",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5790,6 +5790,11 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "enabledWith": "glm-lightning-trail"
         },
         {
           "id": "hotspots",
@@ -5886,13 +5891,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-hgt500",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "model-mslp",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -5910,6 +5915,11 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "enabledWith": "glm-lightning-trail"
         },
         {
           "id": "hotspots",
@@ -6006,13 +6016,13 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-hgt500",
+          "id": "model-mslp",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
         },
         {
-          "id": "model-mslp",
+          "id": "model-hgt500",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false
@@ -6030,6 +6040,11 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "lightning-trail",
+          "opacity": 1.0,
+          "enabledWith": "glm-lightning-trail"
         },
         {
           "id": "hotspots",

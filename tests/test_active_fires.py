@@ -362,6 +362,8 @@ class ActiveFireTests(unittest.TestCase):
             )
             self.assertEqual(summary["rendered"], 1)
             self.assertTrue(overlay_path.exists())
+            with Image.open(overlay_path) as overlay_image:
+                self.assertEqual(overlay_image.size, (480, 400))
             self.assertEqual(
                 overlay_metadata["fireOverlayRenderVersion"],
                 FIRE_OVERLAY_RENDER_VERSION,
@@ -377,15 +379,17 @@ class ActiveFireTests(unittest.TestCase):
             self.assertTrue(regional_path.exists())
             with Image.open(regional_path) as regional_image:
                 expected_height = round(
-                    1920
+                    3840
                     * (domain.height * VIEWPORTS["small"]["height"])
                     / (domain.width * VIEWPORTS["small"]["width"])
                 )
-                self.assertEqual(regional_image.size, (1920, expected_height))
+                self.assertEqual(regional_image.size, (3840, expected_height))
             self.assertEqual(regional_metadata["activeFireDisplayCount"], 1)
             self.assertEqual(regional_metadata["hotspotDisplayCount"], 1)
             self.assertEqual(regional_metadata["symbolReferenceWidth"], 1120)
             self.assertEqual(regional_metadata["notableSizeScale"], 0.85)
+            self.assertEqual(regional_metadata["symbolSizeScale"], 0.85)
+            self.assertEqual(overlay_metadata["symbolSizeScale"], 0.85)
             detailed_layer = LAYERS[regional_layer_id("hotspots", "southwest")]
             detailed_path = frame_path(root, domain, detailed_layer, valid_time)
             detailed_metadata = json.loads(

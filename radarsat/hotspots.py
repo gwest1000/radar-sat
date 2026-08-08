@@ -290,6 +290,7 @@ def render_fire_overlay(
     output_width: int | None = None,
     symbol_reference_width: int = 960,
     notable_size_scale: float = 1.0,
+    symbol_size_scale: float = 1.0,
     supersample: int = 1,
     blur_glow: bool = True,
 ) -> dict[str, int]:
@@ -302,6 +303,8 @@ def render_fire_overlay(
         raise ValueError("Fire-overlay symbol reference width must be positive")
     if notable_size_scale <= 0:
         raise ValueError("Notable-fire size scale must be positive")
+    if symbol_size_scale <= 0:
+        raise ValueError("Fire-symbol size scale must be positive")
     overview = domain.id in {"north-america", "north-pacific"}
     active_markers: list[FireDisplayPoint] = []
     for row in active_rows:
@@ -415,7 +418,9 @@ def render_fire_overlay(
     ]
 
     for marker in markers:
-        desired_size = 11 if overview and marker.notable else 21 if marker.notable else 13
+        desired_size = (
+            11 if overview and marker.notable else 21 if marker.notable else 13
+        ) * symbol_size_scale
         if marker.notable:
             desired_size *= notable_size_scale
         size = max(8, round(desired_size * symbol_scale))
@@ -442,7 +447,9 @@ def render_fire_overlay(
         else glow
     )
     for marker in markers:
-        desired_size = 11 if overview and marker.notable else 21 if marker.notable else 13
+        desired_size = (
+            11 if overview and marker.notable else 21 if marker.notable else 13
+        ) * symbol_size_scale
         if marker.notable:
             desired_size *= notable_size_scale
         size = max(8, round(desired_size * symbol_scale))
