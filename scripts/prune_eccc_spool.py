@@ -37,6 +37,12 @@ def main() -> int:
     )
     parser.add_argument("--older-than-hours", type=float, default=3.0)
     parser.add_argument(
+        "--lightning-older-than-hours",
+        type=float,
+        default=168.0,
+        help="Separate retention for compact lightning GeoTIFFs.",
+    )
+    parser.add_argument(
         "--ingest-status",
         type=Path,
         help="ingest.json whose rejected source files must be preserved",
@@ -44,13 +50,13 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="delete candidates instead of listing them")
     args = parser.parse_args()
 
-    if args.older_than_hours < 1:
-        parser.error("--older-than-hours must be at least 1")
+    if args.older_than_hours < 1 or args.lightning_older_than_hours < 1:
+        parser.error("retention hours must be at least 1")
     spool = args.spool.expanduser().resolve()
     if spool in (Path("/"), Path.home().resolve()):
         parser.error("refusing to operate on a broad filesystem path")
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=args.older_than_hours)
+    now = datetime.now(timezone.utc)
     try:
         preserve = preserved_names(args.ingest_status)
     except RuntimeError as error:
@@ -59,6 +65,12 @@ def main() -> int:
     retained_bytes = 0
     total_bytes = 0
     for feed, suffix in FEED_SUFFIXES.items():
+        retention_hours = (
+            args.lightning_older_than_hours
+            if feed == "lightning"
+            else args.older_than_hours
+        )
+        cutoff = now - timedelta(hours=retention_hours)
         directory = spool / feed
         paths = sorted(
             (

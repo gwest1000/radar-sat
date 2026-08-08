@@ -500,8 +500,9 @@ def ingest_spool(
     latest_only: bool,
     *,
     now: dt.datetime | None = None,
+    include_layers: Iterable[str] | None = None,
 ) -> SpoolIngestResult:
-    """Render native BC observations without moving or deleting raw files."""
+    """Render selected native observations without moving or deleting raw files."""
     # Import archive helpers lazily so ``pipeline`` can call this module without
     # a module-initialization cycle.
     from .pipeline import (
@@ -520,7 +521,14 @@ def ingest_spool(
     for native_file in files:
         grouped.setdefault(native_file.layer_id, []).append(native_file)
 
-    for layer_id in sorted(NATIVE_LAYER_IDS):
+    supported_layers = set(NATIVE_LAYER_IDS) | {"site-radar"}
+    selected_layers = (
+        set(include_layers) if include_layers is not None else supported_layers
+    )
+    unknown_layers = selected_layers.difference(supported_layers)
+    if unknown_layers:
+        raise ValueError(f"Unsupported native spool layers: {sorted(unknown_layers)}")
+    for layer_id in sorted(selected_layers.intersection(NATIVE_LAYER_IDS)):
         unique = _choose_unique(grouped.get(layer_id, []))
         result.add_discovered(layer_id, len(unique))
         result.timelines[layer_id] = sorted(unique)
@@ -568,6 +576,9 @@ def ingest_spool(
                 result.rejected.append(
                     f"{native_file.path.name}: {type(error).__name__}: {error}"
                 )
+
+    if "site-radar" not in selected_layers:
+        return result
 
     station_groups: dict[str, dict[dt.datetime, NativeFile]] = {}
     for station in STATIONS:

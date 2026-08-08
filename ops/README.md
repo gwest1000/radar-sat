@@ -10,31 +10,36 @@ objects are deleted only after the catalog commit and only when their timestamps
 independently violate the local retention policy. A 9-day R2 lifecycle rule is
 the final backstop.
 
-## Display-resolution H.264 pilot
+## Display-resolution H.264 loops
 
-The optional pilot accelerates the default NOAA VIS/IR background on the two
-most useful performance test cases: NE BC and North America. It does not encode
+The optional video path accelerates every satellite background and loop domain. It does not encode
 radar, precipitation type, lightning, fires, model contours, or line work into
 the lossy video. Those layers are cropped to the same display grid and the
 browser draws them with the decoded satellite into one atomic canvas frame.
 
-Install ffmpeg with libx264, then enable the pilot without reinstalling the
+Install ffmpeg with libx264, then enable the video renderer without reinstalling the
 LaunchAgent:
 
 ```text
-RADARSAT_H264_PILOT_ENABLED=1
-RADARSAT_H264_PILOT_HOURS=24
+RADARSAT_VIDEO_ENABLED=1
+RADARSAT_VIDEO_LIVE_HOURS=24
+RADARSAT_VIDEO_ARCHIVE_HOURS=168
 # RADARSAT_FFMPEG=/opt/homebrew/bin/ffmpeg
 ```
 
-The satellite cycle rebuilds a media object only when its selected source-frame
-fingerprint changes. Overlay-only changes create a new small immutable manifest
-and reuse the existing MP4. Media, manifests, and proxy assets upload before
+The satellite cycle rebuilds only the completed-hour segment whose selected
+source-frame fingerprint changed. Overlay-only changes create a new small
+immutable manifest and reuse the existing H.264 segments. HLS playlists,
+segments, manifests, and proxy assets upload before
 `catalog.json`; a failed encode or incomplete generation leaves the previous
-pointer intact and the browser falls back to ordinary image frames. The pilot
-uses progressive fast-start MP4 for the two-domain trial. Its manifest contract
-keeps the transport explicit so completed-hour fMP4/HLS segments can replace it
-later if rolling 24-hour uploads become material.
+pointer intact and the browser falls back to ordinary image frames. Satellite
+media are shared by domain, source layer and quality tier, while each product
+keeps its own lossless display-sized overlay proxies. This avoids duplicating
+the same video for every regional crop. Live tracks use one-hour immutable
+MPEG-TS segments and seven-day archive tracks use six-hour segments behind a
+small immutable HLS playlist. This keeps routine encoding, upload, and orphan
+storage proportional to the new data instead of rewriting a rolling 24-hour
+movie each cycle.
 
 The publisher always protects the current catalog's media and proxy objects,
 keeps the newest three generations unconditionally, and gives older orphaned

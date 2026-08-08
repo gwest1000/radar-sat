@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Hls from "hls.js";
 
 import {
   VideoLoopManifest,
@@ -262,8 +263,8 @@ export function VideoCompositeStage({
   const [bitmapCache] = useState(() => new BitmapCache());
   const [surfaceCache] = useState(() => new SurfaceCache(
     bitmapCache,
-    manifest.media.width,
-    manifest.media.height,
+    manifest.width,
+    manifest.height,
   ));
   const callbackIdRef = useRef<number | undefined>(undefined);
   const loopTimerRef = useRef<number | undefined>(undefined);
@@ -329,8 +330,8 @@ export function VideoCompositeStage({
     const bounds = canvas.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
     const sourceScale = Math.min(
-      manifest.media.width / bounds.width,
-      manifest.media.height / bounds.height,
+      manifest.width / bounds.width,
+      manifest.height / bounds.height,
     );
     const scale = Math.max(0.25, Math.min(window.devicePixelRatio || 1, sourceScale));
     const width = Math.max(1, Math.round(bounds.width * scale));
@@ -339,7 +340,7 @@ export function VideoCompositeStage({
       canvas.width = width;
       canvas.height = height;
     }
-  }, [manifest.media.height, manifest.media.width]);
+  }, [manifest.height, manifest.width]);
 
   const draw = useCallback((surfaces: PreparedSurfaces) => {
     const canvas = canvasRef.current;
@@ -356,14 +357,38 @@ export function VideoCompositeStage({
     }
     context.filter = satelliteFilter ?? "none";
     context.globalAlpha = 1;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const displayViewport = manifest.viewport ?? { left: 0, top: 0, width: 1, height: 1 };
+    const mediaViewport = manifest.mediaViewport ?? displayViewport;
+    const sourceLeft = (
+      (displayViewport.left - mediaViewport.left) / mediaViewport.width
+    ) * video.videoWidth;
+    const sourceTop = (
+      (displayViewport.top - mediaViewport.top) / mediaViewport.height
+    ) * video.videoHeight;
+    const sourceWidth = (
+      displayViewport.width / mediaViewport.width
+    ) * video.videoWidth;
+    const sourceHeight = (
+      displayViewport.height / mediaViewport.height
+    ) * video.videoHeight;
+    context.drawImage(
+      video,
+      sourceLeft,
+      sourceTop,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
     context.filter = "none";
     if (surfaces.overlay) {
       context.globalAlpha = 1;
       context.drawImage(surfaces.overlay, 0, 0, canvas.width, canvas.height);
     }
     context.restore();
-  }, [resizeCanvas, satelliteFilter]);
+  }, [manifest.mediaViewport, manifest.viewport, resizeCanvas, satelliteFilter]);
 
   const requestFrameRef = useRef<() => void>(() => undefined);
   const seekToIndexRef = useRef<(index: number) => void>(() => undefined);
@@ -556,6 +581,62 @@ export function VideoCompositeStage({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    if (manifest.transport === "hls-ts") {
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          maxBufferLength: 120,
+          maxMaxBufferLength: 300,
+          backBufferLength: 30,
+        });
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            canvas.dataset.hlsError = `${data.type}:${data.details}`;
+          }
+          if (data.fatal) fail(new Error(`Segmented H.264 playback failed: ${data.details}`));
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          const canvas = canvasRef.current;
+          if (canvas) canvas.dataset.hlsState = "manifest-parsed";
+        });
+        hls.on(Hls.Events.BUFFER_APPENDED, () => {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            canvas.dataset.hlsState = "buffer-appended";
+            canvas.dataset.hlsCurrentTime = String(video.currentTime);
+            canvas.dataset.hlsReadyState = String(video.readyState);
+            canvas.dataset.hlsDuration = String(video.duration);
+            canvas.dataset.hlsBuffered = Array.from(
+              { length: video.buffered.length },
+              (_, index) => `${video.buffered.start(index)}-${video.buffered.end(index)}`,
+            ).join(",");
+          }
+        });
+        hls.loadSource(mediaUrl);
+        hls.attachMedia(video);
+        return () => hls.destroy();
+      }
+      if (video.canPlayType(manifest.media.mimeType)) {
+        video.src = mediaUrl;
+        return () => {
+          video.removeAttribute("src");
+          video.load();
+        };
+      }
+      fail(new Error("Segmented H.264 playback is unavailable in this browser."));
+      return;
+    }
+    video.src = mediaUrl;
+    return () => {
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [fail, manifest.media.mimeType, manifest.transport, mediaUrl]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
     video.playbackRate = speed;
     video.defaultPlaybackRate = speed;
     if (loopTimerRef.current !== undefined && committedIndexRef.current === plans.length - 1) {
@@ -612,6 +693,7 @@ export function VideoCompositeStage({
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
     const onMetadata = () => {
+      canvas.dataset.hlsMetadata = `${video.videoWidth}x${video.videoHeight}@${video.duration}`;
       if (
         video.videoWidth !== manifest.media.width
         || video.videoHeight !== manifest.media.height
@@ -621,7 +703,23 @@ export function VideoCompositeStage({
       }
       seekToIndexRef.current(requestedIndexRef.current);
     };
-    const onError = () => fail(new Error("The H.264 loop could not be decoded."));
+    const onError = () => {
+      // hls.js emits a substantially more useful fatal-error detail than the
+      // generic MediaSource error exposed by the video element. Let that
+      // handler own failures when the browser is not using native HLS.
+      if (
+        manifest.transport === "hls-ts"
+        && Hls.isSupported()
+      ) return;
+      const mediaError = video.error;
+      const detail = mediaError
+        ? ` (media error ${mediaError.code}${mediaError.message ? `: ${mediaError.message}` : ""})`
+        : "";
+      fail(new Error(
+        `The H.264 loop could not be decoded${detail}`
+        + ` (HLS engine ${Hls.isSupported() ? "available" : "unavailable"}, native HLS ${video.canPlayType(manifest.media.mimeType) || "unavailable"}).`,
+      ));
+    };
     const onEnded = () => {
       if (!playingRef.current || failedRef.current || !plans.length) return;
       const lastIndex = plans.length - 1;
@@ -661,7 +759,9 @@ export function VideoCompositeStage({
     fail,
     handleVideoFrame,
     manifest.media.height,
+    manifest.media.mimeType,
     manifest.media.width,
+    manifest.transport,
     plans,
     resizeCanvas,
     scheduleLoop,
@@ -695,7 +795,6 @@ export function VideoCompositeStage({
       <video
         ref={videoRef}
         className="video-loop-decoder"
-        src={mediaUrl}
         crossOrigin="anonymous"
         muted
         playsInline

@@ -132,7 +132,10 @@ type Catalog = {
   products: Product[];
   legends: Record<string, Legend>;
   sources?: Record<string, string>;
-  videoProfiles?: Record<string, Record<string, { live?: VideoProfilePointer }>>;
+  videoProfiles?: Record<string, Record<string, {
+    live?: VideoProfilePointer;
+    archive?: VideoProfilePointer;
+  }>>;
 };
 
 type SiteConfig = {
@@ -180,10 +183,6 @@ const WEB_MERCATOR_RADIUS = 6_378_137;
 const WGS84_ECCENTRICITY = 0.08181919084262149;
 const NORTH_AMERICA_BOUNDS = [-21_051_700.011, 557_305.257, -4_551_782.871, 12_932_243.112] as const;
 const NORTH_PACIFIC_BOUNDS = [-3_339_584.7, 764_000, 15_584_728.7, 11_413_000] as const;
-const VIDEO_PILOT_LAYERS: Record<string, string> = {
-  "bc-northeast-overlay": "raw-visir",
-  "north-america-overlay": "westwx-visir",
-};
 type ImageFrameCacheEntry = {
   image: HTMLImageElement;
   promise: Promise<boolean>;
@@ -1640,26 +1639,28 @@ export function RadarViewer() {
     [optionalLayers, product],
   );
   const effectiveRangeHours = Math.min(rangeHours, product?.maxHours ?? 168);
-  const pilotLayerId = product ? VIDEO_PILOT_LAYERS[product.id] : undefined;
-  const pilotPointer = product && pilotLayerId && activeAnchorId === pilotLayerId && effectiveRangeHours <= 24
-    ? catalog?.videoProfiles?.[product.id]?.[pilotLayerId]?.live
+  const videoTrack = effectiveRangeHours <= 24 ? "live" : "archive";
+  const videoLayerId = activeAnchorId;
+  const videoPointer = product && videoLayerId
+    ? catalog?.videoProfiles?.[product.id]?.[videoLayerId]?.[videoTrack]
     : undefined;
-  const pilotPointerKey = pilotPointer
-    ? `${product?.id}/${pilotLayerId}/${pilotPointer.generation}/${pilotPointer.manifestPath}`
+  const videoPointerKey = videoPointer
+    ? `${product?.id}/${videoLayerId}/${videoTrack}/${videoPointer.generation}/${videoPointer.manifestPath}`
     : "";
 
   useEffect(() => {
     let cancelled = false;
-    if (!pilotPointer || !pilotLayerId || !product || failedVideoGeneration === pilotPointer.generation) {
+    if (!videoPointer || !videoLayerId || !product || failedVideoGeneration === videoPointer.generation) {
       return;
     }
-    const manifestUrl = absoluteUrl(pilotPointer.manifestPath, catalogBase);
+    const manifestUrl = absoluteUrl(videoPointer.manifestPath, catalogBase);
     void loadVideoLoopManifest(manifestUrl).then((manifest) => {
       if (cancelled) return;
       if (
-        manifest.generation !== pilotPointer.generation
+        manifest.generation !== videoPointer.generation
         || manifest.productId !== product.id
-        || manifest.layerId !== pilotLayerId
+        || manifest.layerId !== videoLayerId
+        || manifest.track !== videoTrack
         || !supportsVideoLoop(manifest.media.mimeType)
       ) {
         throw new Error("Video profile does not match the selected loop.");
@@ -1669,6 +1670,7 @@ export function RadarViewer() {
         active
         && active.productId === manifest.productId
         && active.layerId === manifest.layerId
+        && active.track === manifest.track
         && active.generation !== manifest.generation
       ) {
         pendingVideoManifestRef.current = manifest;
@@ -1680,12 +1682,12 @@ export function RadarViewer() {
       setVideoFallbackReason("");
     }).catch((reason) => {
       if (!cancelled) {
-        setFailedVideoGeneration(pilotPointer.generation);
+        setFailedVideoGeneration(videoPointer.generation);
         setVideoFallbackReason(reason instanceof Error ? reason.message : "Video manifest failed.");
       }
     });
     return () => { cancelled = true; };
-  }, [catalogBase, failedVideoGeneration, pilotLayerId, pilotPointer, pilotPointerKey, product]);
+  }, [catalogBase, failedVideoGeneration, product, videoLayerId, videoPointer, videoPointerKey, videoTrack]);
 
   const fallbackAnchorFrames = useMemo(() => {
     if (!domain || !product) return [];
@@ -1706,14 +1708,15 @@ export function RadarViewer() {
 
   const candidateVideoManifest = useMemo(() => (
     loadedVideoManifest
-      && pilotPointer
-      && pilotLayerId
+      && videoPointer
+      && videoLayerId
       && loadedVideoManifest.productId === product?.id
-      && loadedVideoManifest.layerId === pilotLayerId
+      && loadedVideoManifest.layerId === videoLayerId
+      && loadedVideoManifest.track === videoTrack
       && failedVideoGeneration !== loadedVideoManifest.generation
       ? loadedVideoManifest
       : null
-  ), [failedVideoGeneration, loadedVideoManifest, pilotLayerId, pilotPointer, product?.id]);
+  ), [failedVideoGeneration, loadedVideoManifest, product?.id, videoLayerId, videoPointer, videoTrack]);
   const videoManifestFrames = useMemo(
     () => candidateVideoManifest
       ? selectVideoFrames(candidateVideoManifest, effectiveRangeHours)
@@ -1737,10 +1740,10 @@ export function RadarViewer() {
     if (
       !candidateVideoManifest
       || !product
-      || !pilotLayerId
+      || !videoLayerId
       || videoAnchorFrames.length !== videoManifestFrames.length
     ) return [];
-    const satelliteRecipeIndex = product.layers.findIndex((recipe) => recipe.id === pilotLayerId);
+    const satelliteRecipeIndex = product.layers.findIndex((recipe) => recipe.id === videoLayerId);
     if (satelliteRecipeIndex < 0) return [];
     const recipeById = new Map(product.layers.map((recipe, index) => [recipe.id, { recipe, index }]));
     const plans: VideoCompositeFramePlan[] = [];
@@ -1757,8 +1760,8 @@ export function RadarViewer() {
         const proxy = candidateVideoManifest.proxies[selection.sourceKey];
         if (
           !proxy
-          || proxy.width !== candidateVideoManifest.media.width
-          || proxy.height !== candidateVideoManifest.media.height
+          || proxy.width !== candidateVideoManifest.width
+          || proxy.height !== candidateVideoManifest.height
         ) return [];
         const layer = {
           url: absoluteUrl(proxy.path, catalogBase),
@@ -1787,7 +1790,7 @@ export function RadarViewer() {
     candidateVideoManifest,
     catalogBase,
     optionalLayers,
-    pilotLayerId,
+    videoLayerId,
     product,
     videoAnchorFrames,
     videoManifestFrames,
@@ -2249,7 +2252,7 @@ export function RadarViewer() {
     .join(" · ");
   const composedLayerIds = new Set(
     videoModeReady
-      ? ["base-dark", pilotLayerId ?? "", ...activeVideoProxyLayers.map((layer) => layer.id)]
+      ? ["base-dark", videoLayerId, ...activeVideoProxyLayers.map((layer) => layer.id)]
       : composedLayers.map((layer) => layer.id),
   );
   if (!videoModeReady && lightningController && (lightningPointReferences.length || ecccFallbackPointReferences.length)) {
@@ -2440,7 +2443,7 @@ export function RadarViewer() {
                 onFramePresented={handleVideoFramePresented}
                 onFailure={handleActiveVideoFailure}
                 onLoopBoundary={handleVideoLoopBoundary}
-                key={`${product.id}-${candidateVideoManifest.generation}`}
+                key={`${product.id}-${candidateVideoManifest.layerId}-${candidateVideoManifest.track}-${candidateVideoManifest.generation}`}
               />
             ) : composedLayers.map((layer) => (
               <StableMapImage

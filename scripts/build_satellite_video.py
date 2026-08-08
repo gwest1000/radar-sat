@@ -5,12 +5,12 @@ import argparse
 import json
 from pathlib import Path
 
-from radarsat.video import PILOT_PROFILES, build_satellite_videos
+from radarsat.video import VIDEO_PROFILES, build_satellite_videos
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build display-resolution H.264 satellite pilots and overlay proxies."
+        description="Build shared H.264 satellite loops and display-resolution overlay proxies."
     )
     parser.add_argument(
         "--source-root",
@@ -26,8 +26,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--product",
         action="append",
-        choices=[spec.product_id for spec in PILOT_PROFILES],
-        help="Pilot product to build; repeat to select both (default: both).",
+        choices=sorted({spec.product_id for spec in VIDEO_PROFILES}),
+        help="Product to build; repeat to select several (default: all products).",
     )
     parser.add_argument(
         "--hours",
@@ -36,12 +36,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Live history to encode, capped at 24 hours.",
     )
     parser.add_argument(
+        "--archive-hours",
+        type=float,
+        default=168.0,
+        help="Hourly archive history to encode, capped at 168 hours.",
+    )
+    parser.add_argument(
         "--ffmpeg",
         help="Explicit ffmpeg executable; defaults to PATH discovery.",
     )
     args = parser.parse_args(argv)
-    if args.hours <= 0:
-        parser.error("--hours must be positive")
+    if args.hours <= 0 or args.archive_hours <= 0:
+        parser.error("--hours and --archive-hours must be positive")
     return args
 
 
@@ -53,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         product_ids=args.product,
         ffmpeg=args.ffmpeg,
         hours=min(args.hours, 24.0),
+        archive_hours=min(args.archive_hours, 168.0),
     )
     print(json.dumps(result, indent=2))
     return 1 if result["status"] == "warning" else 0

@@ -187,6 +187,7 @@ if (( primary_ingest_status == 0 )); then
   "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/prune_eccc_spool.py" \
     --spool "${RADARSAT_SPOOL_ROOT:-${HOME}/.local/share/radar-sat/spool/eccc}" \
     --older-than-hours "${RADARSAT_RAW_RETENTION_HOURS:-3}" \
+    --lightning-older-than-hours "${RADARSAT_LIGHTNING_RAW_RETENTION_HOURS:-168}" \
     --ingest-status "${OUTPUT_ROOT}/status/ingest.json" \
     --apply
 else

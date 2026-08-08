@@ -36,12 +36,13 @@ export type VideoLoopManifest = {
   generatedAt: string;
   productId: string;
   layerId: string;
-  track: "live";
-  transport: "progressive-mp4";
+  track: "live" | "archive";
+  transport: "progressive-mp4" | "hls-ts";
   cadenceMinutes: number;
   width: number;
   height: number;
   viewport?: Record<string, number>;
+  mediaViewport?: Record<string, number>;
   media: {
     path: string;
     mimeType: string;
@@ -50,6 +51,14 @@ export type VideoLoopManifest = {
     height: number;
     byteLength: number;
     sha256: string;
+    segments?: Array<{
+      path: string;
+      byteLength: number;
+      sha256: string;
+      durationSeconds: number;
+      firstFrame: number;
+      lastFrame: number;
+    }>;
   };
   frames: VideoManifestFrame[];
   proxies: Record<string, VideoProxy>;
@@ -61,6 +70,17 @@ const manifestCache = new Map<string, Promise<VideoLoopManifest>>();
 
 function finitePositive(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function validViewport(value: unknown): value is Record<string, number> {
+  if (!value || typeof value !== "object") return false;
+  const viewport = value as Record<string, unknown>;
+  return typeof viewport.left === "number"
+    && Number.isFinite(viewport.left)
+    && typeof viewport.top === "number"
+    && Number.isFinite(viewport.top)
+    && finitePositive(viewport.width)
+    && finitePositive(viewport.height);
 }
 
 function validProxy(value: unknown): value is VideoProxy {
@@ -119,15 +139,20 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
     || typeof manifest.generatedAt !== "string"
     || typeof manifest.productId !== "string"
     || typeof manifest.layerId !== "string"
-    || manifest.track !== "live"
-    || manifest.transport !== "progressive-mp4"
+    || !["live", "archive"].includes(String(manifest.track))
+    || !["progressive-mp4", "hls-ts"].includes(String(manifest.transport))
     || !finitePositive(manifest.cadenceMinutes)
     || !finitePositive(manifest.width)
     || !finitePositive(manifest.height)
+    || (manifest.viewport !== undefined && !validViewport(manifest.viewport))
+    || (manifest.mediaViewport !== undefined && !validViewport(manifest.mediaViewport))
     || !manifest.media
     || typeof manifest.media.path !== "string"
     || typeof manifest.media.mimeType !== "string"
-    || !manifest.media.mimeType.startsWith("video/mp4")
+    || (
+      !manifest.media.mimeType.startsWith("video/mp4")
+      && manifest.media.mimeType !== "application/vnd.apple.mpegurl"
+    )
     || typeof manifest.media.codec !== "string"
     || !finitePositive(manifest.media.width)
     || !finitePositive(manifest.media.height)
@@ -159,6 +184,25 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
     ) {
       throw new Error("Video manifest times are not strictly increasing.");
     }
+  }
+  if (
+    manifest.transport === "hls-ts"
+    && (
+      !Array.isArray(manifest.media.segments)
+      || !manifest.media.segments.length
+      || manifest.media.segments.some((segment) => (
+        !segment
+        || typeof segment.path !== "string"
+        || !segment.path
+        || !finitePositive(segment.byteLength)
+        || typeof segment.sha256 !== "string"
+        || !finitePositive(segment.durationSeconds)
+        || !Number.isInteger(segment.firstFrame)
+        || !Number.isInteger(segment.lastFrame)
+      ))
+    )
+  ) {
+    throw new Error("HLS video manifest has invalid segments.");
   }
   return manifest as VideoLoopManifest;
 }
@@ -221,6 +265,10 @@ export function videoFrameAtMediaTime(
 export function supportsVideoLoop(mimeType: string): boolean {
   if (typeof document === "undefined") return false;
   const video = document.createElement("video");
+  const native = video.canPlayType(mimeType) !== "";
+  const mediaSource = mimeType === "application/vnd.apple.mpegurl"
+    && typeof MediaSource !== "undefined"
+    && MediaSource.isTypeSupported('video/mp4; codecs="avc1.640028"');
   return typeof video.requestVideoFrameCallback === "function"
-    && video.canPlayType(mimeType) !== "";
+    && (native || mediaSource);
 }

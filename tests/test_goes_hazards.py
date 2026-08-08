@@ -279,6 +279,31 @@ class HazardRenderTests(unittest.TestCase):
                 {"age0", "age10", "age20", "age30", "age40", "age50"},
             )
 
+    def test_hourly_glm_history_extends_beyond_live_trails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = projected_domain(width=100, height=60)
+            newest = VALID.replace(minute=0)
+            old_hour = newest - dt.timedelta(hours=30)
+            for anchor in (old_hour, newest):
+                for index in range(6):
+                    valid = anchor - dt.timedelta(minutes=10 * index)
+                    source = frame_path(root, domain, LAYERS["glm-lightning"], valid)
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+                    image.putpixel((15 + index * 12, 30), (255, 255, 255, 255))
+                    image.save(source, "PNG")
+                    write_metadata(root, domain, LAYERS["glm-lightning"], valid, source)
+
+            derive_glm_lightning_trails(root, domain, hours=48)
+
+            self.assertTrue(
+                frame_path(root, domain, LAYERS["glm-lightning-hour"], old_hour).is_file()
+            )
+            self.assertFalse(
+                frame_path(root, domain, LAYERS["glm-lightning-trail"], old_hour).exists()
+            )
+
 
 class FakeHazardClient:
     def __init__(self) -> None:

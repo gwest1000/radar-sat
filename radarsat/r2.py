@@ -51,6 +51,7 @@ VIDEO_MIN_GENERATIONS = 3
 VIDEO_ORPHAN_GRACE = dt.timedelta(hours=1)
 VIDEO_IMMUTABLE_PREFIXES = (
     "videos/",
+    "video-segments/",
     "video-manifests/",
     "video-proxies/",
     "video-static-overlays/",
@@ -486,7 +487,7 @@ def _video_manifest_paths(
         or payload.get("productId") != product_id
         or payload.get("layerId") != layer_id
         or payload.get("track") != track
-        or payload.get("transport") != "progressive-mp4"
+        or payload.get("transport") not in {"progressive-mp4", "hls-ts"}
     ):
         return None
     frames = payload.get("frames")
@@ -497,16 +498,66 @@ def _video_manifest_paths(
         return None
     media_relative = _safe_relative_value(media.get("path"))
     media_parts = Path(media_relative).parts if media_relative is not None else ()
+    domain_id = payload.get("domainId")
+    media_owner_ok = (
+        len(media_parts) == 5
+        and (
+            media_parts[:4] == ("videos", product_id, layer_id, track)
+            or (
+                isinstance(domain_id, str)
+                and media_parts[0] == "videos"
+                and re.fullmatch(
+                    rf"shared-{re.escape(domain_id)}-[a-z0-9][a-z0-9-]*",
+                    media_parts[1],
+                )
+                is not None
+                and media_parts[2:4] == (layer_id, track)
+            )
+        )
+    )
+    transport = payload.get("transport")
+    expected_suffix = ".mp4" if transport == "progressive-mp4" else ".m3u8"
+    expected_mime = (
+        "video/mp4"
+        if transport == "progressive-mp4"
+        else "application/vnd.apple.mpegurl"
+    )
     if (
         media_relative is None
-        or len(media_parts) != 5
-        or media_parts[:4] != ("videos", product_id, layer_id, track)
-        or Path(media_parts[4]).suffix != ".mp4"
+        or not media_owner_ok
+        or Path(media_parts[4]).suffix != expected_suffix
         or not VIDEO_GENERATION_RE.fullmatch(Path(media_parts[4]).stem)
-        or media.get("mimeType") != "video/mp4"
+        or media.get("mimeType") != expected_mime
         or not _video_asset_available(root, media_relative, media.get("byteLength"))
     ):
         return None
+    segment_paths: list[str] = []
+    if transport == "hls-ts":
+        segments = media.get("segments")
+        if not isinstance(segments, list) or not segments:
+            return None
+        for segment in segments:
+            if not isinstance(segment, Mapping):
+                return None
+            segment_relative = _safe_relative_value(segment.get("path"))
+            segment_parts = (
+                Path(segment_relative).parts if segment_relative is not None else ()
+            )
+            if (
+                segment_relative is None
+                or len(segment_parts) != 5
+                or segment_parts[:4]
+                != ("video-segments", media_parts[1], layer_id, track)
+                or re.fullmatch(
+                    r"\d{8}T\d{4}Z-[0-9a-f]{16}\.ts", segment_parts[4]
+                )
+                is None
+                or not _video_asset_available(
+                    root, segment_relative, segment.get("byteLength")
+                )
+            ):
+                return None
+            segment_paths.append(segment_relative)
     proxy_paths = _proxy_paths(root, product_id, payload.get("proxies"))
     if proxy_paths is None:
         return None
@@ -534,7 +585,7 @@ def _video_manifest_paths(
     static_path = _static_overlay_path(root, product_id, payload.get("staticOverlay"))
     if static_path is None:
         return None
-    paths = [manifest_relative, media_relative, *proxy_paths]
+    paths = [manifest_relative, media_relative, *segment_paths, *proxy_paths]
     if static_path:
         paths.append(static_path)
     return paths
@@ -857,6 +908,10 @@ def list_remote_objects(client: Any, bucket: str) -> dict[str, int]:
 def content_type(path: Path) -> str:
     if path.suffix.lower() == ".mp4":
         return "video/mp4"
+    if path.suffix.lower() == ".m3u8":
+        return "application/vnd.apple.mpegurl"
+    if path.suffix.lower() == ".ts":
+        return "video/mp2t"
     guessed, _ = mimetypes.guess_type(path.name)
     if guessed == "application/json":
         return "application/json; charset=utf-8"
@@ -952,8 +1007,8 @@ def _video_generation_key(key: str) -> tuple[tuple[str, str, str, str], str] | N
     generation = Path(parts[4]).stem
     if not VIDEO_GENERATION_RE.fullmatch(generation):
         return None
-    expected_suffix = ".mp4" if parts[0] == "videos" else ".json"
-    if Path(parts[4]).suffix != expected_suffix:
+    expected_suffixes = {".mp4", ".m3u8"} if parts[0] == "videos" else {".json"}
+    if Path(parts[4]).suffix not in expected_suffixes:
         return None
     return (parts[0], parts[1], parts[2], parts[3]), generation
 
@@ -1007,7 +1062,9 @@ def expired_video_keys(
                 expired.update(key for key in keys if key not in desired)
 
     for key in remote:
-        if key in desired or not key.startswith(("video-proxies/", "video-static-overlays/")):
+        if key in desired or not key.startswith(
+            ("video-proxies/", "video-static-overlays/", "video-segments/")
+        ):
             continue
         modified = modifications.get(key)
         # Hash-only proxy names carry no reliable timestamp. If R2 did not

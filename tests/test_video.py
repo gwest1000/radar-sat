@@ -294,7 +294,7 @@ class VideoBuildTests(unittest.TestCase):
         )
         return catalog, spec
 
-    def test_progressive_mp4_manifest_pts_and_skip(self) -> None:
+    def test_segmented_h264_manifest_pts_and_skip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             catalog, spec = self.make_source(root)
@@ -315,7 +315,9 @@ class VideoBuildTests(unittest.TestCase):
             manifest = json.loads((output / str(result["manifestPath"])).read_text())
             media = output / manifest["media"]["path"]
             self.assertEqual([item["ptsSeconds"] for item in manifest["frames"]], [0.0, 0.22, 0.44])
-            self.assertEqual([item["durationSeconds"] for item in manifest["frames"]], [0.22] * 3)
+            self.assertEqual([item["durationSeconds"] for item in manifest["frames"]], [0.22, 0.22, 0.24])
+            self.assertEqual(manifest["transport"], "hls-ts")
+            self.assertEqual(manifest["media"]["mimeType"], "application/vnd.apple.mpegurl")
             self.assertEqual(manifest["media"]["width"], 64)
             self.assertEqual(manifest["media"]["height"], 48)
             self.assertIn("static/bc/boundaries.png?v=1", manifest["proxies"])
@@ -327,9 +329,10 @@ class VideoBuildTests(unittest.TestCase):
                 manifest["frames"][0]["proxyLayers"][0]["sourceValidTime"]
             )
             self.assertTrue(media.is_file())
-            with media.open("rb") as handle:
-                data = handle.read()
-            self.assertLess(data.index(b"moov"), data.index(b"mdat"))
+            self.assertIn("#EXT-X-ENDLIST", media.read_text())
+            self.assertEqual(len(manifest["media"]["segments"]), 1)
+            segment = output / manifest["media"]["segments"][0]["path"]
+            self.assertTrue(segment.is_file())
 
             probe = subprocess.run(
                 [
@@ -342,7 +345,7 @@ class VideoBuildTests(unittest.TestCase):
                     "stream=codec_name,pix_fmt,color_space,color_transfer,color_primaries,nb_frames",
                     "-of",
                     "json",
-                    str(media),
+                    str(segment),
                 ],
                 check=True,
                 capture_output=True,
@@ -354,7 +357,6 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(stream["color_space"], "bt709")
             self.assertEqual(stream["color_transfer"], "bt709")
             self.assertEqual(stream["color_primaries"], "bt709")
-            self.assertEqual(int(stream["nb_frames"]), 4)
 
             frame_probe = subprocess.run(
                 [
@@ -364,22 +366,24 @@ class VideoBuildTests(unittest.TestCase):
                     "-select_streams",
                     "v:0",
                     "-show_entries",
-                    "frame=best_effort_timestamp_time,duration_time",
+                    "frame=best_effort_timestamp_time,duration_time,pict_type",
                     "-of",
                     "json",
-                    str(media),
+                    str(segment),
                 ],
                 check=True,
                 capture_output=True,
                 text=True,
             )
             encoded_frames = json.loads(frame_probe.stdout)["frames"]
+            self.assertEqual(len(encoded_frames), 4)
+            self.assertNotIn("B", {item.get("pict_type") for item in encoded_frames})
+            timestamps = [
+                float(item["best_effort_timestamp_time"])
+                for item in encoded_frames
+            ]
             self.assertEqual(
-                [float(item["best_effort_timestamp_time"]) for item in encoded_frames],
-                [0.0, 0.22, 0.44, 0.66],
-            )
-            self.assertEqual(
-                [float(item["duration_time"]) for item in encoded_frames[:3]],
+                [round(right - left, 2) for left, right in zip(timestamps, timestamps[1:])],
                 [0.22, 0.22, 0.22],
             )
 
@@ -413,7 +417,7 @@ class VideoBuildTests(unittest.TestCase):
             assert isinstance(frames, list)
             frames[-1]["fetchedAt"] = "2026-08-01T01:05:00Z"
 
-            with mock.patch("radarsat.video._encode_mp4", side_effect=RuntimeError("encode failed")):
+            with mock.patch("radarsat.video._encode_ts", side_effect=RuntimeError("encode failed")):
                 with self.assertRaisesRegex(RuntimeError, "encode failed"):
                     build_profile(
                         root / "source",

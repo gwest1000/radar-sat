@@ -84,6 +84,8 @@ BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH = 1600
 BC_SMALL_NOTABLE_FIRE_SCALE = 0.85
 BROAD_HAZARD_SCALE = 2
 BROAD_FIRE_SYMBOL_REFERENCE_WIDTH = 1920
+LIGHTNING_TRAIL_HOURS = 24.0
+LIGHTNING_ARCHIVE_HOURS = 168.0
 STATIC_BOUNDARY_RENDER_VERSION = 4
 STATIC_TRANSMISSION_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
@@ -754,9 +756,13 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
     radar_times = local_times("radar-rain")
     if not lightning_times:
         return
-    cutoff = max(lightning_times) - dt.timedelta(hours=hours)
-    anchor_start = cutoff.replace(
-        minute=cutoff.minute - cutoff.minute % 10,
+    newest_lightning = max(lightning_times)
+    archive_cutoff = newest_lightning - dt.timedelta(hours=hours)
+    trail_cutoff = newest_lightning - dt.timedelta(
+        hours=min(hours, LIGHTNING_TRAIL_HOURS)
+    )
+    trail_start = trail_cutoff.replace(
+        minute=trail_cutoff.minute - trail_cutoff.minute % 10,
         second=0,
         microsecond=0,
     )
@@ -769,12 +775,19 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         second=0,
         microsecond=0,
     )
-    all_anchors: set[dt.datetime] = set()
-    anchor_cursor = anchor_start
+    trail_anchors: set[dt.datetime] = set()
+    anchor_cursor = trail_start
     while anchor_cursor <= anchor_end:
-        all_anchors.add(anchor_cursor)
+        if anchor_cursor >= trail_cutoff:
+            trail_anchors.add(anchor_cursor)
         anchor_cursor += dt.timedelta(minutes=10)
-    anchors = sorted(value for value in all_anchors if value >= cutoff)
+    hour_anchors: set[dt.datetime] = set()
+    hour_cursor = archive_cutoff.replace(minute=0, second=0, microsecond=0)
+    while hour_cursor <= anchor_end:
+        if hour_cursor >= archive_cutoff:
+            hour_anchors.add(hour_cursor)
+        hour_cursor += dt.timedelta(hours=1)
+    anchors = sorted(trail_anchors | hour_anchors)
     output_layer = LAYERS["lightning-trail"]
     hour_layer = LAYERS["lightning-hour"]
     flash_layer = LAYERS["lightning-flash"]
@@ -803,33 +816,22 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         else {}
     )
     source_layer = LAYERS["lightning"]
-    regional_cutoff = max(lightning_times) - dt.timedelta(hours=24)
-
     # The display clock is ten-minute satellite time, not six-minute radar
     # time. Canonical ten-minute trail anchors keep new bolts, their halo and
     # their 10/20-minute age states synchronized with every displayed frame.
-    valid_anchor_stamps = {frame_stamp(value) for value in all_anchors}
-    regional_anchor_stamps = {
-        frame_stamp(value)
-        for value in all_anchors
-        if value >= regional_cutoff
-    }
-    regional_layer_ids = {
-        layer.id
-        for layer in (*regional_trail_layers.values(), *regional_flash_layers.values())
-    }
+    trail_anchor_stamps = {frame_stamp(value) for value in trail_anchors}
+    hour_anchor_stamps = {frame_stamp(value) for value in hour_anchors}
     derived_layers = (
         output_layer,
         flash_layer,
         *regional_trail_layers.values(),
         *regional_flash_layers.values(),
     )
-    for derived_layer in derived_layers:
-        allowed_stamps = (
-            regional_anchor_stamps
-            if derived_layer.id in regional_layer_ids
-            else valid_anchor_stamps
-        )
+    hour_layers = (hour_layer, *regional_hour_layers.values())
+    for derived_layer, allowed_stamps in (
+        *((layer, trail_anchor_stamps) for layer in derived_layers),
+        *((layer, hour_anchor_stamps) for layer in hour_layers),
+    ):
         output_metadata_root = root / "metadata" / domain.id / derived_layer.id
         if output_metadata_root.exists():
             for path in output_metadata_root.rglob("*.json"):
@@ -953,38 +955,60 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         return source_times, existing
 
     for anchor in anchors:
-        source_times, existing = selected_sources(anchor, (0, 10, 20))
-        if not any(existing):
-            for layer in derived_layers:
-                frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
-                metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
-            continue
         base_output_width = BC_LIGHTNING_WIDTH if domain.id == "bc" else domain.width * 2
         base_symbol_reference_width = (
             domain.width if domain.id == "bc" else round(domain.width * 1.5)
         )
         base_blur_glow = domain.tier != "broad"
-        fresh_arrival = (
-            existing[0] is not None
-            and source_times[0] is not None
-            and dt.timedelta(0) <= anchor - source_times[0] < dt.timedelta(minutes=5)
-        )
-        write_derived(
-            output_layer,
-            anchor,
-            existing,
-            source_times,
-            render_version=LIGHTNING_TRAIL_RENDER_VERSION,
-            output_width=base_output_width,
-            symbol_reference_width=base_symbol_reference_width,
-            blur_glow=base_blur_glow,
-            new_strike_halo=fresh_arrival,
-        )
-        # The diffuse new-strike halo is now composited into the same raster as
-        # its bolt, eliminating separate-frame timing and registration drift.
-        frame_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
-        metadata_path(root, domain, flash_layer, anchor).unlink(missing_ok=True)
-        if anchor.minute == 0 and anchor >= regional_cutoff:
+        if anchor in trail_anchors:
+            source_times, existing = selected_sources(anchor, (0, 10, 20))
+            if any(existing):
+                fresh_arrival = (
+                    existing[0] is not None
+                    and source_times[0] is not None
+                    and dt.timedelta(0) <= anchor - source_times[0] < dt.timedelta(minutes=5)
+                )
+                write_derived(
+                    output_layer,
+                    anchor,
+                    existing,
+                    source_times,
+                    render_version=LIGHTNING_TRAIL_RENDER_VERSION,
+                    output_width=base_output_width,
+                    symbol_reference_width=base_symbol_reference_width,
+                    blur_glow=base_blur_glow,
+                    new_strike_halo=fresh_arrival,
+                )
+                for region_id in regional_trail_layers:
+                    viewport = VIEWPORTS[region_id]
+                    detailed_region = region_id != "small"
+                    regional_symbol_reference_width = (
+                        DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
+                        if detailed_region
+                        else BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH
+                    )
+                    write_derived(
+                        regional_trail_layers[region_id],
+                        anchor,
+                        existing,
+                        source_times,
+                        render_version=LIGHTNING_REGIONAL_RENDER_VERSION,
+                        viewport=viewport,
+                        output_width=BC_LIGHTNING_WIDTH,
+                        symbol_reference_width=regional_symbol_reference_width,
+                        blur_glow=not detailed_region,
+                        new_strike_halo=fresh_arrival,
+                    )
+            else:
+                for layer in (output_layer, *regional_trail_layers.values()):
+                    frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
+                    metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
+            # The diffuse new-strike halo is composited into the same raster as
+            # its bolt, eliminating separate-frame timing and registration drift.
+            for layer in (flash_layer, *regional_flash_layers.values()):
+                frame_path(root, domain, layer, anchor).unlink(missing_ok=True)
+                metadata_path(root, domain, layer, anchor).unlink(missing_ok=True)
+        if anchor in hour_anchors:
             hour_source_times, hour_existing = selected_sources(
                 anchor,
                 (0, 10, 20, 30, 40, 50),
@@ -1020,34 +1044,6 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                         blur_glow=not detailed_region,
                         new_strike_halo=False,
                     )
-        if anchor < regional_cutoff:
-            continue
-        for region_id in regional_trail_layers:
-            viewport = VIEWPORTS[region_id]
-            detailed_region = region_id != "small"
-            regional_output_width = BC_LIGHTNING_WIDTH
-            regional_symbol_reference_width = (
-                DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH
-                if detailed_region
-                else BC_SMALL_LIGHTNING_SYMBOL_REFERENCE_WIDTH
-            )
-            write_derived(
-                regional_trail_layers[region_id],
-                anchor,
-                existing,
-                source_times,
-                render_version=LIGHTNING_REGIONAL_RENDER_VERSION,
-                viewport=viewport,
-                output_width=regional_output_width,
-                symbol_reference_width=regional_symbol_reference_width,
-                blur_glow=not detailed_region,
-                new_strike_halo=fresh_arrival,
-            )
-            regional_flash_layer = regional_flash_layers[region_id]
-            frame_path(root, domain, regional_flash_layer, anchor).unlink(missing_ok=True)
-            metadata_path(root, domain, regional_flash_layer, anchor).unlink(missing_ok=True)
-
-
 def _rendered_frame_ready(
     root: Path,
     domain: Domain,
@@ -1320,9 +1316,11 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
     source_times = _archived_layer_times(root, domain, source_layer)
     if not source_times:
         return
-    cutoff = max(source_times) - dt.timedelta(hours=hours)
-    hour_cutoff = max(source_times) - dt.timedelta(hours=24)
-    anchors = [value for value in source_times if value >= cutoff]
+    trail_cutoff = max(source_times) - dt.timedelta(
+        hours=min(hours, LIGHTNING_TRAIL_HOURS)
+    )
+    hour_cutoff = max(source_times) - dt.timedelta(hours=hours)
+    anchors = [value for value in source_times if value >= min(trail_cutoff, hour_cutoff)]
     source_set = set(source_times)
     broad_view = domain.tier == "broad"
     render_output_width = domain.width * BROAD_HAZARD_SCALE if broad_view else None
@@ -1340,62 +1338,61 @@ def derive_glm_lightning_trails(root: Path, domain: Domain, hours: float = 24.0)
         existing = [path if path is not None and path.is_file() else None for path in paths]
         if not any(existing):
             continue
-        destination = frame_path(root, domain, output_layer, anchor)
-        metadata = metadata_path(root, domain, output_layer, anchor)
-        expected_sources = {
-            f"age{index * 10}": format_utc(value)
-            for index, value in enumerate(selected)
-            if value is not None
-        }
-        current_sources: dict[str, str] = {}
-        current_version: int | None = None
-        if metadata.is_file():
-            try:
-                payload = json.loads(metadata.read_text())
-                current_sources = payload.get("sourceTimes", {})
-                current_version = payload.get("renderVersion")
-            except (OSError, json.JSONDecodeError):
-                pass
-        if (
-            destination.is_file()
-            and current_sources == expected_sources
-            and current_version == GLM_LIGHTNING_TRAIL_RENDER_VERSION
-        ):
-            pass
-        else:
-            lightning_trail(
-                existing,
-                destination,
-                output_width=render_output_width,
-                symbol_reference_width=render_symbol_reference_width,
-                blur_glow=render_blur_glow,
-            )
-            write_metadata(
-                root,
-                domain,
-                output_layer,
-                anchor,
-                destination,
-                {
-                    f"age{index * 10}": value
-                    for index, value in enumerate(selected)
-                    if value is not None
-                },
-                source="NOAA GOES-18",
-                source_layer="GLM-L2-LCFA 30-minute age trail",
-                extra={
-                    "renderVersion": GLM_LIGHTNING_TRAIL_RENDER_VERSION,
-                    **(
-                        {
-                            "outputWidth": render_output_width,
-                            "symbolReferenceWidth": render_symbol_reference_width,
-                            "blurGlow": render_blur_glow,
-                        }
-                        if broad_view
-                        else {}
-                    ),
-                },
-            )
+        if anchor >= trail_cutoff:
+            destination = frame_path(root, domain, output_layer, anchor)
+            metadata = metadata_path(root, domain, output_layer, anchor)
+            expected_sources = {
+                f"age{index * 10}": format_utc(value)
+                for index, value in enumerate(selected)
+                if value is not None
+            }
+            current_sources: dict[str, str] = {}
+            current_version: int | None = None
+            if metadata.is_file():
+                try:
+                    payload = json.loads(metadata.read_text())
+                    current_sources = payload.get("sourceTimes", {})
+                    current_version = payload.get("renderVersion")
+                except (OSError, json.JSONDecodeError):
+                    pass
+            if not (
+                destination.is_file()
+                and current_sources == expected_sources
+                and current_version == GLM_LIGHTNING_TRAIL_RENDER_VERSION
+            ):
+                lightning_trail(
+                    existing,
+                    destination,
+                    output_width=render_output_width,
+                    symbol_reference_width=render_symbol_reference_width,
+                    blur_glow=render_blur_glow,
+                )
+                write_metadata(
+                    root,
+                    domain,
+                    output_layer,
+                    anchor,
+                    destination,
+                    {
+                        f"age{index * 10}": value
+                        for index, value in enumerate(selected)
+                        if value is not None
+                    },
+                    source="NOAA GOES-18",
+                    source_layer="GLM-L2-LCFA 30-minute age trail",
+                    extra={
+                        "renderVersion": GLM_LIGHTNING_TRAIL_RENDER_VERSION,
+                        **(
+                            {
+                                "outputWidth": render_output_width,
+                                "symbolReferenceWidth": render_symbol_reference_width,
+                                "blurGlow": render_blur_glow,
+                            }
+                            if broad_view
+                            else {}
+                        ),
+                    },
+                )
         if anchor.minute == 0 and anchor >= hour_cutoff:
             hour_selected = [
                 value if value in source_set else None
@@ -1867,7 +1864,7 @@ def ingest_goes_hazards(
     legacy_trails: list[str] = []
     for domain in selected:
         if radarsat_product_uses_layer(domain.id, "glm-lightning-trail"):
-            derive_glm_lightning_trails(root, domain)
+            derive_glm_lightning_trails(root, domain, hours=LIGHTNING_ARCHIVE_HOURS)
             legacy_trails.append(domain.id)
     rendered_any = any(rendered.values())
     return {
@@ -2468,6 +2465,16 @@ def run(
                     latest_only,
                 )
                 native_status[domain.id] = native_result.status()
+            elif domain.id != "bc" and spool_mode != "off":
+                native_result = ingest_spool(
+                    spool_root,
+                    output_root,
+                    domain,
+                    max(hours, LIGHTNING_TRAIL_HOURS),
+                    latest_only,
+                    include_layers=("lightning",),
+                )
+                native_status[domain.id] = native_result.status()
             excluded = (
                 set(NATIVE_LAYER_IDS)
                 if domain.id == "bc" and spool_mode == "only"
@@ -2506,16 +2513,11 @@ def run(
                         "ECCC broad-domain lightning unavailable: "
                         f"{type(error).__name__}: {error}"
                     )
-            trail_hours = (
-                spool_hours
-                if domain.id == "bc" and spool_mode != "off"
-                else hours
-            )
             derive_lightning_trails(
                 output_root,
                 domain,
                 timelines,
-                max(hours, trail_hours),
+                LIGHTNING_ARCHIVE_HOURS,
             )
             if domain.id in {"bc", "north-america", "north-pacific"}:
                 try:

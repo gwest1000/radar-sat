@@ -59,20 +59,22 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /VIEWER_PREFERENCES_KEY/);
 });
 
-test("uses an atomic H.264 compositor only for complete pilot profiles", async () => {
+test("uses an atomic H.264 compositor for complete live and archive profiles", async () => {
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
   const videoLoop = await readFile(new URL("../app/video-loop.ts", import.meta.url), "utf8");
   const compositor = await readFile(new URL("../app/video-composite-stage.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(viewer, /"bc-northeast-overlay": "raw-visir"/);
-  assert.match(viewer, /"north-america-overlay": "westwx-visir"/);
-  assert.match(viewer, /effectiveRangeHours <= 24/);
+  assert.doesNotMatch(viewer, /VIDEO_PILOT_LAYERS/);
+  assert.match(viewer, /effectiveRangeHours <= 24 \? "live" : "archive"/);
+  assert.match(viewer, /videoProfiles\?\.\[product\.id\]\?\.\[videoLayerId\]\?\.\[videoTrack\]/);
   assert.match(viewer, /videoPlans\.length === videoAnchorFrames\.length/);
-  assert.match(viewer, /proxy\.width !== candidateVideoManifest\.media\.width/);
+  assert.match(viewer, /proxy\.width !== candidateVideoManifest\.width/);
   assert.match(viewer, /if \(videoModeReady \|\| !isAnimating/);
   assert.match(viewer, /data-renderer=\{videoModeReady \? "video" : "images"\}/);
   assert.match(viewer, /<VideoCompositeStage/);
   assert.match(videoLoop, /transport: "progressive-mp4"/);
+  assert.match(videoLoop, /track: "live" \| "archive"/);
+  assert.match(videoLoop, /mediaViewport/);
   assert.match(videoLoop, /proxies: Record<string, VideoProxy>/);
   assert.match(videoLoop, /proxyLayers: VideoProxyLayerSelection\[\]/);
   assert.match(videoLoop, /MAX_MANIFEST_CACHE_ENTRIES = 8/);
@@ -85,6 +87,7 @@ test("uses an atomic H.264 compositor only for complete pilot profiles", async (
   assert.match(viewer, /if \(!videoModeReady && lightningController/);
   assert.match(viewer, /if \(!videoModeReady && fireController/);
   assert.match(compositor, /class SurfaceCache/);
+  assert.match(compositor, /displayViewport\.left - mediaViewport\.left/);
   assert.match(compositor, /FINAL_SURFACE_CACHE_SIZE = 4/);
   assert.match(compositor, /crossOrigin="anonymous"/);
   assert.match(compositor, /requestVideoFrameCallback/);

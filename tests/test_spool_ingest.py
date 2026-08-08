@@ -750,6 +750,31 @@ class NativeRenderTests(unittest.TestCase):
                 {"age0", "age10", "age20", "age30", "age40", "age50"},
             )
 
+    def test_hourly_lightning_history_extends_beyond_live_trails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            domain = test_domain()
+            newest = VALID.replace(minute=0)
+            old_hour = newest - dt.timedelta(hours=30)
+            for anchor in (old_hour, newest):
+                for index in range(6):
+                    valid = anchor - dt.timedelta(minutes=10 * index)
+                    source = frame_path(output, domain, LAYERS["lightning"], valid)
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+                    image.putpixel((15 + index * 12, 45), (0, 45, 255, 255))
+                    image.save(source, "PNG")
+                    write_metadata(output, domain, LAYERS["lightning"], valid, source)
+
+            derive_lightning_trails(output, domain, {}, hours=48)
+
+            self.assertTrue(
+                frame_path(output, domain, LAYERS["lightning-hour"], old_hour).is_file()
+            )
+            self.assertFalse(
+                frame_path(output, domain, LAYERS["lightning-trail"], old_hour).exists()
+            )
+
     def test_recovered_lightning_gap_gets_a_derived_trail_anchor(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
@@ -891,6 +916,38 @@ class NativeRenderTests(unittest.TestCase):
 
 
 class PipelineIntegrationTests(unittest.TestCase):
+    def test_broad_native_lightning_renders_live_window_not_entire_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            catalog = output / "catalog.json"
+            native_result = SpoolIngestResult(timelines={"lightning": []})
+            with (
+                mock.patch("radarsat.pipeline.GeoMetClient") as client_class,
+                mock.patch("radarsat.pipeline.ensure_static_assets"),
+                mock.patch("radarsat.pipeline.ingest_geomet", return_value={}),
+                mock.patch("radarsat.pipeline.derive_lightning_trails"),
+                mock.patch("radarsat.pipeline.ingest_hotspot_snapshot", return_value={}),
+                mock.patch("radarsat.pipeline.ingest_active_fire_snapshot", return_value={}),
+                mock.patch("radarsat.pipeline.derive_fire_overlays", return_value={}),
+                mock.patch("radarsat.pipeline.ingest_raw_satellite", return_value={"status": "unchanged"}),
+                mock.patch("radarsat.pipeline.ingest_goes_hazards", return_value={"status": "unchanged"}),
+                mock.patch("radarsat.pipeline.prune"),
+                mock.patch("radarsat.pipeline.write_catalog", return_value=catalog),
+                mock.patch("radarsat.spool.ingest_spool", return_value=native_result) as native_ingest,
+            ):
+                client_class.return_value.__enter__.return_value = object()
+                run(
+                    output,
+                    ["north-america"],
+                    3,
+                    False,
+                    Path(temporary) / "spool",
+                    "auto",
+                )
+
+            self.assertEqual(native_ingest.call_args.args[3], 24.0)
+            self.assertEqual(native_ingest.call_args.kwargs["include_layers"], ("lightning",))
+
     def test_broad_domains_ingest_and_derive_canadian_lightning(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "output"

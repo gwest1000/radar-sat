@@ -21,7 +21,7 @@ from .config import BROAD_VIEWPORTS, PRODUCTS, VIEWPORTS
 
 UTC = dt.timezone.utc
 VIDEO_SCHEMA_VERSION = 1
-VIDEO_RENDER_VERSION = 3
+VIDEO_RENDER_VERSION = 5
 PROXY_RENDER_VERSION = 1
 METEOROLOGICAL_MINUTE_SECONDS = 0.022
 FFCONCAT_TIMEBASE_FPS = 50
@@ -52,7 +52,41 @@ REGIONAL_LAYER_BASES = frozenset(
         "hrdps-mslp",
     }
 )
-REGIONAL_PRODUCT_KEYS = {"bc-northeast-overlay": "northeast"}
+REGIONAL_PRODUCT_KEYS = {
+    "bc-small-overlay": "small",
+    "bc-southwest-overlay": "southwest",
+    "bc-southeast-overlay": "southeast",
+    "bc-northeast-overlay": "northeast",
+}
+FULL_VIEWPORT = {"left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0}
+BC_REGIONAL_MEDIA_VIEWPORT = {
+    "left": min(VIEWPORTS[key]["left"] for key in REGIONAL_PRODUCT_KEYS.values()),
+    "top": min(VIEWPORTS[key]["top"] for key in REGIONAL_PRODUCT_KEYS.values()),
+    "width": max(
+        VIEWPORTS[key]["left"] + VIEWPORTS[key]["width"]
+        for key in REGIONAL_PRODUCT_KEYS.values()
+    )
+    - min(VIEWPORTS[key]["left"] for key in REGIONAL_PRODUCT_KEYS.values()),
+    "height": max(
+        VIEWPORTS[key]["top"] + VIEWPORTS[key]["height"]
+        for key in REGIONAL_PRODUCT_KEYS.values()
+    )
+    - min(VIEWPORTS[key]["top"] for key in REGIONAL_PRODUCT_KEYS.values()),
+}
+SOURCE_MEDIA_SIZES: Mapping[tuple[str, str], tuple[int, int]] = {
+    ("bc", "raw-visir"): (1920, 1472),
+    ("bc", "raw-visir-5min"): (3840, 2944),
+    ("bc", "raw-ir"): (1920, 1472),
+    ("bc", "eccc-geocolor"): (3000, 2300),
+    ("bc", "daynight"): (1920, 1472),
+    ("bc", "ir"): (1920, 1472),
+    ("bc", "convective"): (1920, 1472),
+    ("bc", "snowfog"): (1920, 1472),
+    ("north-america", "westwx-visir"): (1280, 960),
+    ("north-america", "westwx-ir"): (1280, 960),
+    ("north-pacific", "raw-visir"): (1600, 900),
+    ("north-pacific", "raw-ir"): (1600, 900),
+}
 
 
 @dataclass(frozen=True)
@@ -64,38 +98,168 @@ class ProfileSpec:
     width: int
     height: int
     cadence_minutes: int
+    track_name: str = "live"
+    media_group: str = "full"
+    media_viewport: Mapping[str, float] | None = None
+    media_width: int | None = None
+    media_height: int | None = None
     crf: int = 18
     preset: str = "medium"
 
     @property
     def track(self) -> str:
-        return "live"
+        return self.track_name
+
+    @property
+    def resolved_media_viewport(self) -> Mapping[str, float]:
+        return self.media_viewport or FULL_VIEWPORT
+
+    @property
+    def resolved_media_width(self) -> int:
+        return self.media_width or self.width
+
+    @property
+    def resolved_media_height(self) -> int:
+        return self.media_height or self.height
 
     @property
     def gop_frames(self) -> int:
         return max(1, round(60 / self.cadence_minutes))
 
 
-PILOT_PROFILES: tuple[ProfileSpec, ...] = (
-    ProfileSpec(
-        product_id="bc-northeast-overlay",
-        domain_id="bc",
-        layer_id="raw-visir",
-        viewport=VIEWPORTS["northeast"],
-        width=1920,
-        height=1296,
-        cadence_minutes=10,
-    ),
-    ProfileSpec(
-        product_id="north-america-overlay",
-        domain_id="north-america",
-        layer_id="westwx-visir",
-        viewport=BROAD_VIEWPORTS["north-america"],
-        width=1200,
-        height=816,
-        cadence_minutes=20,
-    ),
-)
+def _even(value: float) -> int:
+    rounded = max(2, round(value))
+    return rounded if rounded % 2 == 0 else rounded + 1
+
+
+def _display_size(domain_id: str, viewport: Mapping[str, float]) -> tuple[int, int]:
+    source_width, source_height = SOURCE_MEDIA_SIZES[
+        (domain_id, "westwx-visir" if domain_id == "north-america" else "raw-visir")
+    ]
+    width = 1920 if domain_id == "bc" else 1200
+    height = _even(
+        width
+        * source_height
+        / source_width
+        * float(viewport["height"])
+        / float(viewport["width"])
+    )
+    return width, height
+
+
+def _media_geometry(
+    product_id: str,
+    domain_id: str,
+    layer_id: str,
+    track: str,
+) -> tuple[str, Mapping[str, float], int, int]:
+    source_width, source_height = SOURCE_MEDIA_SIZES[(domain_id, layer_id)]
+    if domain_id == "bc" and layer_id == "raw-visir-5min" and track == "archive":
+        source_width, source_height = SOURCE_MEDIA_SIZES[("bc", "raw-visir")]
+    if track == "archive" and domain_id == "bc" and source_width > 1600:
+        source_height = _even(source_height * 1600 / source_width)
+        source_width = 1600
+    elif track == "live" and layer_id == "eccc-geocolor" and source_width > 2400:
+        source_height = _even(source_height * 2400 / source_width)
+        source_width = 2400
+    if (
+        domain_id == "bc"
+        and layer_id == "raw-visir"
+        and track == "live"
+        and product_id in REGIONAL_PRODUCT_KEYS
+    ):
+        viewport = dict(
+            next(product for product in PRODUCTS if product["id"] == product_id).get(
+                "viewport", FULL_VIEWPORT
+            )
+        )
+        width, height = _display_size(domain_id, viewport)
+        return "regional-hires", viewport, width, height
+    if (
+        domain_id == "bc"
+        and layer_id == "raw-visir-5min"
+        and track == "live"
+        and product_id in REGIONAL_PRODUCT_KEYS
+    ):
+        viewport = BC_REGIONAL_MEDIA_VIEWPORT
+        return (
+            "regional-hires",
+            viewport,
+            _even(source_width * float(viewport["width"])),
+            _even(source_height * float(viewport["height"])),
+        )
+    if (
+        domain_id == "bc"
+        and layer_id == "raw-visir"
+        and track == "live"
+        and product_id == "bc-large-overlay"
+    ):
+        viewport = dict(
+            next(product for product in PRODUCTS if product["id"] == product_id).get(
+                "viewport", FULL_VIEWPORT
+            )
+        )
+        width = 1920
+        height = _even(
+            width
+            * source_height
+            / source_width
+            * float(viewport["height"])
+            / float(viewport["width"])
+        )
+        return "bc-xl", viewport, width, height
+    return "full", FULL_VIEWPORT, source_width, source_height
+
+
+def _all_profiles() -> tuple[ProfileSpec, ...]:
+    profiles: list[ProfileSpec] = []
+    for product in PRODUCTS:
+        product_id = str(product["id"])
+        domain_id = str(product["domain"])
+        viewport = dict(product.get("viewport", FULL_VIEWPORT))
+        display_width, display_height = _display_size(domain_id, viewport)
+        satellite_layers = [
+            str(recipe["id"])
+            for recipe in product.get("layers", [])
+            if str(recipe.get("id", "")) in SATELLITE_LAYER_IDS
+        ]
+        for layer_id in satellite_layers:
+            for track, cadence in (
+                ("live", int(product.get("frameIntervalMinutes", 10))),
+                ("archive", int(product.get("archiveFrameIntervalMinutes", 60))),
+            ):
+                media_group, media_viewport, media_width, media_height = _media_geometry(
+                    product_id, domain_id, layer_id, track
+                )
+                profiles.append(
+                    ProfileSpec(
+                        product_id=product_id,
+                        domain_id=domain_id,
+                        layer_id=layer_id,
+                        viewport=viewport,
+                        width=display_width,
+                        height=display_height,
+                        cadence_minutes=cadence,
+                        track_name=track,
+                        media_group=media_group,
+                        media_viewport=media_viewport,
+                        media_width=media_width,
+                        media_height=media_height,
+                        crf=(
+                            21
+                            if track == "archive"
+                            else 18
+                            if layer_id in {"raw-visir", "raw-visir-5min"}
+                            else 19
+                        ),
+                    )
+                )
+    return tuple(profiles)
+
+
+VIDEO_PROFILES = _all_profiles()
+# Backwards-compatible export for the existing command and tests.
+PILOT_PROFILES = VIDEO_PROFILES
 
 
 @dataclass(frozen=True)
@@ -247,7 +411,7 @@ def _timeline(
     interval_seconds = cadence_minutes * 60
     newest_epoch = math.floor(parsed[-1].timestamp() / interval_seconds) * interval_seconds
     newest = dt.datetime.fromtimestamp(newest_epoch, UTC)
-    requested_start = newest - dt.timedelta(hours=min(24.0, hours))
+    requested_start = newest - dt.timedelta(hours=hours)
     available_epoch = math.ceil(parsed[0].timestamp() / interval_seconds) * interval_seconds
     current = max(requested_start, dt.datetime.fromtimestamp(available_epoch, UTC))
     values: list[dt.datetime] = []
@@ -264,7 +428,14 @@ def _selected_satellite_frames(
 ) -> list[SelectedFrame]:
     domain = catalog["domains"][spec.domain_id]
     layers = domain["layers"]
-    anchor_layer = layers.get(spec.layer_id, {})
+    selection_layer_id = (
+        "raw-visir"
+        if spec.domain_id == "bc"
+        and spec.layer_id == "raw-visir-5min"
+        and spec.track == "archive"
+        else spec.layer_id
+    )
+    anchor_layer = layers.get(selection_layer_id, {})
     anchor_frames = list(anchor_layer.get("frames", []))
     if not anchor_frames:
         return []
@@ -278,7 +449,7 @@ def _selected_satellite_frames(
     )
     selected: list[SelectedFrame] = []
     for valid_time in _timeline(anchor_frames, spec.cadence_minutes, hours):
-        if spec.product_id == "bc-northeast-overlay":
+        if spec.domain_id == "bc" and spec.layer_id == "raw-visir" and spec.track == "live":
             native = _nearest(native_frames, valid_time, 2) or _at_or_before(
                 native_frames, valid_time, 25
             )
@@ -293,7 +464,7 @@ def _selected_satellite_frames(
             candidates = (
                 (
                     _at_or_before(anchor_frames, valid_time, broad_max_age),
-                    spec.layer_id,
+                    selection_layer_id,
                     broad_max_age,
                 ),
             )
@@ -308,7 +479,10 @@ def _selected_satellite_frames(
             source_path = str(frame.get("path", ""))
             if source_valid_time is None or not source_path:
                 continue
-            if source_valid_time > valid_time:
+            # Native GOES filenames use the nominal ten-minute slot while
+            # metadata preserves the scan start (typically :21 seconds). Treat
+            # that sub-slot offset as the same frame, not future imagery.
+            if source_valid_time - valid_time > dt.timedelta(minutes=2):
                 continue
             if (
                 source_max_age is not None
@@ -335,7 +509,7 @@ def _selected_satellite_frames(
                 25
                 if previous.encoded_source_layer == "raw-visir-native"
                 else 90
-                if spec.product_id == "bc-northeast-overlay"
+                if spec.domain_id == "bc" and spec.layer_id == "raw-visir" and spec.track == "live"
                 else broad_max_age
             )
             if (
@@ -557,12 +731,20 @@ def _rendered_layer_id(
     spec: ProfileSpec,
     domain: Mapping[str, Any],
 ) -> str:
-    if recipe_id == "model-hgt500":
+    archive_recipe_id = (
+        {
+            "lightning-trail": "lightning-hour",
+            "glm-lightning-trail": "glm-lightning-hour",
+        }.get(recipe_id, recipe_id)
+        if spec.track == "archive"
+        else recipe_id
+    )
+    if archive_recipe_id == "model-hgt500":
         base_id = "hrdps-hgt500" if spec.domain_id == "bc" else "ecmwf-hgt500"
-    elif recipe_id == "model-mslp":
+    elif archive_recipe_id == "model-mslp":
         base_id = "hrdps-mslp" if spec.domain_id == "bc" else "ecmwf-mslp"
     else:
-        base_id = recipe_id
+        base_id = archive_recipe_id
     region = REGIONAL_PRODUCT_KEYS.get(spec.product_id)
     if region and base_id in REGIONAL_LAYER_BASES:
         candidate = f"{base_id}-region-{region}"
@@ -659,7 +841,12 @@ def _prepare_satellite_images(
         f"static/{spec.domain_id}/base-dark.png",
     )
     with Image.open(base_path) as base_image:
-        base = _crop_resize(base_image, spec.viewport, spec.width, spec.height).convert("RGB")
+        base = _crop_resize(
+            base_image,
+            spec.resolved_media_viewport,
+            spec.resolved_media_width,
+            spec.resolved_media_height,
+        ).convert("RGB")
     rendered: dict[tuple[str, str], Path] = {}
     paths: list[Path] = []
     for frame in selected:
@@ -670,9 +857,9 @@ def _prepare_satellite_images(
             with Image.open(_safe_path(source_root, frame.source_path)) as source_image:
                 satellite = _crop_resize(
                     source_image,
-                    spec.viewport,
-                    spec.width,
-                    spec.height,
+                    spec.resolved_media_viewport,
+                    spec.resolved_media_width,
+                    spec.resolved_media_height,
                 )
                 composed = base.copy()
                 composed.paste(satellite.convert("RGB"), (0, 0), satellite.getchannel("A"))
@@ -781,6 +968,242 @@ def _encode_mp4(
             temporary.unlink(missing_ok=True)
 
 
+def _encode_ts(
+    ffmpeg: str,
+    images: Sequence[Path],
+    durations: Sequence[float],
+    destination: Path,
+    spec: ProfileSpec,
+) -> None:
+    if len(images) != len(durations) or not images:
+        raise ValueError("Segment encoding requires matching non-empty images and durations")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp.ts")
+    with tempfile.TemporaryDirectory(prefix="radarsat-video-segment-") as temporary_directory:
+        concat = Path(temporary_directory) / "frames.ffconcat"
+        lines = ["ffconcat version 1.0"]
+        for image, duration in zip(images, durations, strict=True):
+            lines.extend(
+                (
+                    f"file '{_ffconcat_path(image)}'",
+                    f"option framerate {FFCONCAT_TIMEBASE_FPS}",
+                    f"duration {duration:.6f}",
+                )
+            )
+        lines.extend(
+            (
+                f"file '{_ffconcat_path(images[-1])}'",
+                f"option framerate {FFCONCAT_TIMEBASE_FPS}",
+            )
+        )
+        concat.write_text("\n".join(lines) + "\n")
+        command = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            spec.preset,
+            "-crf",
+            str(spec.crf),
+            "-profile:v",
+            "high",
+            # Each immutable HLS segment is intentionally short and uses a
+            # sparse variable-frame-rate weather clock. B-frame reordering can
+            # push presentation timestamps beyond a segment's declared HLS
+            # duration (especially for one- to three-frame hourly groups),
+            # leaving MediaSource buffered but unable to present a frame.
+            "-bf",
+            "0",
+            "-pix_fmt",
+            "yuv420p",
+            "-fps_mode",
+            "vfr",
+            "-enc_time_base",
+            "-1",
+            "-x264-params",
+            (
+                f"keyint={len(images)}:min-keyint={len(images)}:"
+                "scenecut=0:bframes=0:force-cfr=0:colorprim=bt709:transfer=bt709:colormatrix=bt709"
+            ),
+            "-color_primaries",
+            "bt709",
+            "-color_trc",
+            "bt709",
+            "-colorspace",
+            "bt709",
+            "-color_range",
+            "tv",
+            "-mpegts_flags",
+            "+initial_discontinuity",
+            "-f",
+            "mpegts",
+            "-y",
+            str(temporary),
+        ]
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            if not temporary.is_file() or temporary.stat().st_size <= 0:
+                raise RuntimeError("ffmpeg produced no MPEG-TS output")
+            temporary.replace(destination)
+        except subprocess.CalledProcessError as error:
+            details = (error.stderr or error.stdout or "").strip()
+            raise RuntimeError(f"ffmpeg failed: {details[-2000:]}") from error
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def _segment_groups(
+    selected: Sequence[SelectedFrame],
+    track: str,
+) -> list[list[int]]:
+    grouped: dict[dt.datetime, list[int]] = {}
+    for index, frame in enumerate(selected):
+        valid = frame.valid_time.astimezone(UTC)
+        group_hours = 1 if track == "live" else 6
+        key = valid.replace(
+            hour=valid.hour - valid.hour % group_hours,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        grouped.setdefault(key, []).append(index)
+    return [grouped[key] for key in sorted(grouped)]
+
+
+def _atomic_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("w") as handle:
+            handle.write(value)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _build_hls_media(
+    source_root: Path,
+    output_root: Path,
+    spec: ProfileSpec,
+    selected: Sequence[SelectedFrame],
+    media_inputs: Sequence[Mapping[str, Any]],
+    durations: Sequence[float],
+    *,
+    ffmpeg: str,
+) -> tuple[Path, str, list[Mapping[str, Any]], list[float]]:
+    owner = f"shared-{spec.domain_id}-{spec.media_group}"
+    groups = _segment_groups(selected, spec.track)
+    adjusted_durations = list(durations)
+    segment_entries: list[Mapping[str, Any]] = []
+    for indexes in groups:
+        # The concat demuxer emits a final 1/50-second sentinel to materialize
+        # the preceding still's declared duration. Account for it explicitly
+        # so the HLS and meteorological clocks stay aligned across segments.
+        adjusted_durations[indexes[-1]] += 1 / FFCONCAT_TIMEBASE_FPS
+        segment_fingerprint = _hash_payload(
+            {
+                "videoRenderVersion": VIDEO_RENDER_VERSION,
+                "domainId": spec.domain_id,
+                "layerId": spec.layer_id,
+                "track": spec.track,
+                "mediaGroup": spec.media_group,
+                "mediaViewport": dict(spec.resolved_media_viewport),
+                "mediaWidth": spec.resolved_media_width,
+                "mediaHeight": spec.resolved_media_height,
+                "crf": spec.crf,
+                "preset": spec.preset,
+                "frames": [media_inputs[index] for index in indexes],
+                "durations": [durations[index] for index in indexes],
+            },
+            16,
+        )
+        start_stamp = selected[indexes[0]].valid_time.strftime("%Y%m%dT%H%MZ")
+        segment_path = (
+            output_root
+            / "video-segments"
+            / owner
+            / spec.layer_id
+            / spec.track
+            / f"{start_stamp}-{segment_fingerprint}.ts"
+        )
+        if not segment_path.is_file():
+            with tempfile.TemporaryDirectory(prefix=f"radarsat-{owner}-segment-") as temporary:
+                group_frames = [selected[index] for index in indexes]
+                prepared = _prepare_satellite_images(
+                    source_root,
+                    spec,
+                    group_frames,
+                    Path(temporary),
+                )
+                _encode_ts(
+                    ffmpeg,
+                    prepared,
+                    [durations[index] for index in indexes],
+                    segment_path,
+                    spec,
+                )
+        segment_entries.append(
+            {
+                "path": segment_path.relative_to(output_root).as_posix(),
+                "byteLength": segment_path.stat().st_size,
+                "sha256": _sha256_file(segment_path),
+                "durationSeconds": round(
+                    sum(adjusted_durations[index] for index in indexes), 6
+                ),
+                "firstFrame": indexes[0],
+                "lastFrame": indexes[-1],
+            }
+        )
+    playlist_fingerprint = _hash_payload(
+        {
+            "videoRenderVersion": VIDEO_RENDER_VERSION,
+            "segments": segment_entries,
+        }
+    )
+    end_stamp = selected[-1].valid_time.strftime("%Y%m%dT%H%MZ")
+    playlist_path = (
+        output_root
+        / "videos"
+        / owner
+        / spec.layer_id
+        / spec.track
+        / f"{end_stamp}-{playlist_fingerprint}.m3u8"
+    )
+    if not playlist_path.is_file():
+        target_duration = max(
+            1,
+            math.ceil(max(float(entry["durationSeconds"]) for entry in segment_entries)),
+        )
+        lines = [
+            "#EXTM3U",
+            "#EXT-X-VERSION:3",
+            f"#EXT-X-TARGETDURATION:{target_duration}",
+            "#EXT-X-MEDIA-SEQUENCE:0",
+            "#EXT-X-PLAYLIST-TYPE:VOD",
+        ]
+        for index, entry in enumerate(segment_entries):
+            if index:
+                lines.append("#EXT-X-DISCONTINUITY")
+            lines.append(f"#EXTINF:{float(entry['durationSeconds']):.6f},")
+            segment_absolute = output_root / str(entry["path"])
+            lines.append(os.path.relpath(segment_absolute, playlist_path.parent))
+        lines.append("#EXT-X-ENDLIST")
+        _atomic_text(playlist_path, "\n".join(lines) + "\n")
+    return playlist_path, playlist_fingerprint, segment_entries, adjusted_durations
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -810,6 +1233,15 @@ def _manifest_dependencies(output_root: Path, manifests: Iterable[Path]) -> set[
                 dependencies.add(_safe_path(output_root, str(media["path"])))
             except (ValueError, FileNotFoundError):
                 pass
+            segments = media.get("segments")
+            if isinstance(segments, list):
+                for segment in segments:
+                    if not isinstance(segment, Mapping) or not segment.get("path"):
+                        continue
+                    try:
+                        dependencies.add(_safe_path(output_root, str(segment["path"])))
+                    except (ValueError, FileNotFoundError):
+                        pass
         proxies = manifest.get("proxies")
         values = proxies.values() if isinstance(proxies, Mapping) else []
         for proxy in values:
@@ -850,6 +1282,10 @@ def prune_local_video_orphans(
                     manifest.unlink(missing_ok=True)
                     removed_manifests += 1
     dependencies = _manifest_dependencies(output_root, kept_manifests)
+    all_manifest_dependencies = _manifest_dependencies(
+        output_root,
+        (output_root / "video-manifests").rglob("*.json"),
+    )
     removed_dependencies = 0
     for prefix in ("videos", "video-proxies"):
         root = output_root / prefix / product_id
@@ -857,6 +1293,29 @@ def prune_local_video_orphans(
             continue
         for path in root.rglob("*"):
             if not path.is_file() or path in dependencies:
+                continue
+            if current - path.stat().st_mtime <= grace_seconds:
+                continue
+            path.unlink(missing_ok=True)
+            removed_dependencies += 1
+    videos_root = output_root / "videos"
+    if videos_root.exists():
+        for shared_root in videos_root.glob("shared-*"):
+            if not shared_root.is_dir():
+                continue
+            for path in shared_root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if path in all_manifest_dependencies:
+                    continue
+                if current - path.stat().st_mtime <= grace_seconds:
+                    continue
+                path.unlink(missing_ok=True)
+                removed_dependencies += 1
+    segment_root = output_root / "video-segments"
+    if segment_root.exists():
+        for path in segment_root.rglob("*.ts"):
+            if path in all_manifest_dependencies:
                 continue
             if current - path.stat().st_mtime <= grace_seconds:
                 continue
@@ -880,40 +1339,20 @@ def build_profile(
 ) -> Mapping[str, Any]:
     source_root = source_root.resolve()
     output_root = output_root.resolve()
-    selected = _selected_satellite_frames(catalog, spec, min(hours, 24.0))
+    selected = _selected_satellite_frames(catalog, spec, hours)
     if len(selected) < 2:
         raise RuntimeError(f"{spec.product_id} has fewer than two usable satellite frames")
     media_inputs = [_source_fingerprint(source_root, frame) for frame in selected]
-    media_fingerprint = _hash_payload(
-        {
-            "schemaVersion": VIDEO_SCHEMA_VERSION,
-            "videoRenderVersion": VIDEO_RENDER_VERSION,
-            "profile": {
-                "productId": spec.product_id,
-                "domainId": spec.domain_id,
-                "layerId": spec.layer_id,
-                "track": spec.track,
-                "viewport": dict(spec.viewport),
-                "width": spec.width,
-                "height": spec.height,
-                "cadenceMinutes": spec.cadence_minutes,
-                "crf": spec.crf,
-                "preset": spec.preset,
-                "gopFrames": spec.gop_frames,
-            },
-            "frames": media_inputs,
-        }
+    media_path, media_fingerprint, segment_entries, durations = _build_hls_media(
+        source_root,
+        output_root,
+        spec,
+        selected,
+        media_inputs,
+        _frame_durations(selected, spec.cadence_minutes),
+        ffmpeg=ffmpeg,
     )
     end_stamp = selected[-1].valid_time.strftime("%Y%m%dT%H%MZ")
-    media_generation = f"{end_stamp}-{media_fingerprint}"
-    media_path = (
-        output_root
-        / "videos"
-        / spec.product_id
-        / spec.layer_id
-        / spec.track
-        / f"{media_generation}.mp4"
-    )
 
     proxy_selections = _proxy_selections(catalog, spec, selected)
     unique_proxy_sources: dict[str, ProxyLayerSelection] = {}
@@ -996,20 +1435,6 @@ def build_profile(
             "proxyWarnings": len(proxy_warnings),
         }
 
-    if not media_path.is_file():
-        with tempfile.TemporaryDirectory(prefix=f"radarsat-{spec.product_id}-") as temporary:
-            prepared = _prepare_satellite_images(
-                source_root, spec, selected, Path(temporary)
-            )
-            _encode_mp4(
-                ffmpeg,
-                prepared,
-                _frame_durations(selected, spec.cadence_minutes),
-                media_path,
-                spec,
-            )
-
-    durations = _frame_durations(selected, spec.cadence_minutes)
     pts = 0.0
     frame_manifest: list[dict[str, Any]] = []
     for index, (frame, duration, frame_proxy_layers) in enumerate(
@@ -1039,20 +1464,22 @@ def build_profile(
         "domainId": spec.domain_id,
         "layerId": spec.layer_id,
         "track": spec.track,
-        "transport": "progressive-mp4",
+        "transport": "hls-ts",
         "cadenceMinutes": spec.cadence_minutes,
         "width": spec.width,
         "height": spec.height,
         "viewport": dict(spec.viewport),
+        "mediaViewport": dict(spec.resolved_media_viewport),
         "media": {
             "path": media_path.relative_to(output_root).as_posix(),
-            "mimeType": "video/mp4",
+            "mimeType": "application/vnd.apple.mpegurl",
             "codec": "avc1",
-            "width": spec.width,
-            "height": spec.height,
+            "width": spec.resolved_media_width,
+            "height": spec.resolved_media_height,
             "byteLength": media_path.stat().st_size,
             "sha256": _sha256_file(media_path),
             "fingerprint": media_fingerprint,
+            "segments": segment_entries,
         },
         "frames": frame_manifest,
         "proxies": proxy_entries,
@@ -1084,7 +1511,9 @@ def build_profile(
         "generation": generation,
         "manifestPath": manifest_path.relative_to(output_root).as_posix(),
         "mediaPath": media_path.relative_to(output_root).as_posix(),
-        "mediaBytes": media_path.stat().st_size,
+        "mediaBytes": media_path.stat().st_size
+        + sum(int(entry["byteLength"]) for entry in segment_entries),
+        "segments": len(segment_entries),
         "frames": len(selected),
         "proxies": len(proxy_entries),
         "proxyWarnings": len(proxy_warnings),
@@ -1099,23 +1528,24 @@ def build_satellite_videos(
     product_ids: Iterable[str] | None = None,
     ffmpeg: str | None = None,
     hours: float = 24.0,
+    archive_hours: float = 168.0,
     now: dt.datetime | None = None,
 ) -> Mapping[str, Any]:
-    if hours <= 0:
-        raise ValueError("hours must be positive")
+    if hours <= 0 or archive_hours <= 0:
+        raise ValueError("hours and archive_hours must be positive")
     source_root = source_root.resolve()
     output_root = (output_root or source_root).resolve()
     executable = ffmpeg or shutil.which("ffmpeg")
     if not executable:
         raise RuntimeError("ffmpeg with libx264 is required to build satellite video")
-    requested = set(product_ids or (spec.product_id for spec in PILOT_PROFILES))
-    unknown = requested.difference(spec.product_id for spec in PILOT_PROFILES)
+    requested = set(product_ids or (spec.product_id for spec in VIDEO_PROFILES))
+    unknown = requested.difference(spec.product_id for spec in VIDEO_PROFILES)
     if unknown:
-        raise ValueError(f"Unsupported pilot products: {sorted(unknown)}")
+        raise ValueError(f"Unsupported video products: {sorted(unknown)}")
     catalog = build_catalog(source_root)
     results: list[Mapping[str, Any]] = []
     failures: list[Mapping[str, str]] = []
-    for spec in PILOT_PROFILES:
+    for spec in VIDEO_PROFILES:
         if spec.product_id not in requested:
             continue
         try:
@@ -1126,7 +1556,7 @@ def build_satellite_videos(
                     catalog,
                     spec,
                     ffmpeg=executable,
-                    hours=min(hours, 24.0),
+                    hours=min(hours, 24.0) if spec.track == "live" else min(archive_hours, 168.0),
                     now=now,
                 )
             )
@@ -1134,6 +1564,8 @@ def build_satellite_videos(
             failures.append(
                 {
                     "productId": spec.product_id,
+                    "layerId": spec.layer_id,
+                    "track": spec.track,
                     "error": f"{type(error).__name__}: {error}",
                 }
             )

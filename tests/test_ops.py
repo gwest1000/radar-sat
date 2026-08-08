@@ -173,6 +173,52 @@ def add_video_profile(
     return {media_relative, manifest_relative, proxy_relative, static_relative}
 
 
+def add_hls_video_profile(
+    root: Path,
+    generation: str = "20260720T2340Z-abcdef012345",
+) -> set[str]:
+    expected = add_video_profile(root, generation)
+    manifest_relative = next(key for key in expected if key.startswith("video-manifests/"))
+    manifest_path = root / manifest_relative
+    payload = json.loads(manifest_path.read_text())
+    old_media = root / payload["media"]["path"]
+    old_media.unlink()
+    media_relative = (
+        "videos/shared-bc-regional-hires/raw-visir/live/"
+        "20260720T2340Z-fedcba543210.m3u8"
+    )
+    segment_relative = (
+        "video-segments/shared-bc-regional-hires/raw-visir/live/"
+        "20260720T2300Z-0123456789abcdef.ts"
+    )
+    media = root / media_relative
+    segment = root / segment_relative
+    media.parent.mkdir(parents=True, exist_ok=True)
+    segment.parent.mkdir(parents=True, exist_ok=True)
+    segment.write_bytes(b"test-mpeg-ts")
+    media.write_text("#EXTM3U\n#EXTINF:1.0,\nsegment.ts\n#EXT-X-ENDLIST\n")
+    payload["transport"] = "hls-ts"
+    payload["domainId"] = "bc"
+    payload["media"] = {
+        "path": media_relative,
+        "mimeType": "application/vnd.apple.mpegurl",
+        "byteLength": media.stat().st_size,
+        "segments": [
+            {
+                "path": segment_relative,
+                "byteLength": segment.stat().st_size,
+                "durationSeconds": 1.0,
+                "firstFrame": 0,
+                "lastFrame": 1,
+            }
+        ],
+    }
+    manifest_path.write_text(json.dumps(payload))
+    expected.remove(old_media.relative_to(root).as_posix())
+    expected.update({media_relative, segment_relative})
+    return expected
+
+
 class FakeR2:
     def __init__(
         self,
@@ -353,15 +399,18 @@ class ConfigurationTests(unittest.TestCase):
         )
         self.assertNotIn("immutable", cache_control("metadata/bc/daynight/frame.json"))
 
-    def test_versioned_video_assets_are_immutable_with_mp4_mime(self) -> None:
+    def test_versioned_video_assets_are_immutable_with_video_mime(self) -> None:
         for key in (
             "videos/bc-northeast-overlay/raw-visir/live/generation.mp4",
             "video-manifests/bc-northeast-overlay/raw-visir/live/generation.json",
             "video-proxies/bc-northeast-overlay/radar-rain/hash.png",
             "video-static-overlays/bc-northeast-overlay/hash.png",
+            "video-segments/shared-bc-full/raw-visir/live/hash.ts",
         ):
             self.assertEqual(cache_control(key), "public, max-age=31536000, immutable")
         self.assertEqual(content_type(Path("satellite.MP4")), "video/mp4")
+        self.assertEqual(content_type(Path("satellite.m3u8")), "application/vnd.apple.mpegurl")
+        self.assertEqual(content_type(Path("satellite.ts")), "video/mp2t")
 
     @mock.patch("radarsat.r2.keychain_password")
     def test_environment_precedes_scoped_keychain(self, password: mock.Mock) -> None:
@@ -436,6 +485,18 @@ class PublisherTests(unittest.TestCase):
             self.assertTrue(expected.issubset(keys))
             published = json.loads(payload)
             self.assertIn("videoProfiles", published)
+
+    def test_hls_manifest_playlist_and_segments_are_discovered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_hls_video_profile(root)
+
+            objects, payload = discover_objects(root)
+
+            self.assertTrue(expected.issubset({item.key for item in objects}))
+            self.assertIn("videoProfiles", json.loads(payload))
 
     def test_incomplete_video_profile_fails_open_to_image_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
