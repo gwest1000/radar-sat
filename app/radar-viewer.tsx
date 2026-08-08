@@ -187,7 +187,7 @@ const SOURCE_SUMMARIES: Record<string, string> = {
   "ECCC GeoMet": "Canadian radar, precipitation type and ECCC-rendered satellite products.",
   "ECCC Datamart": "Native MSC GOES RGB satellite products and Canadian Lightning Detection Network observations.",
   "ECCC HRDPS Continental 2.5 km": "Hourly 500 hPa geopotential-height and mean sea-level-pressure model contours.",
-  "ECMWF IFS Control": "Three-hour 500 hPa geopotential-height and mean sea-level-pressure control-forecast contours on the large domains.",
+  "ECMWF IFS Control": "Hourly 500 hPa geopotential-height and mean sea-level-pressure contours, linearly interpolated from three-hour control-forecast fields on the large domains.",
   "NRCan CWFIS": "Timestamped satellite thermal detections and Canadian active-fire records.",
   "BC Wildfire Service": "Official BC active fires and Wildfires of Note.",
   "NIFC WFIGS": "Current U.S. ICS-209 large-incident locations.",
@@ -754,7 +754,7 @@ function rasterLayerId(
   domain: Domain,
   hourlyLightning = false,
 ): string {
-  const baseId = hourlyLightning
+  let baseId = hourlyLightning
     ? recipeId === "lightning-trail"
       ? "lightning-hour"
       : recipeId === "glm-lightning-trail"
@@ -762,13 +762,22 @@ function rasterLayerId(
         : recipeId
     : recipeId;
   if (baseId === "model-hgt500") {
-    return product.domain === "bc" ? "hrdps-hgt500" : "ecmwf-hgt500";
-  }
-  if (baseId === "model-mslp") {
-    return product.domain === "bc" ? "hrdps-mslp" : "ecmwf-mslp";
+    baseId = product.domain === "bc" ? "hrdps-hgt500" : "ecmwf-hgt500";
+  } else if (baseId === "model-mslp") {
+    baseId = product.domain === "bc" ? "hrdps-mslp" : "ecmwf-mslp";
   }
   const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
-  if (product.domain === "bc" && regionKey && ["lightning-trail", "lightning-hour", "hotspots"].includes(baseId)) {
+  if (
+    product.domain === "bc"
+    && regionKey
+    && [
+      "lightning-trail",
+      "lightning-hour",
+      "hotspots",
+      "hrdps-hgt500",
+      "hrdps-mslp",
+    ].includes(baseId)
+  ) {
     const candidate = `${baseId}-region-${regionKey}`;
     if (domain.layers[candidate]?.frames?.length) return candidate;
   }

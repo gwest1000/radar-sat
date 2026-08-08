@@ -53,11 +53,11 @@ from .point_frames import (
 
 
 UTC = dt.timezone.utc
-LIGHTNING_TRAIL_RENDER_VERSION = 8
-LIGHTNING_HOUR_RENDER_VERSION = 2
+LIGHTNING_TRAIL_RENDER_VERSION = 9
+LIGHTNING_HOUR_RENDER_VERSION = 3
 LIGHTNING_FLASH_RENDER_VERSION = 9
-LIGHTNING_REGIONAL_RENDER_VERSION = 6
-LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 3
+LIGHTNING_REGIONAL_RENDER_VERSION = 7
+LIGHTNING_REGIONAL_HOUR_RENDER_VERSION = 4
 LIGHTNING_REGIONAL_FLASH_RENDER_VERSION = 11
 LIGHTNING_POINT_RENDER_VERSION = 1
 HOTSPOT_RENDER_VERSION = 4
@@ -754,20 +754,25 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
     if not lightning_times:
         return
     cutoff = max(lightning_times) - dt.timedelta(hours=hours)
-    all_anchors = set(radar_times or lightning_times)
-    if radar_times:
-        # Normal six-minute composite scans remain the display clock. During a
-        # workstation outage, however, GeoMet cannot backfill the full native
-        # queue window. Add a ten-minute lightning anchor only where there is a
-        # real gap in the local radar archive, so recovered lightning is not
-        # silently stranded as an unused source frame.
-        for lightning_time in lightning_times:
-            has_nearby_radar = any(
-                abs((radar_time - lightning_time).total_seconds()) <= 6 * 60
-                for radar_time in radar_times
-            )
-            if not has_nearby_radar:
-                all_anchors.add(lightning_time)
+    anchor_start = cutoff.replace(
+        minute=cutoff.minute - cutoff.minute % 10,
+        second=0,
+        microsecond=0,
+    )
+    newest_observation = max(
+        lightning_times[-1],
+        radar_times[-1] if radar_times else lightning_times[-1],
+    )
+    anchor_end = newest_observation.replace(
+        minute=newest_observation.minute - newest_observation.minute % 10,
+        second=0,
+        microsecond=0,
+    )
+    all_anchors: set[dt.datetime] = set()
+    anchor_cursor = anchor_start
+    while anchor_cursor <= anchor_end:
+        all_anchors.add(anchor_cursor)
+        anchor_cursor += dt.timedelta(minutes=10)
     anchors = sorted(value for value in all_anchors if value >= cutoff)
     output_layer = LAYERS["lightning-trail"]
     hour_layer = LAYERS["lightning-hour"]
@@ -799,10 +804,9 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
     source_layer = LAYERS["lightning"]
     regional_cutoff = max(lightning_times) - dt.timedelta(hours=24)
 
-    # A previous capability-timeline implementation could manufacture derived
-    # frames for anchors whose source radar frame was never downloaded.  Keep
-    # only anchors represented in the local archive.  Older, legitimately
-    # retained anchors remain valid because ``all_anchors`` is not hour-limited.
+    # The display clock is ten-minute satellite time, not six-minute radar
+    # time. Canonical ten-minute trail anchors keep new bolts, their halo and
+    # their 10/20-minute age states synchronized with every displayed frame.
     valid_anchor_stamps = {frame_stamp(value) for value in all_anchors}
     regional_anchor_stamps = {
         frame_stamp(value)
@@ -936,7 +940,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         for offset in offsets:
             target = anchor - dt.timedelta(minutes=offset)
             selected = at_or_before(lightning_times, target)
-            if selected is not None and target - selected > dt.timedelta(minutes=10):
+            if selected is not None and target - selected > dt.timedelta(minutes=2):
                 selected = None
             if selected in used:
                 selected = None

@@ -430,10 +430,10 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     "northeast": {"left": 0.3946, "top": 0.1525, "width": 0.5020, "height": 0.4422},
 }
 
-# BC XL already uses the complete east/west source raster. A slight vertical
-# trim makes the operational display wider without inventing pixels outside
-# the retained seven-day archive or shifting older frames onto new bounds.
-BC_XL_VIEWPORT = {"left": 0.0, "top": 0.0250, "width": 1.0, "height": 0.9500}
+# BC XL already uses the complete east/west source raster. A modest vertical
+# trim lets that full retained width occupy more of the widescreen map stage
+# without changing georegistration or invalidating the seven-day archive.
+BC_XL_VIEWPORT = {"left": 0.0, "top": 0.0500, "width": 1.0, "height": 0.9000}
 
 
 def regional_layer_id(base_layer_id: str, region_id: str) -> str:
@@ -455,19 +455,31 @@ for _region_id in VIEWPORTS:
             source="NRCan CWFIS" if _base_layer_id == "hotspots" else "ECCC GeoMet",
             max_age_minutes=_max_age,
         )
+    for _base_layer_id, _title in (
+        ("hrdps-hgt500", "HRDPS 500 hPa geopotential height"),
+        ("hrdps-mslp", "HRDPS mean sea-level pressure"),
+    ):
+        _layer_id = regional_layer_id(_base_layer_id, _region_id)
+        LAYERS[_layer_id] = Layer(
+            id=_layer_id,
+            title=f"{_title} · {_region_id} crop",
+            source_layer=None,
+            source="ECCC HRDPS Continental 2.5 km",
+            max_age_minutes=90,
+        )
 
 
 BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
     # 170 E–102 W, 20–66 N: the eastern half of the North Pacific through the
     # eastern edge of Colorado, without Kamchatka or the far tropical Pacific.
-    "pacific-wna": {"left": 0.2341, "top": 0.1479, "width": 0.6076, "height": 0.7117},
+    "pacific-wna": {"left": 0.2100, "top": 0.1479, "width": 0.6500, "height": 0.7117},
     # Crop the continental display near 69 N and the eastern edge of Maine.
     # Keeping the source grid intact means satellite, radar and hazards remain
     # pixel-registered while the browser devotes its space to useful terrain.
-    "north-america": {"left": 0.0, "top": 0.1763, "width": 0.8772, "height": 0.8237},
+    "north-america": {"left": 0.0, "top": 0.1763, "width": 0.8600, "height": 0.7800},
     # Retain the full Pacific western edge, remove the high Arctic above 69 N,
     # and stop at 120 W along the straight BC–Alberta boundary.
-    "north-pacific": {"left": 0.0, "top": 0.075936, "width": 0.735882, "height": 0.924064},
+    "north-pacific": {"left": 0.0, "top": 0.075936, "width": 0.770000, "height": 0.900000},
 }
 
 
@@ -510,15 +522,15 @@ def _overlay_product(
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
-            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
-            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "watersheds", "opacity": 1.0},
             {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
             {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
         ],
-        "legends": ["radar-rain", "ptype", "model-hgt500", "model-mslp", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
+        "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
             (
                 "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5°N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback."
@@ -572,20 +584,18 @@ def _broad_product(
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
-            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
-            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
             {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "lightning-trail", "opacity": 1.0, "enabledWith": "glm-lightning-trail"},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
         ],
         "legends": [
             anchor_layer,
             "radar-rain",
             "ptype",
-            "model-hgt500",
-            "model-mslp",
             "glm-lightning-age",
             "smoke-confidence",
             "hotspots",

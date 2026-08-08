@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-08T00:23:02.833812Z",
+  "generatedAt": "2026-08-08T02:01:22.135970Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -5002,18 +5002,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-hgt500",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
-          "id": "model-mslp",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5036,13 +5024,23 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "model-mslp",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "model-hgt500",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         }
       ],
       "legends": [
         "radar-rain",
         "ptype",
-        "model-hgt500",
-        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5060,9 +5058,9 @@
       ],
       "viewport": {
         "left": 0.0,
-        "top": 0.025,
+        "top": 0.05,
         "width": 1.0,
-        "height": 0.95
+        "height": 0.9
       }
     },
     {
@@ -5161,18 +5159,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-hgt500",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
-          "id": "model-mslp",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5195,13 +5181,23 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "model-mslp",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "model-hgt500",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         }
       ],
       "legends": [
         "radar-rain",
         "ptype",
-        "model-hgt500",
-        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5321,18 +5317,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-hgt500",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
-          "id": "model-mslp",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5355,13 +5339,23 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "model-mslp",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "model-hgt500",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         }
       ],
       "legends": [
         "radar-rain",
         "ptype",
-        "model-hgt500",
-        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5481,18 +5475,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-hgt500",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
-          "id": "model-mslp",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5515,13 +5497,23 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "model-mslp",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "model-hgt500",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         }
       ],
       "legends": [
         "radar-rain",
         "ptype",
-        "model-hgt500",
-        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5641,18 +5633,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-hgt500",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
-          "id": "model-mslp",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
           "id": "watersheds",
           "opacity": 1.0
         },
@@ -5675,13 +5655,23 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "model-mslp",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "model-hgt500",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         }
       ],
       "legends": [
         "radar-rain",
         "ptype",
-        "model-hgt500",
-        "model-mslp",
         "lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5766,18 +5756,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-mslp",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
-          "id": "model-hgt500",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
           "id": "transmission-lines",
           "opacity": 1.0
         },
@@ -5801,14 +5779,24 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "model-mslp",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "model-hgt500",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         }
       ],
       "legends": [
         "raw-ir",
         "radar-rain",
         "ptype",
-        "model-hgt500",
-        "model-mslp",
         "glm-lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5824,9 +5812,9 @@
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration."
       ],
       "viewport": {
-        "left": 0.2341,
+        "left": 0.21,
         "top": 0.1479,
-        "width": 0.6076,
+        "width": 0.65,
         "height": 0.7117
       }
     },
@@ -5891,18 +5879,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-mslp",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
-          "id": "model-hgt500",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
           "id": "transmission-lines",
           "opacity": 1.0
         },
@@ -5926,14 +5902,24 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "model-mslp",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "model-hgt500",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         }
       ],
       "legends": [
         "westwx-ir",
         "radar-rain",
         "ptype",
-        "model-hgt500",
-        "model-mslp",
         "glm-lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -5951,8 +5937,8 @@
       "viewport": {
         "left": 0.0,
         "top": 0.1763,
-        "width": 0.8772,
-        "height": 0.8237
+        "width": 0.86,
+        "height": 0.78
       }
     },
     {
@@ -6016,18 +6002,6 @@
           "choiceGroup": "precipitation"
         },
         {
-          "id": "model-mslp",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
-          "id": "model-hgt500",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false
-        },
-        {
           "id": "transmission-lines",
           "opacity": 1.0
         },
@@ -6051,14 +6025,24 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true
+        },
+        {
+          "id": "model-mslp",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
+        },
+        {
+          "id": "model-hgt500",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false
         }
       ],
       "legends": [
         "raw-ir",
         "radar-rain",
         "ptype",
-        "model-hgt500",
-        "model-mslp",
         "glm-lightning-age",
         "smoke-confidence",
         "hotspots",
@@ -6076,8 +6060,8 @@
       "viewport": {
         "left": 0.0,
         "top": 0.075936,
-        "width": 0.735882,
-        "height": 0.924064
+        "width": 0.77,
+        "height": 0.9
       }
     }
   ],

@@ -667,13 +667,14 @@ class NativeRenderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
             domain = test_domain()
-            source = frame_path(output, domain, LAYERS["lightning"], VALID)
+            first_time = VALID.replace(minute=10)
+            source = frame_path(output, domain, LAYERS["lightning"], first_time)
             source.parent.mkdir(parents=True, exist_ok=True)
             image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
             image.putpixel((60, 45), (0, 45, 255, 255))
             image.save(source, "PNG")
-            write_metadata(output, domain, LAYERS["lightning"], VALID, source)
-            for radar_time in (VALID, VALID + dt.timedelta(minutes=6)):
+            write_metadata(output, domain, LAYERS["lightning"], first_time, source)
+            for radar_time in (first_time, first_time + dt.timedelta(minutes=10)):
                 radar = frame_path(output, domain, LAYERS["radar-rain"], radar_time)
                 radar.parent.mkdir(parents=True, exist_ok=True)
                 Image.new(
@@ -689,9 +690,9 @@ class NativeRenderTests(unittest.TestCase):
                 output,
                 domain,
                 LAYERS["lightning-trail"],
-                VALID,
+                first_time,
             ).read_text())
-            next_time = VALID + dt.timedelta(minutes=6)
+            next_time = first_time + dt.timedelta(minutes=10)
             next_meta = json.loads(metadata_path(
                 output,
                 domain,
@@ -704,7 +705,7 @@ class NativeRenderTests(unittest.TestCase):
                 output,
                 domain,
                 LAYERS["lightning-trail"],
-                VALID,
+                first_time,
             )) as first_frame:
                 self.assertEqual(first_frame.mode, "RGBA")
             with Image.open(frame_path(
@@ -743,18 +744,19 @@ class NativeRenderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
             domain = test_domain()
-            old = VALID - dt.timedelta(hours=8)
-            for valid in (old, VALID):
+            newest = VALID.replace(minute=10)
+            old = newest - dt.timedelta(hours=8)
+            for valid in (old, newest):
                 source = frame_path(output, domain, LAYERS["lightning"], valid)
                 source.parent.mkdir(parents=True, exist_ok=True)
                 image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
                 image.putpixel((60, 45), (0, 45, 255, 255))
                 image.save(source, "PNG")
                 write_metadata(output, domain, LAYERS["lightning"], valid, source)
-            radar = frame_path(output, domain, LAYERS["radar-rain"], VALID)
+            radar = frame_path(output, domain, LAYERS["radar-rain"], newest)
             radar.parent.mkdir(parents=True, exist_ok=True)
             Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0)).save(radar, "PNG")
-            write_metadata(output, domain, LAYERS["radar-rain"], VALID, radar)
+            write_metadata(output, domain, LAYERS["radar-rain"], newest, radar)
 
             derive_lightning_trails(output, domain, {}, hours=12)
 

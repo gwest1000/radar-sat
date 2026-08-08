@@ -159,7 +159,7 @@ class LightningCleanupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             domain = DOMAINS["bc"]
-            valid = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            valid = dt.datetime(2026, 7, 20, 23, 40, tzinfo=UTC)
             for layer_id in ("lightning", "radar-rain"):
                 layer = LAYERS[layer_id]
                 path = frame_path(root, domain, layer, valid)
@@ -178,7 +178,7 @@ class LightningCleanupTests(unittest.TestCase):
             self.assertFalse(metadata_path(root, domain, derived, invalid).exists())
             self.assertTrue(frame_path(root, domain, derived, valid).exists())
             payload = json.loads(metadata_path(root, domain, derived, valid).read_text())
-            self.assertEqual(payload["sourceTimes"]["age0"], "2026-07-20T23:42:00Z")
+            self.assertEqual(payload["sourceTimes"]["age0"], "2026-07-20T23:40:00Z")
 
     def test_archive_metadata_cannot_escape_output_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

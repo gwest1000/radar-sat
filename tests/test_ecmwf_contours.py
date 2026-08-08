@@ -10,7 +10,13 @@ import numpy as np
 from PIL import Image
 
 from radarsat.config import Domain
-from radarsat.ecmwf_contours import UTC, available_runs, interpolate_global_field
+from radarsat.ecmwf_contours import (
+    UTC,
+    available_interpolation_runs,
+    available_runs,
+    interpolate_global_field,
+    interpolate_in_time,
+)
 from radarsat.hrdps_contours import FIELD_STYLES, render_contours
 
 
@@ -55,13 +61,13 @@ class EcmwfContourTests(unittest.TestCase):
                 self.assertEqual(rendered.size, (320, 240))
             self.assertAlmostEqual(
                 height_summary["lineWidth"],
-                FIELD_STYLES[0].linewidth * 0.75,
+                FIELD_STYLES[0].linewidth * 0.5625,
             )
             self.assertAlmostEqual(
                 pressure_summary["lineWidth"],
                 FIELD_STYLES[1].linewidth * 0.90,
             )
-            self.assertEqual(height_summary["labelScale"], 0.90)
+            self.assertEqual(height_summary["labelScale"], 0.45)
             self.assertEqual(height_summary["centreScale"], 0.50)
 
     def test_newest_three_hour_covering_run_is_preferred(self) -> None:
@@ -76,6 +82,17 @@ class EcmwfContourTests(unittest.TestCase):
             runs = available_runs(root, valid)
             self.assertEqual(runs[0][1:], (dt.datetime(2026, 8, 7, 12, tzinfo=UTC), 9))
             self.assertEqual(available_runs(root, valid + dt.timedelta(hours=1)), [])
+            hourly = available_interpolation_runs(
+                root,
+                valid + dt.timedelta(hours=1),
+            )
+            self.assertEqual(hourly[0][1:5], (
+                dt.datetime(2026, 8, 7, 12, tzinfo=UTC),
+                10,
+                9,
+                12,
+            ))
+            self.assertAlmostEqual(hourly[0][5], 1 / 3)
 
     def test_global_interpolation_wraps_across_zero_longitude(self) -> None:
         domain = Domain(
@@ -96,6 +113,16 @@ class EcmwfContourTests(unittest.TestCase):
         rendered = interpolate_global_field(values, latitudes, longitudes, domain)
         self.assertTrue(np.isfinite(rendered).all())
         self.assertAlmostEqual(float(rendered[1, 2]), 10.0, places=4)
+
+    def test_hourly_field_is_a_linear_blend_of_three_hour_fields(self) -> None:
+        lower = np.asarray([[0.0, 30.0], [60.0, np.nan]], dtype=np.float32)
+        upper = np.asarray([[30.0, 60.0], [90.0, np.nan]], dtype=np.float32)
+        blended = interpolate_in_time(lower, upper, 1 / 3)
+        np.testing.assert_allclose(
+            blended,
+            np.asarray([[10.0, 40.0], [70.0, np.nan]], dtype=np.float32),
+            equal_nan=True,
+        )
 
 
 if __name__ == "__main__":

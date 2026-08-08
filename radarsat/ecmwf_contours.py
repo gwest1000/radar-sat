@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 from dataclasses import replace
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
@@ -54,6 +55,46 @@ def available_runs(data_root: Path, valid_time: dt.datetime) -> list[tuple[Path,
     return sorted(candidates, key=lambda item: item[1], reverse=True)
 
 
+def available_interpolation_runs(
+    data_root: Path,
+    valid_time: dt.datetime,
+) -> list[tuple[Path, dt.datetime, int, int, int, float]]:
+    """Return runs with the bracketing three-hour fields for an hourly valid."""
+    candidates: list[tuple[Path, dt.datetime, int, int, int, float]] = []
+    if not data_root.exists():
+        return candidates
+    for date_path in data_root.iterdir():
+        if not date_path.is_dir() or len(date_path.name) != 8 or not date_path.name.isdigit():
+            continue
+        for cycle_path in date_path.iterdir():
+            if not cycle_path.is_dir() or cycle_path.name not in {"00", "06", "12", "18"}:
+                continue
+            try:
+                init_time = dt.datetime.strptime(
+                    f"{date_path.name}{cycle_path.name}", "%Y%m%d%H"
+                ).replace(tzinfo=UTC)
+            except ValueError:
+                continue
+            lead_hours = (valid_time - init_time).total_seconds() / 3600.0
+            lead = int(round(lead_hours))
+            if (
+                init_time > valid_time
+                or abs(lead_hours - lead) >= 1e-6
+                or not 0 <= lead <= MAX_FORECAST_HOUR
+                or not (cycle_path / "pl_cf.grib2").is_file()
+                or not (cycle_path / "sfc_cf.grib2").is_file()
+            ):
+                continue
+            lower = lead - lead % 3
+            upper = lower if lead % 3 == 0 else lower + 3
+            if upper > MAX_FORECAST_HOUR:
+                continue
+            weight = 0.0 if upper == lower else (lead - lower) / (upper - lower)
+            candidates.append((cycle_path, init_time, lead, lower, upper, weight))
+    return sorted(candidates, key=lambda item: item[1], reverse=True)
+
+
+@lru_cache(maxsize=12)
 def read_matching_field(
     path: Path,
     short_name: str,
@@ -135,6 +176,24 @@ def interpolate_global_field(
     return interpolator(points).reshape(domain.height, domain.width).astype(np.float32)
 
 
+def interpolate_in_time(
+    lower_values: np.ndarray,
+    upper_values: np.ndarray,
+    weight: float,
+) -> np.ndarray:
+    """Linearly blend two three-hour model fields to an intervening hour."""
+    if lower_values.shape != upper_values.shape:
+        raise ValueError("ECMWF interpolation fields do not share a grid")
+    if not 0.0 <= weight <= 1.0:
+        raise ValueError("ECMWF interpolation weight must be between zero and one")
+    if weight == 0.0:
+        return np.asarray(lower_values, dtype=np.float32)
+    return (
+        np.asarray(lower_values, dtype=np.float32) * (1.0 - weight)
+        + np.asarray(upper_values, dtype=np.float32) * weight
+    ).astype(np.float32)
+
+
 def _is_current(
     output_root: Path,
     domain: Domain,
@@ -142,6 +201,9 @@ def _is_current(
     valid: dt.datetime,
     init_time: dt.datetime,
     forecast_hour: int,
+    lower_forecast_hour: int,
+    upper_forecast_hour: int,
+    interpolation_weight: float,
 ) -> bool:
     layer = LAYERS[style.layer_id]
     destination = frame_path(output_root, domain, layer, valid)
@@ -155,6 +217,9 @@ def _is_current(
     return (
         existing.get("modelInitTime") == init_time.isoformat().replace("+00:00", "Z")
         and existing.get("forecastHour") == forecast_hour
+        and existing.get("sourceForecastHours")
+        == [lower_forecast_hour, upper_forecast_hour]
+        and existing.get("temporalInterpolationWeight") == interpolation_weight
         and existing.get("renderVersion") == RENDER_VERSION
     )
 
@@ -167,16 +232,31 @@ def render_valid_time(
     domain_ids: Iterable[str] = ("north-america", "north-pacific"),
 ) -> dict[str, object]:
     valid = valid_time.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-    if valid.hour % 3:
-        raise ValueError("ECMWF control overlays must be rendered on three-hour valid times")
     errors: list[str] = []
     domains = [DOMAINS[domain_id] for domain_id in domain_ids]
-    for cycle_root, init_time, forecast_hour in available_runs(data_root, valid):
+    for (
+        cycle_root,
+        init_time,
+        forecast_hour,
+        lower_forecast_hour,
+        upper_forecast_hour,
+        interpolation_weight,
+    ) in available_interpolation_runs(data_root, valid):
         pending = {
             style.layer_id: [
                 domain
                 for domain in domains
-                if not _is_current(output_root, domain, style, valid, init_time, forecast_hour)
+                if not _is_current(
+                    output_root,
+                    domain,
+                    style,
+                    valid,
+                    init_time,
+                    forecast_hour,
+                    lower_forecast_hour,
+                    upper_forecast_hour,
+                    interpolation_weight,
+                )
             ]
             for style, _, _, _ in FIELD_SPECS
         }
@@ -199,8 +279,27 @@ def render_valid_time(
                     style.variable,
                     level_type,
                     level,
-                    forecast_hour,
+                    lower_forecast_hour,
                 )
+                if upper_forecast_hour != lower_forecast_hour:
+                    upper_values, upper_latitudes, upper_longitudes = read_matching_field(
+                        cycle_root / filename,
+                        style.variable,
+                        level_type,
+                        level,
+                        upper_forecast_hour,
+                    )
+                    if (
+                        values.shape != upper_values.shape
+                        or not np.array_equal(latitudes, upper_latitudes)
+                        or not np.array_equal(longitudes, upper_longitudes)
+                    ):
+                        raise ValueError("ECMWF interpolation fields do not share a grid")
+                    values = interpolate_in_time(
+                        values,
+                        upper_values,
+                        interpolation_weight,
+                    )
                 for domain in pending[style.layer_id]:
                     projected = interpolate_global_field(values, latitudes, longitudes, domain)
                     layer = LAYERS[style.layer_id]
@@ -212,19 +311,35 @@ def render_valid_time(
                         layer,
                         valid,
                         destination,
-                        {f"ECMWF {init_time:%Y%m%dT%HZ} F{forecast_hour:03d}": valid},
+                        {
+                            f"ECMWF {init_time:%Y%m%dT%HZ} F{source_hour:03d}": (
+                                init_time + dt.timedelta(hours=source_hour)
+                            )
+                            for source_hour in dict.fromkeys(
+                                (lower_forecast_hour, upper_forecast_hour)
+                            )
+                        },
                         source="ECMWF IFS Control",
                         source_layer=f"{style.variable} {style.level_tag}",
                         extra={
                             **summary,
                             "modelInitTime": init_time.isoformat().replace("+00:00", "Z"),
                             "forecastHour": forecast_hour,
-                            "modelCadenceHours": 3,
+                            "modelCadenceHours": 1,
+                            "sourceModelCadenceHours": 3,
+                            "sourceForecastHours": [
+                                lower_forecast_hour,
+                                upper_forecast_hour,
+                            ],
+                            "temporalInterpolationWeight": interpolation_weight,
                         },
                     )
                     rendered.append(f"{domain.id}/{style.layer_id}")
         except Exception as exc:
-            errors.append(f"{init_time:%Y%m%dT%HZ} F{forecast_hour:03d}: {exc}")
+            errors.append(
+                f"{init_time:%Y%m%dT%HZ} "
+                f"F{lower_forecast_hour:03d}/F{upper_forecast_hour:03d}: {exc}"
+            )
             continue
         return {
             "status": "rendered",
@@ -237,7 +352,7 @@ def render_valid_time(
     return {
         "status": "unavailable",
         "validTime": valid.isoformat().replace("+00:00", "Z"),
-        "errors": errors or ["No local three-hour ECMWF control run covers this valid time."],
+        "errors": errors or ["No local ECMWF control run brackets this hourly valid time."],
     }
 
 
@@ -250,8 +365,6 @@ def update_recent(
     now: dt.datetime | None = None,
 ) -> list[dict[str, object]]:
     current = (now or dt.datetime.now(UTC)).astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-    current -= dt.timedelta(hours=current.hour % 3)
-    oldest_offset = max(0, hours // 3 * 3)
     return [
         render_valid_time(
             output_root,
@@ -259,5 +372,5 @@ def update_recent(
             current - dt.timedelta(hours=offset),
             domain_ids=domain_ids,
         )
-        for offset in range(oldest_offset, -1, -3)
+        for offset in range(max(0, hours), -1, -1)
     ]

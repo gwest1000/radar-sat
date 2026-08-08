@@ -24,7 +24,7 @@ from rasterio.transform import from_bounds
 from rasterio.warp import Resampling, reproject
 from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 
-from .config import DOMAINS, LAYERS, Domain, Layer
+from .config import DOMAINS, LAYERS, VIEWPORTS, Domain, Layer, regional_layer_id
 from .geomet import projected_bbox
 from .pipeline import frame_path, metadata_path, write_metadata
 
@@ -33,7 +33,7 @@ UTC = dt.timezone.utc
 RUN_RE = re.compile(r"^\d{8}T(?:00|06|12|18)Z$")
 BASE_URL = "https://dd.weather.gc.ca/today/model_hrdps/continental/2.5km"
 GRID_TAG = "RLatLon0.0225"
-RENDER_VERSION = 3
+RENDER_VERSION = 4
 DEFAULT_DATA_ROOT = (
     Path(__file__).resolve().parents[2]
     / "fcstGraphics"
@@ -364,6 +364,10 @@ def render_contours(
     domain: Domain,
     style: FieldStyle,
     destination: Path,
+    *,
+    line_scale_override: float | None = None,
+    label_scale_override: float | None = None,
+    centre_scale_override: float | None = None,
 ) -> dict[str, object]:
     pixel_km = _pixel_km(domain, domain.width, domain.height)
     scaled = _smooth_nan(
@@ -374,9 +378,15 @@ def render_contours(
     output_scale = 2
     line_scale = 1.0
     if ecmwf_overview:
-        line_scale = 0.75 if style.kind == "hgt500" else 0.90
-    label_scale = 0.90 if ecmwf_overview else 1.0
+        line_scale = 0.5625 if style.kind == "hgt500" else 0.90
+    if line_scale_override is not None:
+        line_scale = line_scale_override
+    label_scale = 0.45 if ecmwf_overview else 1.0
+    if label_scale_override is not None:
+        label_scale = label_scale_override
     centre_scale = 0.50 if ecmwf_overview else 1.0
+    if centre_scale_override is not None:
+        centre_scale = centre_scale_override
     rendered_linewidth = style.linewidth * line_scale
     output_width = domain.width * output_scale
     output_height = domain.height * output_scale
@@ -480,6 +490,48 @@ def render_contours(
     }
 
 
+def crop_field_to_viewport(
+    values: np.ndarray,
+    domain: Domain,
+    viewport: dict[str, float],
+    region_id: str,
+) -> tuple[np.ndarray, Domain]:
+    """Crop an aligned field and retain exact projected bounds for rendering."""
+    x0 = max(0, min(domain.width - 1, round(viewport["left"] * domain.width)))
+    y0 = max(0, min(domain.height - 1, round(viewport["top"] * domain.height)))
+    x1 = max(
+        x0 + 1,
+        min(domain.width, round((viewport["left"] + viewport["width"]) * domain.width)),
+    )
+    y1 = max(
+        y0 + 1,
+        min(domain.height, round((viewport["top"] + viewport["height"]) * domain.height)),
+    )
+    xmin, ymin, xmax, ymax = projected_bbox(domain)
+    x_span = xmax - xmin
+    y_span = ymax - ymin
+    region_bounds = (
+        xmin + x0 / domain.width * x_span,
+        ymax - y1 / domain.height * y_span,
+        xmin + x1 / domain.width * x_span,
+        ymax - y0 / domain.height * y_span,
+    )
+    cropped = values[y0:y1, x0:x1]
+    return cropped, Domain(
+        id=f"{domain.id}-region-{region_id}",
+        title=f"{domain.title} · {region_id}",
+        west=domain.west,
+        south=domain.south,
+        east=domain.east,
+        north=domain.north,
+        crs=domain.crs,
+        width=x1 - x0,
+        height=y1 - y0,
+        tier=domain.tier,
+        projected_bounds=region_bounds,
+    )
+
+
 def render_valid_time(
     output_root: Path,
     data_root: Path,
@@ -500,38 +552,82 @@ def render_valid_time(
         for domain_id in domain_ids:
             domain = DOMAINS[domain_id]
             for style in FIELD_STYLES:
-                layer = LAYERS[style.layer_id]
-                destination = frame_path(output_root, domain, layer, valid)
-                metadata = metadata_path(output_root, domain, layer, valid)
-                if destination.is_file() and metadata.is_file():
-                    try:
-                        existing = json.loads(metadata.read_text())
-                        if (
-                            existing.get("modelInitTime") == init_time.isoformat().replace("+00:00", "Z")
-                            and existing.get("forecastHour") == fhour
-                            and existing.get("renderVersion") == RENDER_VERSION
-                        ):
-                            continue
-                    except (OSError, json.JSONDecodeError):
-                        pass
+                outputs: list[tuple[Layer, str | None]] = [
+                    (LAYERS[style.layer_id], None)
+                ]
+                if domain.id == "bc":
+                    outputs.extend(
+                        (
+                            LAYERS[regional_layer_id(style.layer_id, region_id)],
+                            region_id,
+                        )
+                        for region_id in VIEWPORTS
+                    )
+                pending: list[tuple[Layer, str | None]] = []
+                for output_layer, region_id in outputs:
+                    destination = frame_path(output_root, domain, output_layer, valid)
+                    metadata = metadata_path(output_root, domain, output_layer, valid)
+                    current = False
+                    if destination.is_file() and metadata.is_file():
+                        try:
+                            existing = json.loads(metadata.read_text())
+                            current = (
+                                existing.get("modelInitTime")
+                                == init_time.isoformat().replace("+00:00", "Z")
+                                and existing.get("forecastHour") == fhour
+                                and existing.get("renderVersion") == RENDER_VERSION
+                                and existing.get("regionalViewportId") == region_id
+                            )
+                        except (OSError, json.JSONDecodeError):
+                            pass
+                    if not current:
+                        pending.append((output_layer, region_id))
+                if not pending:
+                    continue
                 values = reproject_field(paths[style.layer_id], domain)
-                summary = render_contours(values, domain, style, destination)
-                write_metadata(
-                    output_root,
-                    domain,
-                    layer,
-                    valid,
-                    destination,
-                    {f"HRDPS {stamp} F{fhour:03d}": valid},
-                    source="ECCC HRDPS Continental 2.5 km",
-                    source_layer=f"{style.variable} {style.level_tag}",
-                    extra={
-                        **summary,
-                        "modelInitTime": init_time.isoformat().replace("+00:00", "Z"),
-                        "forecastHour": fhour,
-                    },
-                )
-                rendered.append(f"{domain_id}/{style.layer_id}")
+                for output_layer, region_id in pending:
+                    destination = frame_path(output_root, domain, output_layer, valid)
+                    render_values = values
+                    render_domain = domain
+                    line_scale_override: float | None = None
+                    if region_id is not None:
+                        render_values, render_domain = crop_field_to_viewport(
+                            values,
+                            domain,
+                            VIEWPORTS[region_id],
+                            region_id,
+                        )
+                        if style.kind == "hgt500":
+                            line_scale_override = 0.80 if region_id == "small" else 0.50
+                    summary = render_contours(
+                        render_values,
+                        render_domain,
+                        style,
+                        destination,
+                        line_scale_override=line_scale_override,
+                    )
+                    write_metadata(
+                        output_root,
+                        domain,
+                        output_layer,
+                        valid,
+                        destination,
+                        {f"HRDPS {stamp} F{fhour:03d}": valid},
+                        source="ECCC HRDPS Continental 2.5 km",
+                        source_layer=f"{style.variable} {style.level_tag}",
+                        extra={
+                            **summary,
+                            "modelInitTime": init_time.isoformat().replace("+00:00", "Z"),
+                            "forecastHour": fhour,
+                            "regionalViewportId": region_id,
+                            "regionalViewport": (
+                                VIEWPORTS[region_id]
+                                if region_id is not None
+                                else None
+                            ),
+                        },
+                    )
+                    rendered.append(f"{domain_id}/{output_layer.id}")
         return {
             "status": "rendered" if rendered else "unchanged",
             "validTime": valid.isoformat().replace("+00:00", "Z"),

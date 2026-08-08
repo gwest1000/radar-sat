@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render HRDPS BC and three-hour ECMWF large-domain synoptic overlays."""
+"""Render hourly HRDPS and time-interpolated ECMWF synoptic overlays."""
 
 from __future__ import annotations
 

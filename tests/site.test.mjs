@@ -167,7 +167,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(small.frameIntervalMinutes, 10);
   assert.equal(small.archiveFrameIntervalMinutes, 60);
   assert.equal(small.maxHours, 168);
-  assert.deepEqual(overlay.viewport, { left: 0, top: 0.025, width: 1, height: 0.95 });
+  assert.deepEqual(overlay.viewport, { left: 0, top: 0.05, width: 1, height: 0.9 });
   assert.deepEqual(small.viewport, { left: 0.16404, top: 0.22489, width: 0.670919, height: 0.581179 });
   assert.equal(overlay.anchorLayer, "raw-visir");
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, true);
@@ -185,6 +185,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "snowfog").defaultEnabled, false);
   assert.equal(overlay.layers.find((layer) => layer.id === "model-hgt500").defaultEnabled, false);
   assert.equal(overlay.layers.find((layer) => layer.id === "model-mslp").optional, true);
+  assert.equal(overlay.legends.includes("model-hgt500"), false);
+  assert.equal(overlay.legends.includes("model-mslp"), false);
   assert.match(viewer, /500 hPa Height/);
   assert.match(viewer, /ECMWF IFS Control/);
   assert.equal(demo.products.some((product) => product.group === "Snow / fog"), false);
@@ -198,7 +200,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.some((product) => product.id === "north-pacific-overlay"), true);
   const pacificWna = demo.products.find((product) => product.id === "pacific-wna-overlay");
   assert.equal(pacificWna.shortTitle, "Pacific/WNA");
-  assert.deepEqual(pacificWna.viewport, { left: 0.2341, top: 0.1479, width: 0.6076, height: 0.7117 });
+  assert.deepEqual(pacificWna.viewport, { left: 0.21, top: 0.1479, width: 0.65, height: 0.7117 });
   const northAmerica = demo.products.find((product) => product.id === "north-america-overlay");
   const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
   assert.equal(northPacific.shortTitle, "Pacific");
@@ -206,7 +208,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.anchorLayer, "westwx-ir");
   assert.equal(northAmerica.frameIntervalMinutes, 20);
   assert.equal(northAmerica.archiveFrameIntervalMinutes, 60);
-  assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.8772, height: 0.8237 });
+  assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.86, height: 0.78 });
   assert.deepEqual(
     northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
     ["westwx-visir", "westwx-ir"],
@@ -218,7 +220,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northPacific.frameIntervalMinutes, 20);
   assert.match(viewer, /"lightning-hour"/);
   assert.match(viewer, /"glm-lightning-hour"/);
-  assert.deepEqual(northPacific.viewport, { left: 0, top: 0.075936, width: 0.735882, height: 0.924064 });
+  assert.deepEqual(northPacific.viewport, { left: 0, top: 0.075936, width: 0.77, height: 0.9 });
   assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.ok(
@@ -228,6 +230,10 @@ test("ships a runtime data configuration", async () => {
   assert.ok(
     overlay.layers.findIndex((layer) => layer.id === "hotspots")
       > overlay.layers.findIndex((layer) => layer.id === "watersheds"),
+  );
+  assert.ok(
+    overlay.layers.findIndex((layer) => layer.id === "model-mslp")
+      > overlay.layers.findIndex((layer) => layer.id === "hotspots"),
   );
   assert.ok(
     northPacific.layers.findIndex((layer) => layer.id === "glm-lightning-trail")
@@ -240,6 +246,10 @@ test("ships a runtime data configuration", async () => {
   assert.ok(
     northPacific.layers.findIndex((layer) => layer.id === "model-mslp")
       < northPacific.layers.findIndex((layer) => layer.id === "model-hgt500"),
+  );
+  assert.ok(
+    northPacific.layers.findIndex((layer) => layer.id === "model-mslp")
+      > northPacific.layers.findIndex((layer) => layer.id === "hotspots"),
   );
 });
 

@@ -7,11 +7,14 @@ from pathlib import Path
 
 import numpy as np
 
+from radarsat.config import Domain
 from radarsat.hrdps_contours import (
     FIELD_STYLES,
     UTC,
     available_runs,
+    crop_field_to_viewport,
     model_filename,
+    render_contours,
     significant_centres,
 )
 
@@ -65,6 +68,44 @@ class HrdpsContourTests(unittest.TestCase):
         low = next(centre for centre in centres if centre.kind == "L")
         self.assertLess(abs(high.x - 45), 15)
         self.assertLess(abs(low.x - 118), 15)
+
+    def test_regional_crop_retains_projected_alignment_and_line_scale(self) -> None:
+        domain = Domain(
+            id="bc",
+            title="BC",
+            west=-140,
+            south=45,
+            east=-110,
+            north=61,
+            crs="EPSG:3005",
+            width=160,
+            height=120,
+            tier="bc",
+            projected_bounds=(0.0, 0.0, 160_000.0, 120_000.0),
+        )
+        values = np.tile(np.linspace(5_400.0, 6_000.0, domain.width), (domain.height, 1))
+        viewport = {"left": 0.25, "top": 0.20, "width": 0.50, "height": 0.60}
+        cropped, regional_domain = crop_field_to_viewport(
+            values,
+            domain,
+            viewport,
+            "test",
+        )
+        self.assertEqual(cropped.shape, (72, 80))
+        self.assertEqual(
+            regional_domain.projected_bounds,
+            (40_000.0, 24_000.0, 120_000.0, 96_000.0),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            summary = render_contours(
+                cropped,
+                regional_domain,
+                FIELD_STYLES[0],
+                Path(temporary) / "regional-hgt500.png",
+                line_scale_override=0.50,
+            )
+        self.assertAlmostEqual(summary["lineWidth"], FIELD_STYLES[0].linewidth * 0.50)
 
 
 if __name__ == "__main__":
