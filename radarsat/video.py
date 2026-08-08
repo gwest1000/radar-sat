@@ -412,7 +412,13 @@ def _timeline(
     newest_epoch = math.floor(parsed[-1].timestamp() / interval_seconds) * interval_seconds
     newest = dt.datetime.fromtimestamp(newest_epoch, UTC)
     requested_start = newest - dt.timedelta(hours=hours)
-    available_epoch = math.ceil(parsed[0].timestamp() / interval_seconds) * interval_seconds
+    # A scan that starts just after a nominal boundary still belongs to that
+    # boundary.  Keep the first such slot on the timeline so the same two-minute
+    # tolerance used by source selection can actually choose it.
+    available_epoch = (
+        math.ceil((parsed[0].timestamp() - 120) / interval_seconds)
+        * interval_seconds
+    )
     current = max(requested_start, dt.datetime.fromtimestamp(available_epoch, UTC))
     values: list[dt.datetime] = []
     while current <= newest:
@@ -463,7 +469,13 @@ def _selected_satellite_frames(
         else:
             candidates = (
                 (
-                    _at_or_before(anchor_frames, valid_time, broad_max_age),
+                    # GOES scan-start timestamps are usually a few seconds
+                    # after the nominal clock slot.  Prefer that same-slot
+                    # image before falling back to an older image; otherwise
+                    # sparse hourly archives skip every ``HH:00:2x`` frame and
+                    # continuous feeds display the preceding scan.
+                    _nearest(anchor_frames, valid_time, 2)
+                    or _at_or_before(anchor_frames, valid_time, broad_max_age),
                     selection_layer_id,
                     broad_max_age,
                 ),

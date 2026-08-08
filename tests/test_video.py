@@ -154,6 +154,57 @@ class VideoSelectionTests(unittest.TestCase):
         )
         self.assertEqual(selected[1].source_path, selected[0].source_path)
 
+    def test_broad_archive_accepts_scan_seconds_after_nominal_hour(self) -> None:
+        base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
+        frames = [
+            frame(
+                f"frames/north-america/westwx-visir/{hour}.webp",
+                base + dt.timedelta(hours=hour, seconds=22),
+            )
+            for hour in (0, 1, 4)
+        ]
+        catalog = {
+            "domains": {
+                "north-america": {
+                    "layers": {
+                        "westwx-visir": {
+                            "maxAgeMinutes": 30,
+                            "frames": frames,
+                        }
+                    }
+                }
+            }
+        }
+        spec = ProfileSpec(
+            "north-america-overlay",
+            "north-america",
+            "westwx-visir",
+            {"left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0},
+            64,
+            48,
+            60,
+            track_name="archive",
+        )
+
+        selected = _selected_satellite_frames(catalog, spec, 6)
+
+        self.assertEqual(
+            [item.valid_time for item in selected],
+            [
+                base,
+                base + dt.timedelta(hours=1),
+                base + dt.timedelta(hours=4),
+            ],
+        )
+        self.assertEqual(
+            [item.source_valid_time for item in selected],
+            [
+                base + dt.timedelta(seconds=22),
+                base + dt.timedelta(hours=1, seconds=22),
+                base + dt.timedelta(hours=4, seconds=22),
+            ],
+        )
+
     def test_ne_bc_uses_nonregressing_standard_when_native_regresses(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
         standard = [
