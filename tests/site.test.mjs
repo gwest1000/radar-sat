@@ -51,12 +51,65 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /atOrBefore\(nativeLayer\?\.frames \?\? \[\], anchor\.validTime/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
-  assert.match(viewer, /AUTO_REFRESH_MS = 5 \* 60_000/);
   assert.match(viewer, /> Radar coverage</);
   assert.doesNotMatch(viewer, /> No radar coverage</);
-  assert.match(viewer, /document\.visibilityState !== "visible"/);
-  assert.match(viewer, /window\.location\.reload\(\)/);
+  assert.match(viewer, /method: "HEAD"/);
+  assert.match(viewer, /previousGeneration === nextCatalog\.generatedAt/);
+  assert.doesNotMatch(viewer, /window\.location\.reload\(\)/);
   assert.match(viewer, /VIEWER_PREFERENCES_KEY/);
+});
+
+test("uses an atomic H.264 compositor only for complete pilot profiles", async () => {
+  const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
+  const videoLoop = await readFile(new URL("../app/video-loop.ts", import.meta.url), "utf8");
+  const compositor = await readFile(new URL("../app/video-composite-stage.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(viewer, /"bc-northeast-overlay": "raw-visir"/);
+  assert.match(viewer, /"north-america-overlay": "westwx-visir"/);
+  assert.match(viewer, /effectiveRangeHours <= 24/);
+  assert.match(viewer, /videoPlans\.length === videoAnchorFrames\.length/);
+  assert.match(viewer, /proxy\.width !== candidateVideoManifest\.media\.width/);
+  assert.match(viewer, /if \(videoModeReady \|\| !isAnimating/);
+  assert.match(viewer, /data-renderer=\{videoModeReady \? "video" : "images"\}/);
+  assert.match(viewer, /<VideoCompositeStage/);
+  assert.match(videoLoop, /transport: "progressive-mp4"/);
+  assert.match(videoLoop, /proxies: Record<string, VideoProxy>/);
+  assert.match(videoLoop, /proxyLayers: VideoProxyLayerSelection\[\]/);
+  assert.match(videoLoop, /MAX_MANIFEST_CACHE_ENTRIES = 8/);
+  assert.match(videoLoop, /manifestCache\.size > MAX_MANIFEST_CACHE_ENTRIES/);
+  assert.match(videoLoop, /requestVideoFrameCallback/);
+  assert.match(viewer, /for \(const selection of manifestFrame\.proxyLayers\)/);
+  assert.match(viewer, /candidateVideoManifest\.proxies\[selection\.sourceKey\]/);
+  assert.match(viewer, /activeVideoProxyLayers/);
+  assert.match(viewer, /const pointSourceTimes = \(videoModeReady \? \[\] : \[/);
+  assert.match(viewer, /if \(!videoModeReady && lightningController/);
+  assert.match(viewer, /if \(!videoModeReady && fireController/);
+  assert.match(compositor, /class SurfaceCache/);
+  assert.match(compositor, /FINAL_SURFACE_CACHE_SIZE = 4/);
+  assert.match(compositor, /crossOrigin="anonymous"/);
+  assert.match(compositor, /requestVideoFrameCallback/);
+  assert.match(compositor, /data-overlay-stalls="0"/);
+  assert.match(compositor, /getVideoPlaybackQuality/);
+  assert.match(compositor, /VIDEO_PROGRESS_TIMEOUT_MS = 30_000/);
+  assert.match(compositor, /stopped making progress; using image frames/);
+  assert.match(compositor, /video\.addEventListener\("ended", onEnded\)/);
+  assert.match(compositor, /operationEpochRef/);
+  assert.match(compositor, /invalidateOperation/);
+  assert.match(compositor, /previousPlanRevisionRef/);
+  assert.match(compositor, /removeEventListener\("seeked"/);
+  assert.match(compositor, /disposedRef\.current \|\| failedRef\.current/);
+  assert.match(compositor, /disposedRef\.current = true;[\s\S]*?invalidateOperation\(video\)/);
+  assert.match(styles, /\.video-composite-canvas/);
+  assert.match(styles, /\.video-loop-decoder/);
+});
+
+test("exposes stable layer-control targets for deterministic toggles", async () => {
+  const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
+  assert.match(viewer, /htmlFor=\{`layer-\$\{product\.id\}-\$\{layer\.id\}`\}/);
+  assert.match(viewer, /aria-label=\{layerControlLabel\(layer\.id\)\}/);
+  assert.match(viewer, /data-layer-id=\{layer\.id\}/);
+  assert.match(viewer, /id=\{`layer-\$\{product\.id\}-\$\{layer\.id\}`\}/);
+  assert.match(viewer, /data-layer-id="radar-rain"|data-layer-id=\{layer\.id\}/);
 });
 
 test("renders weather-app lightning bolts and wildfire flames from point frames", async () => {

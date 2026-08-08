@@ -50,11 +50,11 @@ by fcstGraphics and downloads only the two intermediate hourly GRIBs. High/low
 centres use smoothed neighborhood extrema, broad-background prominence and
 physical-distance suppression so weak gridscale extrema are not labelled.
 
-The browser refreshes its catalog every minute and performs a visibility-aware
-page reload every five minutes. A visible window keeps looping when another
-window or application has focus; only a genuinely hidden tab pauses playback.
-The reload preserves the selected product, layers, range and playback speed,
-then resumes at the newest frame.
+The browser checks the catalog every minute with an ETag and only parses a new
+catalog when its generation changes. It no longer hard-reloads every five
+minutes, so warmed media and overlay caches survive. A visible window keeps
+looping when another window or application has focus; only a genuinely hidden
+tab pauses playback.
 
 ## Architecture
 
@@ -81,6 +81,13 @@ GitHub Pages static viewer ◀────────────────�
   six-minute clock for 24 hours, then hourly through day 7.
 - The viewer uses server-rendered transparent lightning-trail PNGs (normally
   6–12 KB) instead of rebuilding hundreds of flash symbols in the browser.
+- An optional H.264 pilot serves only the default NOAA VIS/IR background for
+  NE BC and North America loops of 24 hours or less. NE BC is cropped from the
+  best available source to 1920×1296; North America is 1200×816 because its
+  current source contains no useful additional detail. A hidden hardware video
+  decoder supplies the satellite clock while one canvas atomically commits the
+  satellite and exact display-sized overlay proxies. The current image renderer
+  remains the automatic compatibility and failure fallback.
 - Dynamic clients can use `glm-lightning-points` and `hotspot-points` instead
   of the legacy symbol PNGs. Each compact JSON frame uses normalized top-left
   coordinates and tuple schemas `[x,y,ageMinutes,count]` for GLM or
@@ -103,7 +110,7 @@ GitHub Pages static viewer ◀────────────────�
   target grids render concurrently from that one download. Fixed
   geostationary-to-map neighbour lookups are cached separately so each scan
   does not rebuild the same multi-million-point resampling tree.
-- R2 publication is transactional: up to four assets upload concurrently,
+- R2 publication is transactional: assets upload concurrently,
   then `catalog.json` is committed last.
 - The publisher warns at 4 GB and refuses storage growth above 5 GB.
 - The R2 `frames/` lifecycle expires at 9 days as a failure backstop.
@@ -117,7 +124,8 @@ See [the technical assessment](docs/technical-report.md),
 ## Local development
 
 Requirements: Node 22.13+, Python 3.11+, and the packages in
-`requirements.txt`.
+`requirements.txt`. Building the optional video pilot also requires ffmpeg
+with libx264 (`brew install ffmpeg` on the ingest Mac).
 
 ```bash
 npm install

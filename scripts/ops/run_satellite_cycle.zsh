@@ -99,6 +99,20 @@ if [[ "${RADARSAT_WESTWX_SATELLITE_ENABLED:-0}" == "1" ]]; then
     --apply || print -u2 "Warning: WestWX satellite refresh failed; continuing to publication."
 fi
 
+if [[ "${RADARSAT_H264_PILOT_ENABLED:-0}" == "1" ]]; then
+  video_args=(
+    --source-root "${OUTPUT_ROOT}"
+    --output-root "${OUTPUT_ROOT}"
+    --hours "${RADARSAT_H264_PILOT_HOURS:-24}"
+  )
+  if [[ -n "${RADARSAT_FFMPEG:-}" ]]; then
+    video_args+=(--ffmpeg "${RADARSAT_FFMPEG}")
+  fi
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_satellite_video.py" \
+    "${video_args[@]}" \
+    || print -u2 "Warning: H.264 pilot refresh failed; retaining the previous video generation and image fallback."
+fi
+
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
 release_heavy_satellite_lock
 "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast --whole-frame-only --recovery-hours 6

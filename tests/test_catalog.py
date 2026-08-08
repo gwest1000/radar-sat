@@ -15,6 +15,42 @@ UTC = dt.timezone.utc
 
 
 class CatalogTests(unittest.TestCase):
+    def write_video_pointer(
+        self,
+        root: Path,
+        *,
+        manifest_path: str = (
+            "video-manifests/bc-northeast-overlay/raw-visir/live/"
+            "20260722T1200Z-abcdef012345.json"
+        ),
+        manifest_updates: dict[str, object] | None = None,
+    ) -> None:
+        generation = "20260722T1200Z-abcdef012345"
+        manifest = root / manifest_path
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, object] = {
+            "schemaVersion": 1,
+            "generation": generation,
+            "productId": "bc-northeast-overlay",
+            "layerId": "raw-visir",
+            "track": "live",
+        }
+        payload.update(manifest_updates or {})
+        manifest.write_text(json.dumps(payload))
+        index = root / "video-index/bc-northeast-overlay/raw-visir.json"
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(json.dumps({
+            "schemaVersion": 1,
+            "productId": "bc-northeast-overlay",
+            "layerId": "raw-visir",
+            "profiles": {
+                "live": {
+                    "generation": generation,
+                    "manifestPath": manifest_path,
+                }
+            },
+        }))
+
     def test_incremental_catalog_detects_replacement_and_deletion(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -202,6 +238,40 @@ class CatalogTests(unittest.TestCase):
             self.assertTrue(
                 all(frame["source"] == "NOAA/NESDIS/STAR" for frame in published)
             )
+
+    def test_catalog_exposes_only_tiny_validated_video_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_video_pointer(root)
+
+            catalog = build_catalog(root)
+
+            self.assertEqual(
+                catalog["videoProfiles"]["bc-northeast-overlay"]["raw-visir"]["live"],
+                {
+                    "generation": "20260722T1200Z-abcdef012345",
+                    "manifestPath": (
+                        "video-manifests/bc-northeast-overlay/raw-visir/live/"
+                        "20260722T1200Z-abcdef012345.json"
+                    ),
+                },
+            )
+            self.assertNotIn("frames", json.dumps(catalog["videoProfiles"]))
+
+    def test_catalog_omits_mismatched_or_unsafe_video_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_video_pointer(
+                root,
+                manifest_updates={"productId": "north-america-overlay"},
+            )
+            self.assertNotIn("videoProfiles", build_catalog(root))
+
+            index = root / "video-index/bc-northeast-overlay/raw-visir.json"
+            payload = json.loads(index.read_text())
+            payload["profiles"]["live"]["manifestPath"] = "../outside.json"
+            index.write_text(json.dumps(payload))
+            self.assertNotIn("videoProfiles", build_catalog(root))
 
 
 if __name__ == "__main__":

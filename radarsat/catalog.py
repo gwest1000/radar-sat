@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 from concurrent.futures import Executor, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,8 @@ from .config import DOMAINS, LAYERS, LEGENDS, PRODUCTS
 UTC = dt.timezone.utc
 CANONICAL_FIVE_MINUTE_SOURCE = "NOAA/NESDIS/STAR"
 CANONICAL_FIVE_MINUTE_RENDER_VERSION = 4
+VIDEO_GENERATION_RE = re.compile(r"^\d{8}T\d{4}Z-[0-9a-f]{12}$")
+VIDEO_TRACKS = frozenset({"live", "archive"})
 
 
 def retention_policy(tier: str) -> dict[str, int]:
@@ -92,6 +95,147 @@ def _parse_frame_time(value: object) -> dt.datetime | None:
         return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
     except (TypeError, ValueError):
         return None
+
+
+def _known_product_layers() -> dict[str, frozenset[str]]:
+    result: dict[str, frozenset[str]] = {}
+    for product in PRODUCTS:
+        product_id = product.get("id")
+        layers = product.get("layers")
+        if not isinstance(product_id, str) or not isinstance(layers, list):
+            continue
+        result[product_id] = frozenset(
+            str(layer["id"])
+            for layer in layers
+            if isinstance(layer, dict) and isinstance(layer.get("id"), str)
+        )
+    return result
+
+
+def _valid_video_manifest_pointer(
+    root: Path,
+    product_id: str,
+    layer_id: str,
+    track: str,
+    pointer: object,
+) -> dict[str, str] | None:
+    """Return a safe immutable video pointer, or omit the optional fast path.
+
+    The local index is mutable, but it may only point at a versioned manifest
+    whose path repeats the product/layer/track/generation tuple.  Reading the
+    manifest header here prevents a partially rotated or cross-profile pointer
+    from entering the public catalog.  The publisher performs the deeper media
+    and proxy validation immediately before upload.
+    """
+    if not isinstance(pointer, dict):
+        return None
+    generation = pointer.get("generation")
+    manifest_value = pointer.get("manifestPath")
+    if (
+        not isinstance(generation, str)
+        or not VIDEO_GENERATION_RE.fullmatch(generation)
+        or not isinstance(manifest_value, str)
+    ):
+        return None
+    relative = Path(manifest_value)
+    expected_parts = (
+        "video-manifests",
+        product_id,
+        layer_id,
+        track,
+        f"{generation}.json",
+    )
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or relative.parts != expected_parts
+        or relative.as_posix() != manifest_value
+    ):
+        return None
+    manifest = root / relative
+    try:
+        if (
+            manifest.is_symlink()
+            or not manifest.resolve().is_relative_to(root.resolve())
+            or not manifest.is_file()
+            or manifest.stat().st_size <= 0
+        ):
+            return None
+        payload = json.loads(manifest.read_bytes())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or any(
+        (
+            payload.get("schemaVersion") != 1,
+            payload.get("productId") != product_id,
+            payload.get("layerId") != layer_id,
+            payload.get("track") != track,
+            payload.get("generation") != generation,
+        )
+    ):
+        return None
+    return {"generation": generation, "manifestPath": manifest_value}
+
+
+def read_video_profiles(root: Path) -> dict[str, Any]:
+    """Read the atomically maintained local video index files.
+
+    Each encoder profile owns one small pointer at
+    ``video-index/<product>/<layer>.json``. Invalid, incomplete, or stale
+    pointers are deliberately ignored so the conventional image archive
+    remains a complete fallback.
+    """
+    index_root = root / "video-index"
+    if not index_root.is_dir():
+        return {}
+    known_layers = _known_product_layers()
+    video_profiles: dict[str, dict[str, dict[str, dict[str, str]]]] = {}
+    for index_path in sorted(index_root.rglob("*.json")):
+        try:
+            if index_path.is_symlink() or not index_path.is_file():
+                continue
+            payload = json.loads(index_path.read_bytes())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict) or payload.get("schemaVersion") != 1:
+            continue
+        product_id = payload.get("productId")
+        layer_id = payload.get("layerId")
+        profiles = payload.get("profiles")
+        if (
+            not isinstance(product_id, str)
+            or not isinstance(layer_id, str)
+            or layer_id not in known_layers.get(product_id, ())
+            or not isinstance(profiles, dict)
+        ):
+            continue
+        expected_index = index_root / product_id / f"{layer_id}.json"
+        try:
+            if index_path.resolve() != expected_index.resolve():
+                continue
+        except OSError:
+            continue
+        for track, pointer in profiles.items():
+            if track not in VIDEO_TRACKS:
+                continue
+            validated = _valid_video_manifest_pointer(
+                root,
+                product_id,
+                layer_id,
+                track,
+                pointer,
+            )
+            if validated is None:
+                continue
+            existing = (
+                video_profiles
+                .setdefault(product_id, {})
+                .setdefault(layer_id, {})
+                .get(track)
+            )
+            if existing is None or validated["generation"] > existing["generation"]:
+                video_profiles[product_id][layer_id][track] = validated
+    return video_profiles
 
 
 def _canonical_five_minute_frames(
@@ -267,7 +411,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
                 "layers": layers,
                 "staticLayers": static_layers,
             }
-    return {
+    catalog = {
         "schemaVersion": 1,
         "generatedAt": dt.datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "domains": domains,
@@ -287,6 +431,10 @@ def build_catalog(root: Path) -> dict[str, Any]:
             "GeoBC": "https://catalogue.data.gov.bc.ca/dataset/transmission-lines",
         },
     }
+    video_profiles = read_video_profiles(root)
+    if video_profiles:
+        catalog["videoProfiles"] = video_profiles
+    return catalog
 
 
 def write_catalog(root: Path) -> Path:

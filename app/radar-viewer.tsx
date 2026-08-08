@@ -3,6 +3,19 @@
 import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
+import {
+  VideoCanvasProxyLayer,
+  VideoCompositeFramePlan,
+  VideoCompositeStage,
+} from "./video-composite-stage";
+import {
+  loadVideoLoopManifest,
+  selectVideoFrames,
+  sourceCacheKey,
+  supportsVideoLoop,
+  VideoLoopManifest,
+  VideoProfilePointer,
+} from "./video-loop";
 
 type Frame = {
   validTime: string;
@@ -119,6 +132,7 @@ type Catalog = {
   products: Product[];
   legends: Record<string, Legend>;
   sources?: Record<string, string>;
+  videoProfiles?: Record<string, Record<string, { live?: VideoProfilePointer }>>;
 };
 
 type SiteConfig = {
@@ -128,7 +142,6 @@ type SiteConfig = {
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
-const AUTO_REFRESH_MS = 5 * 60_000;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
@@ -167,6 +180,10 @@ const WEB_MERCATOR_RADIUS = 6_378_137;
 const WGS84_ECCENTRICITY = 0.08181919084262149;
 const NORTH_AMERICA_BOUNDS = [-21_051_700.011, 557_305.257, -4_551_782.871, 12_932_243.112] as const;
 const NORTH_PACIFIC_BOUNDS = [-3_339_584.7, 764_000, 15_584_728.7, 11_413_000] as const;
+const VIDEO_PILOT_LAYERS: Record<string, string> = {
+  "bc-northeast-overlay": "raw-visir",
+  "north-america-overlay": "westwx-visir",
+};
 type ImageFrameCacheEntry = {
   image: HTMLImageElement;
   promise: Promise<boolean>;
@@ -743,6 +760,7 @@ type ComposedLayer = {
   id: string;
   renderId?: string;
   url: string;
+  sourceCacheKey: string;
   opacity: number;
   frame?: Frame;
   stageAligned?: boolean;
@@ -832,6 +850,9 @@ function composeLayers(
       return [{
         id: recipe.id,
         url: url.toString(),
+        sourceCacheKey: staticLayer.revision
+          ? sourceCacheKey(staticLayer.path, staticLayer.revision)
+          : staticLayer.path,
         opacity: recipe.opacity,
       }];
     }
@@ -875,6 +896,7 @@ function composeLayers(
       id: recipe.id,
       renderId: renderedLayerId,
       url: frameUrl(frame, catalogBase),
+      sourceCacheKey: sourceCacheKey(frame.path, frame.fetchedAt),
       opacity: recipe.opacity,
       frame,
       stageAligned: renderedLayerId.includes("-region-"),
@@ -1458,6 +1480,11 @@ export function RadarViewer() {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
+  const [loadedVideoManifest, setLoadedVideoManifest] = useState<VideoLoopManifest | null>(null);
+  const [failedVideoGeneration, setFailedVideoGeneration] = useState("");
+  const [videoFallbackReason, setVideoFallbackReason] = useState("");
+  const loadedVideoManifestRef = useRef<VideoLoopManifest | null>(null);
+  const pendingVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const preferencesRef = useRef<ViewerPreferences>({
     productId: "bc-large-overlay",
     speedIndex: 3,
@@ -1469,6 +1496,8 @@ export function RadarViewer() {
     let cancelled = false;
     let initialized = false;
     let loading = false;
+    const catalogEtags = new Map<string, string>();
+    const catalogGenerations = new Map<string, string>();
     async function load() {
       if (loading) return;
       loading = true;
@@ -1483,6 +1512,17 @@ export function RadarViewer() {
         let lastFailure: unknown;
         for (const resolved of candidates) {
           try {
+            const previousEtag = catalogEtags.get(resolved);
+            if (initialized && previousEtag) {
+              try {
+                const head = await fetch(resolved, { method: "HEAD", cache: "no-store" });
+                const headEtag = head.headers.get("etag");
+                if (head.ok && headEtag && headEtag === previousEtag) return;
+              } catch {
+                // Some development origins do not implement HEAD. A normal GET
+                // below remains the compatibility path.
+              }
+            }
             const response = await fetch(resolved, { cache: "no-store" });
             if (!response.ok) throw new Error(`Loop catalog returned ${response.status}.`);
             const nextCatalog = (await response.json()) as Catalog;
@@ -1491,6 +1531,10 @@ export function RadarViewer() {
             }
             const availableProducts = nextCatalog.products.filter((item) => productHasFrames(nextCatalog, item));
             if (!availableProducts.length) throw new Error("Loop catalog contains no available products.");
+            const previousGeneration = catalogGenerations.get(resolved);
+            catalogEtags.set(resolved, response.headers.get("etag") ?? "");
+            catalogGenerations.set(resolved, nextCatalog.generatedAt);
+            if (initialized && previousGeneration === nextCatalog.generatedAt) return;
             if (!cancelled) {
               setCatalog(nextCatalog);
               setCatalogBase(resolved);
@@ -1567,26 +1611,8 @@ export function RadarViewer() {
   }, [optionalLayers, productId, rangeHours, speedIndex]);
 
   useEffect(() => {
-    const refreshDueAt = Date.now() + AUTO_REFRESH_MS;
-    const reloadIfDue = () => {
-      if (Date.now() < refreshDueAt || document.visibilityState !== "visible") return;
-      try {
-        window.sessionStorage.setItem(
-          VIEWER_PREFERENCES_KEY,
-          JSON.stringify(preferencesRef.current),
-        );
-      } catch {
-        // Storage can be disabled; refreshing remains safe without restoration.
-      }
-      window.location.reload();
-    };
-    const interval = window.setInterval(reloadIfDue, 30_000);
-    document.addEventListener("visibilitychange", reloadIfDue);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", reloadIfDue);
-    };
-  }, []);
+    loadedVideoManifestRef.current = loadedVideoManifest;
+  }, [loadedVideoManifest]);
 
   useEffect(() => {
     // A visible loop keeps playing on a second monitor even while another
@@ -1614,7 +1640,54 @@ export function RadarViewer() {
     [optionalLayers, product],
   );
   const effectiveRangeHours = Math.min(rangeHours, product?.maxHours ?? 168);
-  const anchorFrames = useMemo(() => {
+  const pilotLayerId = product ? VIDEO_PILOT_LAYERS[product.id] : undefined;
+  const pilotPointer = product && pilotLayerId && activeAnchorId === pilotLayerId && effectiveRangeHours <= 24
+    ? catalog?.videoProfiles?.[product.id]?.[pilotLayerId]?.live
+    : undefined;
+  const pilotPointerKey = pilotPointer
+    ? `${product?.id}/${pilotLayerId}/${pilotPointer.generation}/${pilotPointer.manifestPath}`
+    : "";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!pilotPointer || !pilotLayerId || !product || failedVideoGeneration === pilotPointer.generation) {
+      return;
+    }
+    const manifestUrl = absoluteUrl(pilotPointer.manifestPath, catalogBase);
+    void loadVideoLoopManifest(manifestUrl).then((manifest) => {
+      if (cancelled) return;
+      if (
+        manifest.generation !== pilotPointer.generation
+        || manifest.productId !== product.id
+        || manifest.layerId !== pilotLayerId
+        || !supportsVideoLoop(manifest.media.mimeType)
+      ) {
+        throw new Error("Video profile does not match the selected loop.");
+      }
+      const active = loadedVideoManifestRef.current;
+      if (
+        active
+        && active.productId === manifest.productId
+        && active.layerId === manifest.layerId
+        && active.generation !== manifest.generation
+      ) {
+        pendingVideoManifestRef.current = manifest;
+      } else {
+        pendingVideoManifestRef.current = null;
+        setLoadedVideoManifest(manifest);
+      }
+      setFailedVideoGeneration("");
+      setVideoFallbackReason("");
+    }).catch((reason) => {
+      if (!cancelled) {
+        setFailedVideoGeneration(pilotPointer.generation);
+        setVideoFallbackReason(reason instanceof Error ? reason.message : "Video manifest failed.");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [catalogBase, failedVideoGeneration, pilotLayerId, pilotPointer, pilotPointerKey, product]);
+
+  const fallbackAnchorFrames = useMemo(() => {
     if (!domain || !product) return [];
     const frames = activeAnchorId === "raw-visir-5min"
       ? mergedFrames(
@@ -1630,6 +1703,101 @@ export function RadarViewer() {
       product.archiveFrameIntervalMinutes,
     );
   }, [activeAnchorId, domain, effectiveRangeHours, product]);
+
+  const candidateVideoManifest = useMemo(() => (
+    loadedVideoManifest
+      && pilotPointer
+      && pilotLayerId
+      && loadedVideoManifest.productId === product?.id
+      && loadedVideoManifest.layerId === pilotLayerId
+      && failedVideoGeneration !== loadedVideoManifest.generation
+      ? loadedVideoManifest
+      : null
+  ), [failedVideoGeneration, loadedVideoManifest, pilotLayerId, pilotPointer, product?.id]);
+  const videoManifestFrames = useMemo(
+    () => candidateVideoManifest
+      ? selectVideoFrames(candidateVideoManifest, effectiveRangeHours)
+      : [],
+    [candidateVideoManifest, effectiveRangeHours],
+  );
+  const videoAnchorFrames = useMemo<Frame[]>(() => videoManifestFrames.map((frame) => ({
+    validTime: frame.validTime,
+    path: frame.sourcePath,
+    source: "NOAA GOES-18",
+    sourceLayer: frame.encodedSourceLayer,
+    fetchedAt: frame.sourceFetchedAt,
+    sourceTimes: frame.sourceTimes ?? { satellite: frame.sourceValidTime },
+  })), [videoManifestFrames]);
+  // Proxy planning intentionally stays memoized across media-clock frame
+  // commits. The immutable manifest freezes each proxy choice at encode time;
+  // consulting the newer mutable catalog here could pair an older satellite
+  // video with a late-arriving radar/lightning correction that it cannot load.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  const videoPlans = useMemo<VideoCompositeFramePlan[]>(() => {
+    if (
+      !candidateVideoManifest
+      || !product
+      || !pilotLayerId
+      || videoAnchorFrames.length !== videoManifestFrames.length
+    ) return [];
+    const satelliteRecipeIndex = product.layers.findIndex((recipe) => recipe.id === pilotLayerId);
+    if (satelliteRecipeIndex < 0) return [];
+    const recipeById = new Map(product.layers.map((recipe, index) => [recipe.id, { recipe, index }]));
+    const plans: VideoCompositeFramePlan[] = [];
+    for (let index = 0; index < videoManifestFrames.length; index += 1) {
+      const manifestFrame = videoManifestFrames[index];
+      const underlays: VideoCanvasProxyLayer[] = [];
+      const overlays: VideoCanvasProxyLayer[] = [];
+      for (const selection of manifestFrame.proxyLayers) {
+        const configured = recipeById.get(selection.id);
+        if (
+          !configured
+          || !isProductLayerEnabled(configured.recipe, optionalLayers, product.layers)
+        ) continue;
+        const proxy = candidateVideoManifest.proxies[selection.sourceKey];
+        if (
+          !proxy
+          || proxy.width !== candidateVideoManifest.media.width
+          || proxy.height !== candidateVideoManifest.media.height
+        ) return [];
+        const layer = {
+          url: absoluteUrl(proxy.path, catalogBase),
+          opacity: configured.recipe.opacity,
+          width: proxy.width,
+          height: proxy.height,
+        };
+        if (configured.index < satelliteRecipeIndex) underlays.push(layer);
+        else overlays.push(layer);
+      }
+      const cacheKey = [
+        candidateVideoManifest.generation,
+        manifestFrame.validTime,
+        ...underlays.map((layer) => `u:${layer.url}:${layer.opacity}`),
+        ...overlays.map((layer) => `o:${layer.url}:${layer.opacity}`),
+      ].join("|");
+      plans.push({
+        frame: manifestFrame,
+        cacheKey,
+        underlays,
+        overlays,
+      });
+    }
+    return plans;
+  }, [
+    candidateVideoManifest,
+    catalogBase,
+    optionalLayers,
+    pilotLayerId,
+    product,
+    videoAnchorFrames,
+    videoManifestFrames,
+  ]);
+  const videoModeReady = Boolean(
+    candidateVideoManifest
+    && videoPlans.length >= 2
+    && videoPlans.length === videoAnchorFrames.length,
+  );
+  const anchorFrames = videoModeReady ? videoAnchorFrames : fallbackAnchorFrames;
 
   const availableRangeOptions = useMemo(
     () => RANGE_OPTIONS.filter((hours) => hours <= (product?.maxHours ?? 168)),
@@ -1741,6 +1909,38 @@ export function RadarViewer() {
     [anchorFrames.length],
   );
 
+  const handleVideoFramePresented = useCallback((index: number) => {
+    setFrameIndex((current) => current === index ? current : index);
+  }, []);
+
+  const handleVideoFailure = useCallback((generation: string) => {
+    setFailedVideoGeneration(generation);
+  }, []);
+
+  const activeVideoGeneration = candidateVideoManifest?.generation ?? "";
+  const handleActiveVideoFailure = useCallback((message: string) => {
+    const pending = pendingVideoManifestRef.current;
+    if (pending && pending.generation !== activeVideoGeneration) {
+      pendingVideoManifestRef.current = null;
+      loadedVideoManifestRef.current = pending;
+      setLoadedVideoManifest(pending);
+      return;
+    }
+    if (activeVideoGeneration) {
+      setVideoFallbackReason(message);
+      handleVideoFailure(activeVideoGeneration);
+    }
+  }, [activeVideoGeneration, handleVideoFailure]);
+
+  const handleVideoLoopBoundary = useCallback(() => {
+    const pending = pendingVideoManifestRef.current;
+    if (!pending) return;
+    pendingVideoManifestRef.current = null;
+    loadedVideoManifestRef.current = pending;
+    setLoadedVideoManifest(pending);
+    setFrameIndex(0);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     if (!lightningPointReferences.length) {
@@ -1798,7 +1998,7 @@ export function RadarViewer() {
   }, [activeFirePointReferences, firePointReferences, product]);
 
   useEffect(() => {
-    if (!isAnimating || !catalog || !domain || !product || !catalogBase) return;
+    if (videoModeReady || !isAnimating || !catalog || !domain || !product || !catalogBase) return;
     const pointReferencesFor = (candidate: Frame): PointFrameReference[] => {
       const references = product.layers.flatMap((recipe) => {
         if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
@@ -1946,6 +2146,7 @@ export function RadarViewer() {
     product,
     speed,
     stepFactor,
+    videoModeReady,
   ]);
 
   useEffect(() => {
@@ -1999,7 +2200,13 @@ export function RadarViewer() {
         effectiveRangeHours > 24,
       )
     : [];
-  const pointSourceTimes = [
+  const activeVideoProxyLayers = videoModeReady && videoPlans[currentFrameIndex]
+    ? videoPlans[currentFrameIndex].frame.proxyLayers.filter((selection) => {
+        const recipe = product.layers.find((candidate) => candidate.id === selection.id);
+        return Boolean(recipe && isLayerEnabled(recipe));
+      })
+    : [];
+  const pointSourceTimes = (videoModeReady ? [] : [
     lightningPointReferences.length || ecccFallbackPointReferences.length
       ? {
           label: "LTG",
@@ -2019,22 +2226,42 @@ export function RadarViewer() {
             .sort((left, right) => Date.parse(right) - Date.parse(left))[0],
         }
       : undefined,
-  ].filter((item): item is { label: string; validTime: string } => Boolean(item));
-  const sourceTimes = composedLayers
-    .filter((item): item is typeof item & { frame: Frame } => "frame" in item && Boolean(item.frame))
-    .map((item) => ({ label: sourceLabel(item.id), validTime: actualSourceTime(item.id, item.frame) }))
-    .filter((item): item is { label: string; validTime: string } => Boolean(item.label))
+  ]).filter((item): item is { label: string; validTime: string } => Boolean(item));
+  const sourceTimes = (videoModeReady
+    ? activeVideoProxyLayers.flatMap((selection): { label: string; validTime: string }[] => {
+        const label = sourceLabel(selection.id);
+        return label && selection.sourceValidTime
+          ? [{ label, validTime: selection.sourceValidTime }]
+          : [];
+      })
+    : composedLayers
+        .filter((item): item is typeof item & { frame: Frame } => "frame" in item && Boolean(item.frame))
+        .map((item) => ({ label: sourceLabel(item.id), validTime: actualSourceTime(item.id, item.frame) }))
+        .filter((item): item is { label: string; validTime: string } => Boolean(item.label)))
+    .concat(
+      videoModeReady && videoPlans[currentFrameIndex]
+        ? [{ label: "SAT", validTime: videoPlans[currentFrameIndex].frame.sourceValidTime }]
+        : [],
+    )
     .concat(pointSourceTimes)
     .filter((item, index, all) => all.findIndex((candidate) => candidate.label === item.label && candidate.validTime === item.validTime) === index)
     .map((item) => `${item.label} ${shortClock(item.validTime)}`)
     .join(" · ");
-  const composedLayerIds = new Set(composedLayers.map((layer) => layer.id));
-  if (lightningController && (lightningPointReferences.length || ecccFallbackPointReferences.length)) {
+  const composedLayerIds = new Set(
+    videoModeReady
+      ? ["base-dark", pilotLayerId ?? "", ...activeVideoProxyLayers.map((layer) => layer.id)]
+      : composedLayers.map((layer) => layer.id),
+  );
+  if (!videoModeReady && lightningController && (lightningPointReferences.length || ecccFallbackPointReferences.length)) {
     composedLayerIds.add(lightningController.id);
   }
-  if (fireController && (firePointReferences.length || activeFirePointReferences.length)) {
+  if (!videoModeReady && fireController && (firePointReferences.length || activeFirePointReferences.length)) {
     composedLayerIds.add(fireController.id);
   }
+  const satelliteFilter = ["Overlay", "Broad"].includes(product.group)
+    && (composedLayerIds.has("radar-rain") || composedLayerIds.has("ptype"))
+    ? "saturate(0.52) brightness(0.78) contrast(1.06)"
+    : undefined;
   const missingLayers = product.layers
     .filter((recipe) => (
       isLayerEnabled(recipe)
@@ -2044,7 +2271,7 @@ export function RadarViewer() {
     ))
     .map((recipe) => layerControlLabel(recipe.id))
     .filter((label, index, all) => all.indexOf(label) === index);
-  const hasCoverage = composedLayers.some((layer) => layer.id.includes("coverage"));
+  const hasCoverage = [...composedLayerIds].some((layerId) => layerId.includes("coverage"));
   const optional = product.layers.filter((layer) => layer.optional);
   const activeLayerLabels = optional
     .filter(isLayerEnabled)
@@ -2195,11 +2422,27 @@ export function RadarViewer() {
 
           <div
             className="map-stage"
+            data-renderer={videoModeReady ? "video" : "images"}
+            data-video-fallback={videoFallbackReason || undefined}
             role="img"
             aria-label={`${product.title}${anchor ? `, valid ${utcClock(anchor.validTime)} UTC. ${sourceTimes}` : ", no frames available"}`}
           >
             {!anchor && <div className="map-loading">No frames are available for this product yet.</div>}
-            {composedLayers.map((layer) => (
+            {videoModeReady && candidateVideoManifest ? (
+              <VideoCompositeStage
+                manifest={candidateVideoManifest}
+                mediaUrl={absoluteUrl(candidateVideoManifest.media.path, catalogBase)}
+                plans={videoPlans}
+                requestedIndex={currentFrameIndex}
+                playing={isAnimating}
+                speed={speed}
+                satelliteFilter={satelliteFilter}
+                onFramePresented={handleVideoFramePresented}
+                onFailure={handleActiveVideoFailure}
+                onLoopBoundary={handleVideoLoopBoundary}
+                key={`${product.id}-${candidateVideoManifest.generation}`}
+              />
+            ) : composedLayers.map((layer) => (
               <StableMapImage
                 className="map-layer"
                 src={layer.url}
@@ -2210,20 +2453,19 @@ export function RadarViewer() {
                   opacity: layer.opacity,
                   filter: ["Overlay", "Broad"].includes(product.group)
                     && ["ir", "daynight", "convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
-                    && (composedLayerIds.has("radar-rain") || composedLayerIds.has("ptype"))
-                    ? "saturate(0.52) brightness(0.78) contrast(1.06)"
+                    ? satelliteFilter
                     : undefined,
                 }}
               />
             ))}
-            {lightningMarkers.length > 0 && (
+            {!videoModeReady && lightningMarkers.length > 0 && (
               <LightningCanvas
                 markers={lightningMarkers}
                 style={cropStyle}
                 label="Recent lightning activity; brighter bolts are newer"
               />
             )}
-            {ecccFallbackLightningMarkers.length > 0 && product.domain === "north-america" && (
+            {!videoModeReady && ecccFallbackLightningMarkers.length > 0 && product.domain === "north-america" && (
               <LightningCanvas
                 markers={ecccFallbackLightningMarkers}
                 style={BC_ON_NORTH_AMERICA_STYLE}
@@ -2231,7 +2473,7 @@ export function RadarViewer() {
                 label="Recent ECCC lightning activity in northern British Columbia"
               />
             )}
-            {fireMarkers.length > 0 && (
+            {!videoModeReady && fireMarkers.length > 0 && (
               <FireCanvas markers={fireMarkers} style={cropStyle} />
             )}
             {anchor && (
@@ -2280,14 +2522,19 @@ export function RadarViewer() {
                 </div>
                 <div className="sidebar-layer-controls">
                   {optional.map((layer) => (
-                    <label className="field-select" key={layer.id}>
+                    <div className="field-select" key={layer.id}>
                       <input
+                        aria-label={layerControlLabel(layer.id)}
                         type="checkbox"
+                        data-layer-id={layer.id}
+                        id={`layer-${product.id}-${layer.id}`}
                         checked={isLayerEnabled(layer)}
                         onChange={(event) => toggleOptionalLayer(layer, event.target.checked)}
                       />
-                      {layerControlLabel(layer.id)}
-                    </label>
+                      <label htmlFor={`layer-${product.id}-${layer.id}`}>
+                        {layerControlLabel(layer.id)}
+                      </label>
+                    </div>
                   ))}
                 </div>
               </div>

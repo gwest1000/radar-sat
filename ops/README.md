@@ -10,6 +10,40 @@ objects are deleted only after the catalog commit and only when their timestamps
 independently violate the local retention policy. A 9-day R2 lifecycle rule is
 the final backstop.
 
+## Display-resolution H.264 pilot
+
+The optional pilot accelerates the default NOAA VIS/IR background on the two
+most useful performance test cases: NE BC and North America. It does not encode
+radar, precipitation type, lightning, fires, model contours, or line work into
+the lossy video. Those layers are cropped to the same display grid and the
+browser draws them with the decoded satellite into one atomic canvas frame.
+
+Install ffmpeg with libx264, then enable the pilot without reinstalling the
+LaunchAgent:
+
+```text
+RADARSAT_H264_PILOT_ENABLED=1
+RADARSAT_H264_PILOT_HOURS=24
+# RADARSAT_FFMPEG=/opt/homebrew/bin/ffmpeg
+```
+
+The satellite cycle rebuilds a media object only when its selected source-frame
+fingerprint changes. Overlay-only changes create a new small immutable manifest
+and reuse the existing MP4. Media, manifests, and proxy assets upload before
+`catalog.json`; a failed encode or incomplete generation leaves the previous
+pointer intact and the browser falls back to ordinary image frames. The pilot
+uses progressive fast-start MP4 for the two-domain trial. Its manifest contract
+keeps the transport explicit so completed-hour fMP4/HLS segments can replace it
+later if rolling 24-hour uploads become material.
+
+The publisher always protects the current catalog's media and proxy objects,
+keeps the newest three generations unconditionally, and gives older orphaned
+generations a one-hour browser-transition grace. Content-addressed proxy and
+static-overlay prefixes deliberately have no blind R2 age lifecycle: boundary,
+watershed, transmission-line, or other unchanged proxies may remain referenced
+for longer than nine days. The publisher's post-commit reachability cleanup
+removes those objects once they are no longer referenced.
+
 ## Credentials
 
 Use a Cloudflare R2 object token scoped to the `radar-sat` bucket with Object Read

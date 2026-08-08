@@ -291,6 +291,26 @@ input:focus-visible {
   user-select: none;
 }
 
+.video-composite-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.video-loop-decoder {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  left: -2px;
+  top: -2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .point-symbol-layer {
   position: absolute;
   z-index: 12;
@@ -698,6 +718,11 @@ input:focus-visible {
 .field-select input {
   margin: 0;
   accent-color: var(--accent);
+}
+
+.field-select label {
+  flex: 1 1 auto;
+  cursor: pointer;
 }
 
 .speed-control {

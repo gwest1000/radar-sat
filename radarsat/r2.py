@@ -45,6 +45,16 @@ DEFAULT_MAX_BYTES = 5_000_000_000
 # once.  Twelve still fills the uplink, while avoiding that long-tail stall.
 UPLOAD_WORKERS = 12
 STAMP_RE = re.compile(r"^(\d{8}T\d{4}Z)$")
+VIDEO_GENERATION_RE = re.compile(r"^(\d{8}T\d{4}Z)-([0-9a-f]{12})$")
+VIDEO_TRACKS = frozenset({"live", "archive"})
+VIDEO_MIN_GENERATIONS = 3
+VIDEO_ORPHAN_GRACE = dt.timedelta(hours=1)
+VIDEO_IMMUTABLE_PREFIXES = (
+    "videos/",
+    "video-manifests/",
+    "video-proxies/",
+    "video-static-overlays/",
+)
 
 
 class R2ConfigurationError(RuntimeError):
@@ -131,6 +141,12 @@ class LocalObject:
     path: Path
     size: int
     mtime_ns: int
+
+
+@dataclass(frozen=True)
+class RemoteInventory:
+    sizes: dict[str, int]
+    modified_at: dict[str, dt.datetime]
 
 
 class PublishState:
@@ -313,6 +329,281 @@ def _tile_manifest_paths(root: Path, relative: str) -> list[str]:
     return [str(value) for value in files]
 
 
+def _safe_relative_value(value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if (
+        path.is_absolute()
+        or not path.parts
+        or ".." in path.parts
+        or path.as_posix() != value
+    ):
+        return None
+    return value
+
+
+def _video_manifest_components(
+    product_id: str,
+    layer_id: str,
+    track: str,
+    pointer: object,
+) -> tuple[str, str] | None:
+    if not isinstance(pointer, Mapping):
+        return None
+    generation = pointer.get("generation")
+    manifest_value = _safe_relative_value(pointer.get("manifestPath"))
+    if (
+        not isinstance(generation, str)
+        or not VIDEO_GENERATION_RE.fullmatch(generation)
+        or track not in VIDEO_TRACKS
+        or manifest_value is None
+    ):
+        return None
+    expected = (
+        "video-manifests",
+        product_id,
+        layer_id,
+        track,
+        f"{generation}.json",
+    )
+    if Path(manifest_value).parts != expected:
+        return None
+    return generation, manifest_value
+
+
+def _video_asset_available(
+    root: Path,
+    relative: str,
+    declared_bytes: object = None,
+) -> bool:
+    if not _relative_file_available(root, relative):
+        return False
+    try:
+        if not (root / relative).resolve().is_relative_to(root.resolve()):
+            return False
+    except OSError:
+        return False
+    if declared_bytes is None:
+        return True
+    if (
+        not isinstance(declared_bytes, int)
+        or isinstance(declared_bytes, bool)
+        or declared_bytes <= 0
+    ):
+        return False
+    try:
+        return (root / relative).stat().st_size == declared_bytes
+    except OSError:
+        return False
+
+
+def _proxy_paths(root: Path, product_id: str, proxies: object) -> list[str] | None:
+    if proxies is None:
+        return []
+    if isinstance(proxies, Mapping):
+        values = list(proxies.values())
+    elif isinstance(proxies, list):
+        values = proxies
+    else:
+        return None
+    paths: list[str] = []
+    for proxy in values:
+        if not isinstance(proxy, Mapping):
+            return None
+        relative = _safe_relative_value(proxy.get("path"))
+        if relative is None:
+            return None
+        parts = Path(relative).parts
+        if (
+            len(parts) != 4
+            or parts[0] != "video-proxies"
+            or parts[1] != product_id
+            or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", parts[2])
+            or not re.fullmatch(r"[0-9a-f]{16}\.(?:webp|png)", parts[3])
+            or not _video_asset_available(root, relative, proxy.get("byteLength"))
+        ):
+            return None
+        paths.append(relative)
+    return paths
+
+
+def _static_overlay_path(root: Path, product_id: str, value: object) -> str | None:
+    if value is None:
+        return ""
+    if isinstance(value, Mapping):
+        relative = _safe_relative_value(value.get("path"))
+        declared_bytes = value.get("byteLength")
+    else:
+        relative = _safe_relative_value(value)
+        declared_bytes = None
+    if relative is None:
+        return None
+    parts = Path(relative).parts
+    proxy_shape = (
+        len(parts) == 4
+        and parts[0] == "video-proxies"
+        and parts[1] == product_id
+        and re.fullmatch(r"[a-z0-9][a-z0-9-]*", parts[2]) is not None
+        and re.fullmatch(r"[0-9a-f]{16}\.(?:webp|png)", parts[3]) is not None
+    )
+    static_shape = (
+        len(parts) == 3
+        and parts[0] == "video-static-overlays"
+        and parts[1] == product_id
+        and re.fullmatch(r"[0-9a-f]{16}\.png", parts[2]) is not None
+    )
+    if not (proxy_shape or static_shape) or not _video_asset_available(
+        root,
+        relative,
+        declared_bytes,
+    ):
+        return None
+    return relative
+
+
+def _video_manifest_paths(
+    root: Path,
+    product_id: str,
+    layer_id: str,
+    track: str,
+    pointer: object,
+) -> list[str] | None:
+    components = _video_manifest_components(product_id, layer_id, track, pointer)
+    if components is None:
+        return None
+    generation, manifest_relative = components
+    if not _video_asset_available(root, manifest_relative):
+        return None
+    try:
+        payload = json.loads((root / manifest_relative).read_bytes())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(payload, Mapping)
+        or payload.get("schemaVersion") != 1
+        or payload.get("generation") != generation
+        or payload.get("productId") != product_id
+        or payload.get("layerId") != layer_id
+        or payload.get("track") != track
+        or payload.get("transport") != "progressive-mp4"
+    ):
+        return None
+    frames = payload.get("frames")
+    if not isinstance(frames, list) or len(frames) < 2:
+        return None
+    media = payload.get("media")
+    if not isinstance(media, Mapping):
+        return None
+    media_relative = _safe_relative_value(media.get("path"))
+    media_parts = Path(media_relative).parts if media_relative is not None else ()
+    if (
+        media_relative is None
+        or len(media_parts) != 5
+        or media_parts[:4] != ("videos", product_id, layer_id, track)
+        or Path(media_parts[4]).suffix != ".mp4"
+        or not VIDEO_GENERATION_RE.fullmatch(Path(media_parts[4]).stem)
+        or media.get("mimeType") != "video/mp4"
+        or not _video_asset_available(root, media_relative, media.get("byteLength"))
+    ):
+        return None
+    proxy_paths = _proxy_paths(root, product_id, payload.get("proxies"))
+    if proxy_paths is None:
+        return None
+    proxies = payload.get("proxies")
+    assert isinstance(proxies, Mapping)
+    proxy_keys = {key for key in proxies if isinstance(key, str)}
+    for index, frame in enumerate(frames):
+        if not isinstance(frame, Mapping) or frame.get("index") != index:
+            return None
+        selections = frame.get("proxyLayers")
+        if not isinstance(selections, list):
+            return None
+        for selection in selections:
+            if (
+                not isinstance(selection, Mapping)
+                or not isinstance(selection.get("id"), str)
+                or not isinstance(selection.get("renderId"), str)
+                or selection.get("sourceKey") not in proxy_keys
+                or (
+                    selection.get("sourceValidTime") is not None
+                    and not isinstance(selection.get("sourceValidTime"), str)
+                )
+            ):
+                return None
+    static_path = _static_overlay_path(root, product_id, payload.get("staticOverlay"))
+    if static_path is None:
+        return None
+    paths = [manifest_relative, media_relative, *proxy_paths]
+    if static_path:
+        paths.append(static_path)
+    return paths
+
+
+def _sanitize_video_profiles(root: Path, catalog: dict[str, Any]) -> set[str]:
+    """Keep only complete optional video profiles and return their assets."""
+    source = catalog.get("videoProfiles")
+    if not isinstance(source, Mapping):
+        catalog.pop("videoProfiles", None)
+        return set()
+    known_layers: dict[str, set[str]] = {}
+    products = catalog.get("products")
+    if isinstance(products, list):
+        for product in products:
+            if not isinstance(product, Mapping) or not isinstance(product.get("id"), str):
+                continue
+            layers = product.get("layers")
+            if not isinstance(layers, list):
+                continue
+            known_layers[str(product["id"])] = {
+                str(layer["id"])
+                for layer in layers
+                if isinstance(layer, Mapping) and isinstance(layer.get("id"), str)
+            }
+    sanitized: dict[str, dict[str, dict[str, object]]] = {}
+    relative_paths: set[str] = set()
+    for product_id, layers in source.items():
+        if not isinstance(product_id, str) or not isinstance(layers, Mapping):
+            continue
+        for layer_id, tracks in layers.items():
+            if (
+                not isinstance(layer_id, str)
+                or layer_id not in known_layers.get(product_id, set())
+                or not isinstance(tracks, Mapping)
+            ):
+                continue
+            for track, pointer in tracks.items():
+                if not isinstance(track, str):
+                    continue
+                paths = _video_manifest_paths(
+                    root,
+                    product_id,
+                    layer_id,
+                    track,
+                    pointer,
+                )
+                if paths is None:
+                    continue
+                components = _video_manifest_components(
+                    product_id,
+                    layer_id,
+                    track,
+                    pointer,
+                )
+                assert components is not None
+                generation, manifest_path = components
+                sanitized.setdefault(product_id, {}).setdefault(layer_id, {})[track] = {
+                    "generation": generation,
+                    "manifestPath": manifest_path,
+                }
+                relative_paths.update(paths)
+    if sanitized:
+        catalog["videoProfiles"] = sanitized
+    else:
+        catalog.pop("videoProfiles", None)
+    return relative_paths
+
+
 def discover_objects(
     root: Path,
     *,
@@ -378,6 +669,10 @@ def discover_objects(
                         frame.pop("tiles", None)
                 retained_frames.append(frame)
             layer["frames"] = retained_frames
+    # Video is an optional acceleration path. A torn encoder output must never
+    # block publication of the complete image archive: validate every
+    # immutable dependency and strip only an incomplete video pointer.
+    video_paths = _sanitize_video_profiles(root, catalog)
     catalog_bytes = json.dumps(catalog, separators=(",", ":")).encode()
 
     relative_paths: set[str] = set()
@@ -402,6 +697,7 @@ def discover_objects(
     for legend in catalog.get("legends", {}).values():
         if legend.get("path"):
             relative_paths.add(str(legend["path"]))
+    relative_paths.update(video_paths)
 
     if frame_count == 0:
         raise PublicationSafetyError("Refusing to publish a catalog containing zero frames")
@@ -519,8 +815,17 @@ def retry(operation: Any, description: str, attempts: int = 5) -> Any:
     raise AssertionError("unreachable")
 
 
-def list_remote_objects(client: Any, bucket: str) -> dict[str, int]:
+def _as_utc(value: dt.datetime) -> dt.datetime:
+    return (
+        value.replace(tzinfo=UTC)
+        if value.tzinfo is None
+        else value.astimezone(UTC)
+    )
+
+
+def list_remote_inventory(client: Any, bucket: str) -> RemoteInventory:
     objects: dict[str, int] = {}
+    modified_at: dict[str, dt.datetime] = {}
     token: str | None = None
     while True:
         arguments: dict[str, Any] = {"Bucket": bucket, "MaxKeys": 1000}
@@ -531,16 +836,27 @@ def list_remote_objects(client: Any, bucket: str) -> dict[str, int]:
             f"List R2 bucket {bucket}",
         )
         for item in response.get("Contents", []):
-            objects[str(item["Key"])] = int(item.get("Size", 0))
+            key = str(item["Key"])
+            objects[key] = int(item.get("Size", 0))
+            modified = item.get("LastModified")
+            if isinstance(modified, dt.datetime):
+                modified_at[key] = _as_utc(modified)
         if not response.get("IsTruncated"):
             break
         token = str(response.get("NextContinuationToken", ""))
         if not token:
             raise RuntimeError("R2 returned a truncated listing without a continuation token")
-    return objects
+    return RemoteInventory(objects, modified_at)
+
+
+def list_remote_objects(client: Any, bucket: str) -> dict[str, int]:
+    """Compatibility wrapper for callers interested only in object sizes."""
+    return list_remote_inventory(client, bucket).sizes
 
 
 def content_type(path: Path) -> str:
+    if path.suffix.lower() == ".mp4":
+        return "video/mp4"
     guessed, _ = mimetypes.guess_type(path.name)
     if guessed == "application/json":
         return "application/json; charset=utf-8"
@@ -548,6 +864,8 @@ def content_type(path: Path) -> str:
 
 
 def cache_control(key: str) -> str:
+    if key.startswith(VIDEO_IMMUTABLE_PREFIXES):
+        return IMMUTABLE_CACHE_CONTROL
     if key.startswith(("frames/", "metadata/")):
         # Same-valid-time native frames and derived trails can be corrected in
         # place, so these keys must never be advertised as immutable.
@@ -621,6 +939,122 @@ def expired_remote_keys(remote: Mapping[str, int], now: dt.datetime) -> list[str
         if not keep_layer_frame(valid_time, now, tier, layer_id):
             expired.append(key)
     return sorted(expired)
+
+
+def _video_generation_key(key: str) -> tuple[tuple[str, str, str, str], str] | None:
+    parts = Path(key).parts
+    if (
+        len(parts) != 5
+        or parts[0] not in {"videos", "video-manifests"}
+        or parts[3] not in VIDEO_TRACKS
+    ):
+        return None
+    generation = Path(parts[4]).stem
+    if not VIDEO_GENERATION_RE.fullmatch(generation):
+        return None
+    expected_suffix = ".mp4" if parts[0] == "videos" else ".json"
+    if Path(parts[4]).suffix != expected_suffix:
+        return None
+    return (parts[0], parts[1], parts[2], parts[3]), generation
+
+
+def _generation_time(generation: str) -> dt.datetime:
+    match = VIDEO_GENERATION_RE.fullmatch(generation)
+    if match is None:
+        raise ValueError(f"Invalid video generation: {generation}")
+    return dt.datetime.strptime(match.group(1), "%Y%m%dT%H%MZ").replace(tzinfo=UTC)
+
+
+def expired_video_keys(
+    remote: Mapping[str, int],
+    now: dt.datetime,
+    *,
+    desired_keys: Iterable[str] = (),
+    modified_at: Mapping[str, dt.datetime] | None = None,
+) -> list[str]:
+    """Select unreachable video generations after a browser-safe grace.
+
+    The newest three generations per product/layer/track survive regardless of
+    age, which protects a recovery following a long feed stall. Older
+    generations and unreferenced content-hashed proxies survive for one hour
+    after their last upload. Catalog-referenced objects are always excluded
+    from this post-commit deletion pass.
+    """
+    desired = set(desired_keys)
+    modifications = modified_at or {}
+    groups: dict[tuple[str, str, str, str], dict[str, list[str]]] = {}
+    for key in remote:
+        parsed = _video_generation_key(key)
+        if parsed is None:
+            continue
+        group, generation = parsed
+        groups.setdefault(group, {}).setdefault(generation, []).append(key)
+
+    cutoff = _as_utc(now) - VIDEO_ORPHAN_GRACE
+    expired: set[str] = set()
+    for generations in groups.values():
+        newest = set(sorted(generations, reverse=True)[:VIDEO_MIN_GENERATIONS])
+        for generation, keys in generations.items():
+            if generation in newest or any(key in desired for key in keys):
+                continue
+            timestamps = [
+                _as_utc(value)
+                for key in keys
+                if isinstance((value := modifications.get(key)), dt.datetime)
+            ]
+            last_changed = max(timestamps) if timestamps else _generation_time(generation)
+            if last_changed <= cutoff:
+                expired.update(key for key in keys if key not in desired)
+
+    for key in remote:
+        if key in desired or not key.startswith(("video-proxies/", "video-static-overlays/")):
+            continue
+        modified = modifications.get(key)
+        # Hash-only proxy names carry no reliable timestamp. If R2 did not
+        # provide LastModified, retain them rather than risk deleting a live
+        # content-addressed dependency.
+        if isinstance(modified, dt.datetime) and _as_utc(modified) <= cutoff:
+            expired.add(key)
+    return sorted(expired)
+
+
+def retained_local_video_keys(root: Path, remote: Mapping[str, int]) -> set[str]:
+    """Protect dependencies of the locally retained newest generations.
+
+    The encoder keeps its newest three immutable manifests. Reading those
+    sidecars lets remote cleanup preserve an old generation's shared proxy
+    objects even when the proxy itself was uploaded more than one hour ago.
+    No missing historical object is re-uploaded; this set only constrains the
+    post-commit deletion pass.
+    """
+    groups: dict[tuple[str, str, str, str], set[str]] = {}
+    for key in remote:
+        parsed = _video_generation_key(key)
+        if parsed is None:
+            continue
+        group, generation = parsed
+        groups.setdefault(group, set()).add(generation)
+    retained: set[str] = set()
+    for (prefix, product_id, layer_id, track), generations in groups.items():
+        if prefix != "video-manifests":
+            continue
+        for generation in sorted(generations, reverse=True)[:VIDEO_MIN_GENERATIONS]:
+            pointer = {
+                "generation": generation,
+                "manifestPath": (
+                    f"video-manifests/{product_id}/{layer_id}/{track}/{generation}.json"
+                ),
+            }
+            paths = _video_manifest_paths(
+                root,
+                product_id,
+                layer_id,
+                track,
+                pointer,
+            )
+            if paths is not None:
+                retained.update(paths)
+    return retained
 
 
 def delete_objects(client: Any, config: R2Config, keys: Iterable[str]) -> int:
@@ -739,11 +1173,13 @@ def publish(
         # successful uploads and avoid a paginated 10k-object bucket listing.
         # The half-hour archive worker still performs a full reconciliation
         # and expiry deletion, repairing any externally removed object.
-        remote = (
-            {key: values[0] for key, values in known_objects.items()}
-            if fast
-            else list_remote_objects(client, config.bucket)
-        )
+        if fast:
+            remote = {key: values[0] for key, values in known_objects.items()}
+            remote_modified: dict[str, dt.datetime] = {}
+        else:
+            inventory = list_remote_inventory(client, config.bucket)
+            remote = inventory.sizes
+            remote_modified = inventory.modified_at
         if not fast:
             # The fast path deliberately trusts this index, so a periodic
             # authoritative listing must discard records for objects no longer
@@ -758,12 +1194,25 @@ def publish(
                     if key in remote
                 }
         desired_keys = {item.key for item in objects}
+        retained_video_keys = (
+            retained_local_video_keys(root, remote) if not fast else set()
+        )
         expired = (
-            [
-                key
-                for key in expired_remote_keys(remote, now)
-                if key not in desired_keys
-            ]
+            sorted(
+                {
+                    key
+                    for key in (
+                        *expired_remote_keys(remote, now),
+                        *expired_video_keys(
+                            remote,
+                            now,
+                            desired_keys=desired_keys | retained_video_keys,
+                            modified_at=remote_modified,
+                        ),
+                    )
+                    if key not in desired_keys
+                }
+            )
             if sync_delete and not fast
             else []
         )

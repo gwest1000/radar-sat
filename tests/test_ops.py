@@ -24,8 +24,10 @@ from radarsat.r2 import (
     PublicationSafetyError,
     R2Config,
     cache_control,
+    content_type,
     discover_objects,
     expired_remote_keys,
+    expired_video_keys,
     publish,
     size_guard,
 )
@@ -38,6 +40,11 @@ UTC = dt.timezone.utc
 def write_png(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGBA", (8, 6), (0, 0, 0, 0)).save(path, "PNG")
+
+
+def write_webp(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGBA", (8, 6), (0, 0, 0, 0)).save(path, "WEBP", lossless=True)
 
 
 def make_archive(root: Path, valid: dt.datetime) -> None:
@@ -66,15 +73,129 @@ def make_archive(root: Path, valid: dt.datetime) -> None:
     (root / "catalog.json").write_text(json.dumps(catalog))
 
 
+def add_video_profile(
+    root: Path,
+    generation: str = "20260720T2340Z-abcdef012345",
+) -> set[str]:
+    product_id = "bc-northeast-overlay"
+    layer_id = "raw-visir"
+    track = "live"
+    media_generation = f"{generation[:14]}-fedcba543210"
+    media_relative = f"videos/{product_id}/{layer_id}/{track}/{media_generation}.mp4"
+    manifest_relative = (
+        f"video-manifests/{product_id}/{layer_id}/{track}/{generation}.json"
+    )
+    proxy_relative = (
+        "video-proxies/bc-northeast-overlay/radar-rain/abcdef0123456789.webp"
+    )
+    static_relative = (
+        "video-static-overlays/bc-northeast-overlay/abcdef0123456789.png"
+    )
+    media = root / media_relative
+    media.parent.mkdir(parents=True, exist_ok=True)
+    media.write_bytes(b"test-fast-start-mp4")
+    write_webp(root / proxy_relative)
+    write_png(root / static_relative)
+    manifest = root / manifest_relative
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({
+        "schemaVersion": 1,
+        "generation": generation,
+        "generatedAt": "2026-07-20T23:42:00Z",
+        "productId": product_id,
+        "layerId": layer_id,
+        "track": track,
+        "transport": "progressive-mp4",
+        "cadenceMinutes": 10,
+        "media": {
+            "path": media_relative,
+            "mimeType": "video/mp4",
+            "byteLength": media.stat().st_size,
+        },
+        "frames": [
+            {
+                "index": 0,
+                "validTime": "2026-07-20T23:30:00Z",
+                "sourceValidTime": "2026-07-20T23:30:21Z",
+                "ptsSeconds": 0.0,
+                "durationSeconds": 0.22,
+                "proxyLayers": [{
+                    "id": "radar-rain",
+                    "renderId": "radar-rain",
+                    "sourceKey": "frames/bc/radar-rain/frame.png?v=revision",
+                    "sourceValidTime": "2026-07-20T23:30:00Z",
+                }],
+            },
+            {
+                "index": 1,
+                "validTime": "2026-07-20T23:40:00Z",
+                "sourceValidTime": "2026-07-20T23:40:21Z",
+                "ptsSeconds": 0.22,
+                "durationSeconds": 0.22,
+                "proxyLayers": [{
+                    "id": "radar-rain",
+                    "renderId": "radar-rain",
+                    "sourceKey": "frames/bc/radar-rain/frame.png?v=revision",
+                    "sourceValidTime": "2026-07-20T23:30:00Z",
+                }],
+            },
+        ],
+        "proxies": {
+            "frames/bc/radar-rain/frame.png?v=revision": {
+                "path": proxy_relative,
+                "width": 1280,
+                "height": 860,
+                "byteLength": (root / proxy_relative).stat().st_size,
+            }
+        },
+        "staticOverlay": {
+            "path": static_relative,
+            "byteLength": (root / static_relative).stat().st_size,
+        },
+    }))
+    catalog_path = root / "catalog.json"
+    catalog = json.loads(catalog_path.read_text())
+    catalog.setdefault("products", []).append({
+        "id": product_id,
+        "layers": [{"id": layer_id}],
+    })
+    catalog["videoProfiles"] = {
+        product_id: {
+            layer_id: {
+                track: {
+                    "generation": generation,
+                    "manifestPath": manifest_relative,
+                }
+            }
+        }
+    }
+    catalog_path.write_text(json.dumps(catalog))
+    return {media_relative, manifest_relative, proxy_relative, static_relative}
+
+
 class FakeR2:
-    def __init__(self, remote: dict[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        remote: dict[str, int] | None = None,
+        modified: dict[str, dt.datetime] | None = None,
+    ) -> None:
         self.remote = dict(remote or {})
+        self.modified = dict(modified or {})
         self.events: list[tuple[str, str | tuple[str, ...]]] = []
 
     def list_objects_v2(self, **_kwargs: object) -> dict[str, object]:
         return {
             "Contents": [
-                {"Key": key, "Size": size} for key, size in sorted(self.remote.items())
+                {
+                    "Key": key,
+                    "Size": size,
+                    **(
+                        {"LastModified": self.modified[key]}
+                        if key in self.modified
+                        else {}
+                    ),
+                }
+                for key, size in sorted(self.remote.items())
             ],
             "IsTruncated": False,
         }
@@ -95,6 +216,7 @@ class FakeR2:
         keys = tuple(str(item["Key"]) for item in delete["Objects"])
         for key in keys:
             self.remote.pop(key, None)
+            self.modified.pop(key, None)
         self.events.append(("delete", keys))
         return {}
 
@@ -231,6 +353,16 @@ class ConfigurationTests(unittest.TestCase):
         )
         self.assertNotIn("immutable", cache_control("metadata/bc/daynight/frame.json"))
 
+    def test_versioned_video_assets_are_immutable_with_mp4_mime(self) -> None:
+        for key in (
+            "videos/bc-northeast-overlay/raw-visir/live/generation.mp4",
+            "video-manifests/bc-northeast-overlay/raw-visir/live/generation.json",
+            "video-proxies/bc-northeast-overlay/radar-rain/hash.png",
+            "video-static-overlays/bc-northeast-overlay/hash.png",
+        ):
+            self.assertEqual(cache_control(key), "public, max-age=31536000, immutable")
+        self.assertEqual(content_type(Path("satellite.MP4")), "video/mp4")
+
     @mock.patch("radarsat.r2.keychain_password")
     def test_environment_precedes_scoped_keychain(self, password: mock.Mock) -> None:
         password.side_effect = lambda service: {
@@ -290,6 +422,142 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(fake.events[catalog_index + 1][0], "delete")
             self.assertEqual(result["deleted"], 1)
             self.assertTrue(result["catalogLast"])
+
+    def test_video_manifest_media_proxies_and_static_overlay_are_discovered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_video_profile(root)
+
+            objects, payload = discover_objects(root)
+
+            keys = {item.key for item in objects}
+            self.assertTrue(expected.issubset(keys))
+            published = json.loads(payload)
+            self.assertIn("videoProfiles", published)
+
+    def test_incomplete_video_profile_fails_open_to_image_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            video_keys = add_video_profile(root)
+            proxy = next(key for key in video_keys if key.startswith("video-proxies/"))
+            (root / proxy).unlink()
+
+            objects, payload = discover_objects(root)
+
+            self.assertNotIn("videoProfiles", json.loads(payload))
+            self.assertTrue(any(item.key.startswith("frames/") for item in objects))
+            self.assertFalse(any(item.key.startswith("videos/") for item in objects))
+            self.assertFalse(any(item.key.startswith("video-manifests/") for item in objects))
+
+    def test_video_profile_cannot_escape_output_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            add_video_profile(root)
+            catalog_path = root / "catalog.json"
+            catalog = json.loads(catalog_path.read_text())
+            pointer = catalog["videoProfiles"]["bc-northeast-overlay"]["raw-visir"]["live"]
+            pointer["manifestPath"] = "../outside.json"
+            catalog_path.write_text(json.dumps(catalog))
+
+            _objects, payload = discover_objects(root)
+
+            self.assertNotIn("videoProfiles", json.loads(payload))
+
+    def test_video_retention_keeps_newest_three_and_one_hour_grace(self) -> None:
+        now = dt.datetime(2026, 7, 21, 12, tzinfo=UTC)
+        generations = [
+            "20260721T0800Z-000000000000",
+            "20260721T0900Z-111111111111",
+            "20260721T1000Z-222222222222",
+            "20260721T1100Z-333333333333",
+            "20260721T1200Z-444444444444",
+        ]
+        remote: dict[str, int] = {}
+        modified: dict[str, dt.datetime] = {}
+        for generation in generations:
+            for prefix, suffix in (("videos", "mp4"), ("video-manifests", "json")):
+                key = f"{prefix}/north-america-overlay/westwx-visir/live/{generation}.{suffix}"
+                remote[key] = 1
+                modified[key] = now - dt.timedelta(hours=8)
+        grace_proxy = "video-proxies/north-america-overlay/radar-rain/aaaaaaaaaaaaaaaa.png"
+        old_proxy = "video-proxies/north-america-overlay/radar-rain/bbbbbbbbbbbbbbbb.png"
+        desired_proxy = "video-proxies/north-america-overlay/radar-rain/cccccccccccccccc.png"
+        remote.update({grace_proxy: 1, old_proxy: 1, desired_proxy: 1})
+        modified.update({
+            grace_proxy: now - dt.timedelta(minutes=59),
+            old_proxy: now - dt.timedelta(hours=1, minutes=1),
+            desired_proxy: now - dt.timedelta(days=1),
+        })
+
+        expired = expired_video_keys(
+            remote,
+            now,
+            desired_keys={desired_proxy},
+            modified_at=modified,
+        )
+
+        self.assertIn(old_proxy, expired)
+        self.assertNotIn(grace_proxy, expired)
+        self.assertNotIn(desired_proxy, expired)
+        for generation in generations[-3:]:
+            self.assertFalse(any(generation in key for key in expired))
+        for generation in generations[:2]:
+            self.assertTrue(any(generation in key for key in expired))
+
+    def test_expired_video_generation_is_deleted_only_after_catalog_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            current_video_keys = add_video_profile(root)
+            generations = [
+                "20260720T1800Z-000000000000",
+                "20260720T1900Z-111111111111",
+                "20260720T2000Z-222222222222",
+                "20260720T2100Z-333333333333",
+            ]
+            remote: dict[str, int] = {}
+            modified: dict[str, dt.datetime] = {}
+            for generation in generations:
+                for prefix, suffix in (("videos", "mp4"), ("video-manifests", "json")):
+                    key = f"{prefix}/bc-northeast-overlay/raw-visir/live/{generation}.{suffix}"
+                    remote[key] = 1
+                    modified[key] = now - dt.timedelta(hours=8)
+            for key in current_video_keys:
+                remote[key] = (root / key).stat().st_size
+                modified[key] = now - dt.timedelta(days=2)
+            fake = FakeR2(remote, modified)
+
+            publish(
+                root,
+                self.config(max_bytes=10_000_000),
+                base / "state.sqlite3",
+                base / "publish.json",
+                client=fake,
+                now=now,
+            )
+
+            catalog_index = fake.events.index(("put", "catalog.json"))
+            delete_index = next(
+                index for index, event in enumerate(fake.events) if event[0] == "delete"
+            )
+            self.assertGreater(delete_index, catalog_index)
+            deleted = fake.events[delete_index][1]
+            self.assertTrue(
+                all(
+                    any(generation in key for generation in generations[:2])
+                    for key in deleted
+                )
+            )
+            self.assertTrue(current_video_keys.isdisjoint(deleted))
 
     def test_size_guard_refuses_growth_above_bucket_cap(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -405,6 +673,7 @@ class PublisherTests(unittest.TestCase):
             root.mkdir()
             now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
             make_archive(root, now)
+            video_keys = add_video_profile(root)
             fake = FakeR2()
             state = base / "state.sqlite3"
             status = base / "publish.json"
@@ -431,7 +700,7 @@ class PublisherTests(unittest.TestCase):
                 )
 
             self.assertTrue(first["fast"])
-            self.assertEqual(first["uploaded"], 3)
+            self.assertEqual(first["uploaded"], 3 + len(video_keys))
             self.assertEqual(second["uploaded"], 0)
             link.assert_not_called()
             self.assertEqual(fake.events, [

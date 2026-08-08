@@ -12,9 +12,17 @@ from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[1]
 RUN_CYCLE = PROJECT / "scripts" / "ops" / "run_cycle.zsh"
+CONFIGURE_R2 = PROJECT / "scripts" / "configure_r2.py"
 
 
 class OpsScriptTests(unittest.TestCase):
+    def test_video_proxy_lifecycle_is_reachability_managed(self) -> None:
+        source = CONFIGURE_R2.read_text()
+        self.assertIn('"ID": "expire-video-media"', source)
+        self.assertIn('"ID": "expire-video-manifests"', source)
+        self.assertNotIn('"ID": "expire-video-proxies"', source)
+        self.assertNotIn('"ID": "expire-video-static-overlays"', source)
+
     def _fake_python(self, root: Path) -> tuple[Path, Path]:
         executable = root / "fake-python.zsh"
         log = root / "calls.log"
@@ -195,6 +203,9 @@ class OpsScriptTests(unittest.TestCase):
 
         self.assertIn("backfill_westwx_satellite.py", satellite)
         self.assertIn("backfill_noaa_star_geocolor.py", satellite)
+        self.assertIn("build_satellite_video.py", satellite)
+        self.assertIn("RADARSAT_H264_PILOT_ENABLED:-0", satellite)
+        self.assertIn("retaining the previous video generation and image fallback", satellite)
         self.assertIn("--sector full-disk", satellite)
         self.assertNotIn("backfill_five_minute_bc_satellite.py", satellite)
         self.assertNotIn("backfill_native_bc_satellite.py", satellite)

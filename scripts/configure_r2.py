@@ -38,6 +38,8 @@ def main() -> int:
                     "AllowedHeaders": ["*"],
                     "ExposeHeaders": [
                         "ETag",
+                        "Accept-Ranges",
+                        "Content-Range",
                         "Content-Length",
                         "Content-Type",
                         "Last-Modified",
@@ -61,6 +63,18 @@ def main() -> int:
                     "ID": "expire-observational-metadata",
                     "Status": "Enabled",
                     "Filter": {"Prefix": "metadata/"},
+                    "Expiration": {"Days": 9},
+                },
+                {
+                    "ID": "expire-video-media",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "videos/"},
+                    "Expiration": {"Days": 9},
+                },
+                {
+                    "ID": "expire-video-manifests",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "video-manifests/"},
                     "Expiration": {"Days": 9},
                 },
                 {
