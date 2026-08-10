@@ -1207,6 +1207,22 @@ def publish(
     state = PublishState(state_path, f"{config.account_id}/{config.bucket}")
     try:
         known_objects = state.known_objects()
+        if fast and not dry_run:
+            # Refuse a known-over-cap rapid commit before creating thousands of
+            # hard links for a snapshot that cannot be uploaded. The regular
+            # reconciliation path still inventories R2 and can make space by
+            # deleting expired objects after its atomic catalog commit.
+            preflight_objects, preflight_catalog = discover_objects(
+                root,
+                whole_frame_only=whole_frame_only,
+                minimum_valid_time=minimum_valid_time,
+            )
+            size_guard(
+                preflight_objects,
+                preflight_catalog,
+                {key: values[0] for key, values in known_objects.items()},
+                config,
+            )
         if dry_run:
             objects, catalog_bytes = discover_objects(
                 root,

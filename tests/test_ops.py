@@ -769,6 +769,28 @@ class PublisherTests(unittest.TestCase):
                 ("put", "catalog.json"),
             ])
 
+    def test_fast_over_cap_publish_refuses_before_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+
+            with mock.patch("radarsat.r2.publication_snapshot") as snapshot:
+                with self.assertRaises(PublicationSafetyError):
+                    publish(
+                        root,
+                        self.config(warn_bytes=1, max_bytes=10),
+                        base / "state.sqlite3",
+                        base / "publish.json",
+                        client=FakeR2(),
+                        now=now,
+                        fast=True,
+                    )
+
+            snapshot.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
