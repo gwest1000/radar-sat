@@ -1706,6 +1706,24 @@ export function RadarViewer() {
     );
   }, [activeAnchorId, domain, effectiveRangeHours, product]);
 
+  const videoFreshEnough = useMemo(() => {
+    if (!loadedVideoManifest || !fallbackAnchorFrames.length || !product) return true;
+    const videoNewest = Date.parse(
+      loadedVideoManifest.frames[loadedVideoManifest.frames.length - 1]?.validTime ?? "",
+    );
+    const imageNewest = Date.parse(
+      fallbackAnchorFrames[fallbackAnchorFrames.length - 1]?.validTime ?? "",
+    );
+    if (!Number.isFinite(videoNewest) || !Number.isFinite(imageNewest)) return false;
+    const expectedMinutes = loadedVideoManifest.track === "archive"
+      ? (product.archiveFrameIntervalMinutes ?? 60)
+      : (product.frameIntervalMinutes ?? 10);
+    // A slow/failed encoder must never make current imagery look stale. Keep
+    // video only while it is within one nominal frame (plus scan tolerance) of
+    // the image fallback that the rapid ingest has already published.
+    return imageNewest - videoNewest <= (expectedMinutes * 60_000 + 120_000);
+  }, [fallbackAnchorFrames, loadedVideoManifest, product]);
+
   const candidateVideoManifest = useMemo(() => (
     loadedVideoManifest
       && videoPointer
@@ -1713,10 +1731,11 @@ export function RadarViewer() {
       && loadedVideoManifest.productId === product?.id
       && loadedVideoManifest.layerId === videoLayerId
       && loadedVideoManifest.track === videoTrack
+      && videoFreshEnough
       && failedVideoGeneration !== loadedVideoManifest.generation
       ? loadedVideoManifest
       : null
-  ), [failedVideoGeneration, loadedVideoManifest, product?.id, videoLayerId, videoPointer, videoTrack]);
+  ), [failedVideoGeneration, loadedVideoManifest, product?.id, videoFreshEnough, videoLayerId, videoPointer, videoTrack]);
   const videoManifestFrames = useMemo(
     () => candidateVideoManifest
       ? selectVideoFrames(candidateVideoManifest, effectiveRangeHours)

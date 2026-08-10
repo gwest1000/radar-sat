@@ -203,10 +203,18 @@ class OpsScriptTests(unittest.TestCase):
 
         self.assertIn("backfill_westwx_satellite.py", satellite)
         self.assertIn("backfill_noaa_star_geocolor.py", satellite)
-        self.assertIn("build_satellite_video.py", satellite)
-        self.assertIn("RADARSAT_VIDEO_ENABLED", satellite)
-        self.assertIn("--archive-hours", satellite)
-        self.assertIn("retaining previous video generations and image fallbacks", satellite)
+        video = (PROJECT / "scripts" / "ops" / "run_video_cycle.zsh").read_text()
+        video_plist = (
+            PROJECT / "ops" / "com.greg.radar-sat.video.plist.template"
+        ).read_text()
+        self.assertNotIn("build_satellite_video.py", satellite)
+        self.assertIn("build_satellite_video.py", video)
+        self.assertIn("RADARSAT_VIDEO_ENABLED", video)
+        self.assertIn("--track live", video)
+        self.assertIn("--track archive", video)
+        self.assertIn("--archive-hours", video)
+        self.assertIn("last-good profiles", video)
+        self.assertIn("<integer>600</integer>", video_plist)
         self.assertIn("--sector full-disk", satellite)
         self.assertNotIn("backfill_five_minute_bc_satellite.py", satellite)
         self.assertNotIn("backfill_native_bc_satellite.py", satellite)
@@ -250,12 +258,16 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("try_acquire_heavy_satellite_lock", archive)
         self.assertIn("build_raster_tiles.py", archive)
         self.assertIn('RADARSAT_WEB_TILES_ENABLED:-0', archive)
+        self.assertIn(
+            'publish_locked.zsh" --whole-frame-only --recovery-hours 6',
+            archive,
+        )
         self.assertLess(
             archive.index("release_heavy_satellite_lock"),
             archive.index("build_raster_tiles.py"),
         )
         self.assertIn("heavy-satellite.lock", heavy_lock)
-        self.assertIn("for name in ingest five-minute observations archive health", install)
+        self.assertIn("for name in ingest five-minute observations video archive health", install)
 
     def test_setup_installs_renderer_and_feed_requirements(self) -> None:
         setup = (PROJECT / "scripts" / "ops" / "setup_local.zsh").read_text()

@@ -30,6 +30,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Product to build; repeat to select several (default: all products).",
     )
     parser.add_argument(
+        "--track",
+        action="append",
+        choices=("live", "archive"),
+        help="Track to build; repeat to select both (default: both tracks).",
+    )
+    parser.add_argument(
         "--hours",
         type=float,
         default=24.0,
@@ -57,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
         args.source_root,
         args.output_root,
         product_ids=args.product,
+        track_names=args.track,
         ffmpeg=args.ffmpeg,
         hours=min(args.hours, 24.0),
         archive_hours=min(args.archive_hours, 168.0),

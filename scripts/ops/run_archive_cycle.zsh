@@ -123,4 +123,7 @@ if [[ "${RADARSAT_MODEL_CONTOURS_ENABLED:-${RADARSAT_HRDPS_CONTOURS_ENABLED:-1}}
 fi
 
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh"
+# Long loops are delivered by immutable video manifests. Keep only a recent
+# whole-frame image fallback in R2 while retaining the full source archive on
+# local disk for rebuilding those loops.
+"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --whole-frame-only --recovery-hours 6

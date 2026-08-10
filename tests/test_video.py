@@ -528,6 +528,29 @@ class VideoBuildTests(unittest.TestCase):
                 )
             )
 
+    def test_source_pruned_after_catalog_snapshot_is_omitted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, spec = self.make_source(root)
+            missing = root / "source/frames/bc/raw-visir/10.webp"
+            missing.unlink()
+
+            result = build_profile(
+                root / "source",
+                root / "output",
+                catalog,
+                spec,
+                ffmpeg=str(shutil.which("ffmpeg")),
+                hours=1,
+            )
+
+            self.assertEqual(result["status"], "built")
+            manifest = json.loads(
+                (root / "output" / str(result["manifestPath"])).read_text()
+            )
+            self.assertEqual(len(manifest["frames"]), 2)
+            self.assertNotIn("10.webp", {frame["sourcePath"] for frame in manifest["frames"]})
+
     def test_manifest_freezes_ordered_dynamic_proxy_selections(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

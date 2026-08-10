@@ -1352,6 +1352,14 @@ def build_profile(
     source_root = source_root.resolve()
     output_root = output_root.resolve()
     selected = _selected_satellite_frames(catalog, spec, hours)
+    # Catalog construction and retention are independent workers. A frame can
+    # legitimately age out between the catalog snapshot and this low-priority
+    # video build, so omit vanished inputs instead of losing the whole profile.
+    selected = [
+        frame
+        for frame in selected
+        if (source_root / frame.source_path).is_file()
+    ]
     if len(selected) < 2:
         raise RuntimeError(f"{spec.product_id} has fewer than two usable satellite frames")
     media_inputs = [_source_fingerprint(source_root, frame) for frame in selected]
@@ -1538,6 +1546,7 @@ def build_satellite_videos(
     output_root: Path | None = None,
     *,
     product_ids: Iterable[str] | None = None,
+    track_names: Iterable[str] | None = None,
     ffmpeg: str | None = None,
     hours: float = 24.0,
     archive_hours: float = 168.0,
@@ -1554,11 +1563,17 @@ def build_satellite_videos(
     unknown = requested.difference(spec.product_id for spec in VIDEO_PROFILES)
     if unknown:
         raise ValueError(f"Unsupported video products: {sorted(unknown)}")
+    requested_tracks = set(track_names or ("live", "archive"))
+    unknown_tracks = requested_tracks.difference({"live", "archive"})
+    if unknown_tracks:
+        raise ValueError(f"Unsupported video tracks: {sorted(unknown_tracks)}")
     catalog = build_catalog(source_root)
     results: list[Mapping[str, Any]] = []
     failures: list[Mapping[str, str]] = []
     for spec in VIDEO_PROFILES:
         if spec.product_id not in requested:
+            continue
+        if spec.track not in requested_tracks:
             continue
         try:
             results.append(
