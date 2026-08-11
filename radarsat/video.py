@@ -769,25 +769,34 @@ def _proxy_selections(
     catalog: Mapping[str, Any],
     spec: ProfileSpec,
     selected_frames: Sequence[SelectedFrame],
+    cache: dict[
+        tuple[str, str, dt.datetime], tuple[ProxyLayerSelection, ...]
+    ] | None = None,
 ) -> list[list[ProxyLayerSelection]]:
     """Select each frame's overlays using the viewer's catalog semantics."""
     domain = catalog["domains"][spec.domain_id]
     product = _product(spec.product_id)
-    results: list[list[ProxyLayerSelection]] = []
-    for selected_frame in selected_frames:
-        anchor = selected_frame.valid_time
-        frame_results: list[ProxyLayerSelection] = []
-        for recipe in product.get("layers", []):
-            recipe_id = str(recipe.get("id", ""))
-            if (
-                not recipe_id
-                or recipe_id == "base-dark"
-                or recipe_id in SATELLITE_LAYER_IDS
-            ):
-                continue
-            static = domain.get("staticLayers", {}).get(recipe_id)
-            if isinstance(static, Mapping) and static.get("path"):
-                frame_results.append(
+    prepared: list[
+        tuple[
+            ProxyLayerSelection | None,
+            str | None,
+            str | None,
+            list[Mapping[str, Any]],
+            int | None,
+        ]
+    ] = []
+    for recipe in product.get("layers", []):
+        recipe_id = str(recipe.get("id", ""))
+        if (
+            not recipe_id
+            or recipe_id == "base-dark"
+            or recipe_id in SATELLITE_LAYER_IDS
+        ):
+            continue
+        static = domain.get("staticLayers", {}).get(recipe_id)
+        if isinstance(static, Mapping) and static.get("path"):
+            prepared.append(
+                (
                     ProxyLayerSelection(
                         recipe_id=recipe_id,
                         rendered_layer_id=recipe_id,
@@ -795,18 +804,49 @@ def _proxy_selections(
                         source_path=str(static["path"]),
                         source_valid_time=None,
                         stage_aligned=False,
-                    )
+                    ),
+                    None,
+                    None,
+                    [],
+                    None,
                 )
-                continue
-            rendered_id = _rendered_layer_id(recipe_id, spec, domain)
-            layer = domain.get("layers", {}).get(rendered_id)
-            if not isinstance(layer, Mapping):
-                continue
-            frames = list(layer.get("frames", []))
-            max_age = layer.get("maxAgeMinutes")
-            max_age_minutes = (
-                int(max_age) if isinstance(max_age, (int, float)) else None
             )
+            continue
+        rendered_id = _rendered_layer_id(recipe_id, spec, domain)
+        layer = domain.get("layers", {}).get(rendered_id)
+        if not isinstance(layer, Mapping):
+            continue
+        max_age = layer.get("maxAgeMinutes")
+        prepared.append(
+            (
+                None,
+                recipe_id,
+                rendered_id,
+                list(layer.get("frames", [])),
+                int(max_age) if isinstance(max_age, (int, float)) else None,
+            )
+        )
+
+    results: list[list[ProxyLayerSelection]] = []
+    for selected_frame in selected_frames:
+        anchor = selected_frame.valid_time
+        cache_key = (spec.product_id, spec.track, anchor)
+        if cache is not None and cache_key in cache:
+            results.append(list(cache[cache_key]))
+            continue
+        frame_results: list[ProxyLayerSelection] = []
+        for (
+            static_selection,
+            prepared_recipe_id,
+            rendered_id,
+            frames,
+            max_age_minutes,
+        ) in prepared:
+            if static_selection is not None:
+                frame_results.append(static_selection)
+                continue
+            assert rendered_id is not None
+            assert prepared_recipe_id is not None
             if "lightning" in rendered_id:
                 frame = _at_or_before_source_time(frames, anchor, max_age_minutes)
             else:
@@ -816,7 +856,7 @@ def _proxy_selections(
             key = _source_url_key(frame)
             frame_results.append(
                 ProxyLayerSelection(
-                    recipe_id=recipe_id,
+                    recipe_id=prepared_recipe_id,
                     rendered_layer_id=rendered_id,
                     source_key=key,
                     source_path=str(frame["path"]),
@@ -824,6 +864,8 @@ def _proxy_selections(
                     stage_aligned="-region-" in rendered_id,
                 )
             )
+        if cache is not None:
+            cache[cache_key] = tuple(frame_results)
         results.append(frame_results)
     return results
 
@@ -1348,6 +1390,9 @@ def build_profile(
     ffmpeg: str,
     hours: float = 24.0,
     now: dt.datetime | None = None,
+    proxy_selection_cache: dict[
+        tuple[str, str, dt.datetime], tuple[ProxyLayerSelection, ...]
+    ] | None = None,
 ) -> Mapping[str, Any]:
     source_root = source_root.resolve()
     output_root = output_root.resolve()
@@ -1374,7 +1419,12 @@ def build_profile(
     )
     end_stamp = selected[-1].valid_time.strftime("%Y%m%dT%H%MZ")
 
-    proxy_selections = _proxy_selections(catalog, spec, selected)
+    proxy_selections = _proxy_selections(
+        catalog,
+        spec,
+        selected,
+        proxy_selection_cache,
+    )
     unique_proxy_sources: dict[str, ProxyLayerSelection] = {}
     for frame_selections in proxy_selections:
         for selection in frame_selections:
@@ -1568,6 +1618,9 @@ def build_satellite_videos(
     catalog = build_catalog(source_root)
     results: list[Mapping[str, Any]] = []
     failures: list[Mapping[str, str]] = []
+    proxy_selection_cache: dict[
+        tuple[str, str, dt.datetime], tuple[ProxyLayerSelection, ...]
+    ] = {}
     for spec in VIDEO_PROFILES:
         if spec.product_id not in requested:
             continue
@@ -1583,6 +1636,7 @@ def build_satellite_videos(
                     ffmpeg=executable,
                     hours=min(hours, 24.0) if spec.track == "live" else min(archive_hours, 168.0),
                     now=now,
+                    proxy_selection_cache=proxy_selection_cache,
                 )
             )
         except Exception as error:
