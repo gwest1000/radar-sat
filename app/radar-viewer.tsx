@@ -2615,7 +2615,7 @@ export function RadarViewer() {
                       </div>
                     ))}
                   </section>
-                  {regionalSatelliteOptional.length > 0 ? (
+                  {regionalSatelliteOptional.length > 0 && (
                     <section className="layer-control-section" aria-label="Additional BC satellite products">
                       <p className="layer-control-section-title">Additional BC satellite</p>
                       {regionalSatelliteOptional.map((layer) => (
@@ -2634,8 +2634,6 @@ export function RadarViewer() {
                         </div>
                       ))}
                     </section>
-                  ) : (
-                    <p className="layer-availability-note">Additional MSC/ECCC satellite views are available in the BC regions.</p>
                   )}
                 </div>
               </div>

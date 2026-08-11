@@ -709,16 +709,6 @@ input:focus-visible {
   text-transform: uppercase;
 }
 
-.layer-availability-note {
-  margin: 5px 2px 0;
-  padding-top: 7px;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 0.62rem;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
 .range-button {
   padding: 5px 8px;
   color: var(--muted);

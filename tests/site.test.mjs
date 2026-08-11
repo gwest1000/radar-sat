@@ -280,6 +280,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.layers.find((layer) => layer.id === "glm-lightning-trail").controlId, "lightning");
   assert.match(viewer, /normalizeLayerChoices/);
   assert.match(viewer, /Additional BC satellite/);
+  assert.doesNotMatch(viewer, /Additional MSC\/ECCC satellite views are available/);
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(northAmerica.layers.find((layer) => layer.id === "model-hgt500").optional, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
