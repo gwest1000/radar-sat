@@ -91,7 +91,7 @@ separate, short-lived administrative token, then revoke it. Do not broaden the
 long-lived Object Read & Write publisher token; it intentionally cannot change
 bucket configuration.
 
-The publisher warns at 4 GB and refuses growth beyond 5.5 GB by default. It lists
+The publisher warns at 6.5 GB and refuses growth beyond 8 GB by default. It lists
 the dedicated bucket before every commit so the guard includes orphaned and
 out-of-band objects, not just the local archive.
 

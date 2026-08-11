@@ -39,8 +39,8 @@ IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 MUTABLE_CACHE_CONTROL = "public, max-age=60, must-revalidate"
 STATIC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400"
 CATALOG_CACHE_CONTROL = "no-cache, max-age=0, must-revalidate"
-DEFAULT_WARN_BYTES = 4_000_000_000
-DEFAULT_MAX_BYTES = 5_500_000_000
+DEFAULT_WARN_BYTES = 6_500_000_000
+DEFAULT_MAX_BYTES = 8_000_000_000
 # R2 begins leaving requests pending when a single Mac opens two dozen PUTs at
 # once.  Twelve still fills the uplink, while avoiding that long-tail stall.
 UPLOAD_WORKERS = 12
