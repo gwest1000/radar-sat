@@ -449,6 +449,99 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(unchanged["status"], "unchanged")
 
+    def test_hls_segments_have_one_continuous_timeline(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, spec = self.make_source(root)
+            base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
+            layers = catalog["domains"]["bc"]["layers"]
+            layers["daynight"] = layers.pop("raw-visir")
+            spec = ProfileSpec(
+                spec.product_id,
+                spec.domain_id,
+                "daynight",
+                spec.viewport,
+                spec.width,
+                spec.height,
+                spec.cadence_minutes,
+                crf=spec.crf,
+                preset=spec.preset,
+            )
+            frames = layers["daynight"]["frames"]
+            assert isinstance(frames, list)
+            layers["daynight"]["maxAgeMinutes"] = 0
+            # Cover both an ordinary adjacent-hour boundary and a skipped UTC
+            # segment group. Neither may introduce a timestamp reset or gap.
+            for item, minute in zip(frames, (50, 60, 180), strict=True):
+                valid = base + dt.timedelta(minutes=minute)
+                item["validTime"] = stamp(valid)
+                item["sourceTimes"] = {"GOES-18": stamp(valid)}
+
+            result = build_profile(
+                root / "source",
+                root / "output",
+                catalog,
+                spec,
+                ffmpeg=str(shutil.which("ffmpeg")),
+                hours=4,
+                now=base + dt.timedelta(hours=4),
+            )
+
+            manifest = json.loads(
+                (root / "output" / str(result["manifestPath"])).read_text()
+            )
+            segments = manifest["media"]["segments"]
+            self.assertEqual(len(segments), 3)
+            playlist = (
+                root / "output" / str(manifest["media"]["path"])
+            ).read_text()
+            self.assertIn("#EXT-X-INDEPENDENT-SEGMENTS", playlist)
+            self.assertNotIn("#EXT-X-DISCONTINUITY", playlist)
+
+            encoded: list[list[dict[str, str]]] = []
+            for segment in segments:
+                probe = subprocess.run(
+                    [
+                        str(shutil.which("ffprobe")),
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "v:0",
+                        "-show_entries",
+                        "frame=best_effort_timestamp_time,duration_time",
+                        "-of",
+                        "json",
+                        str(root / "output" / segment["path"]),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                encoded.append(json.loads(probe.stdout)["frames"])
+
+            first_start = float(encoded[0][0]["best_effort_timestamp_time"])
+            for previous, following, entry in zip(
+                encoded[:-1],
+                encoded[1:],
+                segments[1:],
+                strict=True,
+            ):
+                previous_end = float(
+                    previous[-1]["best_effort_timestamp_time"]
+                ) + float(previous[-1]["duration_time"])
+                following_start = float(
+                    following[0]["best_effort_timestamp_time"]
+                )
+                manifest_pts = float(
+                    manifest["frames"][entry["firstFrame"]]["ptsSeconds"]
+                )
+                self.assertAlmostEqual(
+                    following_start - first_start,
+                    manifest_pts,
+                    places=2,
+                )
+                self.assertAlmostEqual(previous_end, following_start, places=2)
+
     def test_failed_rebuild_preserves_previous_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

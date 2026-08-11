@@ -21,10 +21,11 @@ from .config import BROAD_VIEWPORTS, PRODUCTS, VIEWPORTS
 
 UTC = dt.timezone.utc
 VIDEO_SCHEMA_VERSION = 1
-VIDEO_RENDER_VERSION = 5
+VIDEO_RENDER_VERSION = 6
 PROXY_RENDER_VERSION = 1
 METEOROLOGICAL_MINUTE_SECONDS = 0.022
 FFCONCAT_TIMEBASE_FPS = 50
+MPEGTS_TIMESTAMP_WRAP_SECONDS = (1 << 33) / 90_000
 LOCAL_GENERATIONS_TO_KEEP = 3
 LOCAL_ORPHAN_GRACE_HOURS = 1
 
@@ -884,6 +885,25 @@ def _frame_durations(
     return durations
 
 
+def _segment_group_ordinal(valid_time: dt.datetime, track: str) -> int:
+    group_hours = 1 if track == "live" else 6
+    return math.floor(valid_time.astimezone(UTC).timestamp() / (group_hours * 3600))
+
+
+def _segment_pts_offset(valid_time: dt.datetime, track: str) -> float:
+    """Return a stable compressed-time PTS for an independent TS segment.
+
+    One 1/50-second interval per UTC segment group accounts for the concat
+    sentinel packet. The absolute compressed-weather clock is stable as a
+    rolling playlist gains or loses older segments; constraining it to the
+    MPEG-TS timestamp range preserves normal rollover handling.
+    """
+    utc = valid_time.astimezone(UTC)
+    weather_clock = utc.timestamp() / 60 * METEOROLOGICAL_MINUTE_SECONDS
+    sentinel_clock = _segment_group_ordinal(utc, track) / FFCONCAT_TIMEBASE_FPS
+    return (weather_clock + sentinel_clock) % MPEGTS_TIMESTAMP_WRAP_SECONDS
+
+
 def _prepare_satellite_images(
     source_root: Path,
     spec: ProfileSpec,
@@ -1028,6 +1048,7 @@ def _encode_ts(
     durations: Sequence[float],
     destination: Path,
     spec: ProfileSpec,
+    pts_offset: float,
 ) -> None:
     if len(images) != len(durations) or not images:
         raise ValueError("Segment encoding requires matching non-empty images and durations")
@@ -1097,8 +1118,8 @@ def _encode_ts(
             "bt709",
             "-color_range",
             "tv",
-            "-mpegts_flags",
-            "+initial_discontinuity",
+            "-output_ts_offset",
+            f"{pts_offset:.6f}",
             "-f",
             "mpegts",
             "-y",
@@ -1161,11 +1182,32 @@ def _build_hls_media(
     groups = _segment_groups(selected, spec.track)
     adjusted_durations = list(durations)
     segment_entries: list[Mapping[str, Any]] = []
-    for indexes in groups:
+    for group_index, indexes in enumerate(groups):
         # The concat demuxer emits a final 1/50-second sentinel to materialize
-        # the preceding still's declared duration. Account for it explicitly
-        # so the HLS and meteorological clocks stay aligned across segments.
-        adjusted_durations[indexes[-1]] += 1 / FFCONCAT_TIMEBASE_FPS
+        # the preceding still's declared duration. Give every UTC segment
+        # group a stable compressed-time slot, including missing groups, so a
+        # rolling playlist can reuse immutable segments without timestamp
+        # resets or discontinuities at each boundary.
+        current_ordinal = _segment_group_ordinal(
+            selected[indexes[0]].valid_time,
+            spec.track,
+        )
+        if group_index + 1 < len(groups):
+            next_ordinal = _segment_group_ordinal(
+                selected[groups[group_index + 1][0]].valid_time,
+                spec.track,
+            )
+            boundary_count = max(1, next_ordinal - current_ordinal)
+        else:
+            boundary_count = 1
+        sentinel_seconds = boundary_count / FFCONCAT_TIMEBASE_FPS
+        adjusted_durations[indexes[-1]] += sentinel_seconds
+        encoded_durations = [durations[index] for index in indexes]
+        encoded_durations[-1] += sentinel_seconds - (1 / FFCONCAT_TIMEBASE_FPS)
+        pts_offset = _segment_pts_offset(
+            selected[indexes[0]].valid_time,
+            spec.track,
+        )
         segment_fingerprint = _hash_payload(
             {
                 "videoRenderVersion": VIDEO_RENDER_VERSION,
@@ -1179,7 +1221,8 @@ def _build_hls_media(
                 "crf": spec.crf,
                 "preset": spec.preset,
                 "frames": [media_inputs[index] for index in indexes],
-                "durations": [durations[index] for index in indexes],
+                "durations": encoded_durations,
+                "ptsOffset": round(pts_offset, 6),
             },
             16,
         )
@@ -1204,9 +1247,10 @@ def _build_hls_media(
                 _encode_ts(
                     ffmpeg,
                     prepared,
-                    [durations[index] for index in indexes],
+                    encoded_durations,
                     segment_path,
                     spec,
+                    pts_offset,
                 )
         segment_entries.append(
             {
@@ -1243,13 +1287,12 @@ def _build_hls_media(
         lines = [
             "#EXTM3U",
             "#EXT-X-VERSION:3",
+            "#EXT-X-INDEPENDENT-SEGMENTS",
             f"#EXT-X-TARGETDURATION:{target_duration}",
             "#EXT-X-MEDIA-SEQUENCE:0",
             "#EXT-X-PLAYLIST-TYPE:VOD",
         ]
-        for index, entry in enumerate(segment_entries):
-            if index:
-                lines.append("#EXT-X-DISCONTINUITY")
+        for entry in segment_entries:
             lines.append(f"#EXTINF:{float(entry['durationSeconds']):.6f},")
             segment_absolute = output_root / str(entry["path"])
             lines.append(os.path.relpath(segment_absolute, playlist_path.parent))
