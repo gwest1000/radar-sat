@@ -814,6 +814,39 @@ def discover_objects(
     return objects, catalog_bytes
 
 
+def build_catalog_index(catalog_bytes: bytes) -> bytes:
+    """Build the small, frequently-polled view of a published catalog.
+
+    Video manifests contain the authoritative frame/proxy selections for the
+    smooth playback path.  The browser only needs the newest ordinary image
+    frame per layer to determine product availability and to ensure that a
+    video generation is current.  The complete image history remains at
+    ``catalog.json`` and is fetched only when video is unavailable or fails.
+    """
+    try:
+        catalog = json.loads(catalog_bytes)
+    except json.JSONDecodeError as error:
+        raise PublicationSafetyError("Published catalog is not valid JSON") from error
+    if not isinstance(catalog, dict):
+        raise PublicationSafetyError("Published catalog must be a JSON object")
+    for domain in catalog.get("domains", {}).values():
+        if not isinstance(domain, dict):
+            continue
+        for layer in domain.get("layers", {}).values():
+            if not isinstance(layer, dict):
+                continue
+            frames = [
+                frame for frame in layer.get("frames", [])
+                if isinstance(frame, dict)
+            ]
+            layer["frames"] = [
+                max(frames, key=lambda frame: str(frame.get("validTime", "")))
+            ] if frames else []
+    catalog["catalogMode"] = "index"
+    catalog["fullCatalogPath"] = "catalog.json"
+    return json.dumps(catalog, separators=(",", ":")).encode()
+
+
 def publication_snapshot(
     root: Path,
     state_path: Path,
@@ -1199,11 +1232,16 @@ def size_guard(
     pending_delete: Iterable[str] = (),
 ) -> dict[str, int]:
     values = list(objects)
-    local_bytes = sum(item.size for item in values) + len(catalog_bytes)
+    catalog_index_bytes = build_catalog_index(catalog_bytes)
+    local_bytes = (
+        sum(item.size for item in values)
+        + len(catalog_bytes)
+        + len(catalog_index_bytes)
+    )
     remote_bytes = sum(remote.values())
     replaced_bytes = sum(remote.get(item.key, 0) for item in values) + remote.get(
         "catalog.json", 0
-    )
+    ) + remote.get("catalog-index.json", 0)
     peak_projected_bytes = remote_bytes - replaced_bytes + local_bytes
     desired_keys = {item.key for item in values}
     pending_delete_bytes = sum(
@@ -1309,6 +1347,7 @@ def publish(
             build_westwx_catalog(json.loads(catalog_bytes)),
             separators=(",", ":"),
         ).encode()
+        catalog_index_bytes = build_catalog_index(catalog_bytes)
         client = client or boto3_client(config)
         # Rapid satellite/observation commits trust the durable record of
         # successful uploads and avoid a paginated 10k-object bucket listing.
@@ -1405,8 +1444,9 @@ def publish(
                 state.record(item, sha256)
                 uploaded += 1
 
-        # This is the commit point: browsers cannot observe references to an
-        # object until every referenced asset has uploaded successfully.
+        # Commit complete compatibility catalogs first. The small operational
+        # index is last, so new clients cannot discover a generation until all
+        # of its assets and its on-demand full fallback are public.
         upload_catalog(
             client,
             config,
@@ -1414,6 +1454,12 @@ def publish(
             key="westwx-catalog.json",
         )
         upload_catalog(client, config, catalog_bytes)
+        upload_catalog(
+            client,
+            config,
+            catalog_index_bytes,
+            key="catalog-index.json",
+        )
 
         # Deletion is intentionally after the catalog commit and is limited to
         # objects whose timestamp independently violates the retention policy.
@@ -1437,6 +1483,9 @@ def publish(
         }
         if config.public_base_url:
             result["catalogUrl"] = f"{config.public_base_url}/catalog.json"
+            result["catalogIndexUrl"] = (
+                f"{config.public_base_url}/catalog-index.json"
+            )
         write_status(status_path, result)
         return result
     finally:

@@ -130,6 +130,8 @@ type Legend = {
 type Catalog = {
   schemaVersion: number;
   generatedAt: string;
+  catalogMode?: "index" | "full";
+  fullCatalogPath?: string;
   domains: Record<string, Domain>;
   products: Product[];
   legends: Record<string, Legend>;
@@ -142,6 +144,7 @@ type Catalog = {
 
 type SiteConfig = {
   catalogUrl: string;
+  catalogIndexUrl?: string;
   fallbackCatalogUrl?: string;
 };
 
@@ -1520,6 +1523,7 @@ export function RadarViewer() {
   const [videoFallbackReason, setVideoFallbackReason] = useState("");
   const loadedVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const pendingVideoManifestRef = useRef<VideoLoopManifest | null>(null);
+  const fullCatalogLoadRef = useRef("");
   const preferencesRef = useRef<ViewerPreferences>({
     productId: "bc-large-overlay",
     speedIndex: 3,
@@ -1540,7 +1544,7 @@ export function RadarViewer() {
         const configResponse = await fetch("config.json", { cache: "no-store" });
         if (!configResponse.ok) throw new Error("Site configuration is unavailable.");
         const config = (await configResponse.json()) as SiteConfig;
-        const candidates = [config.catalogUrl, config.fallbackCatalogUrl]
+        const candidates = [config.catalogIndexUrl, config.catalogUrl, config.fallbackCatalogUrl]
           .filter((value): value is string => Boolean(value))
           .map((value) => absoluteUrl(value, configResponse.url))
           .filter((value, index, all) => all.indexOf(value) === index);
@@ -1859,6 +1863,61 @@ export function RadarViewer() {
     && videoPlans.length >= 2
     && videoPlans.length === videoAnchorFrames.length,
   );
+
+  useEffect(() => {
+    if (catalog?.catalogMode !== "index" || !catalog.fullCatalogPath || !product) return;
+    const selectedManifestLoaded = Boolean(
+      loadedVideoManifest
+      && videoPointer
+      && loadedVideoManifest.generation === videoPointer.generation
+      && loadedVideoManifest.productId === product.id
+      && loadedVideoManifest.layerId === videoLayerId
+      && loadedVideoManifest.track === videoTrack
+    );
+    const needsFullCatalog = !videoPointer
+      || failedVideoGeneration === videoPointer.generation
+      || (selectedManifestLoaded && (!videoFreshEnough || !videoModeReady));
+    if (!needsFullCatalog) return;
+
+    const fullCatalogUrl = absoluteUrl(catalog.fullCatalogPath, catalogBase);
+    const requestKey = `${catalog.generatedAt}|${fullCatalogUrl}`;
+    if (fullCatalogLoadRef.current === requestKey) return;
+    fullCatalogLoadRef.current = requestKey;
+    let cancelled = false;
+    void fetch(fullCatalogUrl, { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) throw new Error(`Full loop catalog returned ${response.status}.`);
+      const fullCatalog = (await response.json()) as Catalog;
+      if (!fullCatalog.products?.length || !fullCatalog.domains) {
+        throw new Error("Full loop catalog is incomplete.");
+      }
+      if (!cancelled) {
+        setCatalog({
+          ...fullCatalog,
+          catalogMode: "full",
+          fullCatalogPath: catalog.fullCatalogPath,
+        });
+        setCatalogBase(fullCatalogUrl);
+      }
+    }).catch((reason) => {
+      if (!cancelled) {
+        setVideoFallbackReason(
+          reason instanceof Error ? reason.message : "Full image catalog failed.",
+        );
+      }
+    });
+    return () => { cancelled = true; };
+  }, [
+    catalog,
+    catalogBase,
+    failedVideoGeneration,
+    loadedVideoManifest,
+    product,
+    videoFreshEnough,
+    videoLayerId,
+    videoModeReady,
+    videoPointer,
+    videoTrack,
+  ]);
   const anchorFrames = videoModeReady ? videoAnchorFrames : fallbackAnchorFrames;
 
   const availableRangeOptions = useMemo(

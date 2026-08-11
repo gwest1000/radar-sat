@@ -1,4 +1,5 @@
 {
+  "catalogIndexUrl": "https://pub-2cb8162da84b4c1eb0e445844f2a89a3.r2.dev/catalog-index.json",
   "catalogUrl": "https://pub-2cb8162da84b4c1eb0e445844f2a89a3.r2.dev/catalog.json",
   "fallbackCatalogUrl": "demo/catalog.json"
 }

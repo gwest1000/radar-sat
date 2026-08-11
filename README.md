@@ -50,9 +50,11 @@ by fcstGraphics and downloads only the two intermediate hourly GRIBs. High/low
 centres use smoothed neighborhood extrema, broad-background prominence and
 physical-distance suppression so weak gridscale extrema are not labelled.
 
-The browser checks the catalog every minute with an ETag and only parses a new
-catalog when its generation changes. It no longer hard-reloads every five
-minutes, so warmed media and overlay caches survive. A visible window keeps
+The browser checks a compact catalog index every minute with an ETag and only
+parses a new index when its generation changes. The index keeps the newest
+ordinary frame per layer plus the current video pointers; the complete image
+catalog is fetched only if video is unavailable or fails. The page does not
+hard-reload, so warmed media and overlay caches survive. A visible window keeps
 looping when another window or application has focus; only a genuinely hidden
 tab pauses playback.
 
@@ -62,7 +64,7 @@ tab pauses playback.
 ECCC Datamart AMQPS ── GOES / lightning / site radar ┐
 ECCC GeoMet WMS ────── composite / ptype / coverage ├─ local render + retention
 NOAA public S3 ──────── GOES/AHI + GLM/ADP hazards ─┤
-                                                     └─ R2 layers + catalog.json
+                                                     └─ R2 layers + catalog index/full fallback
                                                                   │
 GitHub Pages static viewer ◀──────────────────────────────────────┘
 ```
@@ -81,13 +83,11 @@ GitHub Pages static viewer ◀────────────────�
   six-minute clock for 24 hours, then hourly through day 7.
 - The viewer uses server-rendered transparent lightning-trail PNGs (normally
   6–12 KB) instead of rebuilding hundreds of flash symbols in the browser.
-- An optional H.264 pilot serves only the default NOAA VIS/IR background for
-  NE BC and North America loops of 24 hours or less. NE BC is cropped from the
-  best available source to 1920×1296; North America is 1200×816 because its
-  current source contains no useful additional detail. A hidden hardware video
+- Display-resolution H.264/HLS serves each satellite background, domain, and
+  live/archive time span that has a complete profile. A hidden hardware video
   decoder supplies the satellite clock while one canvas atomically commits the
-  satellite and exact display-sized overlay proxies. The current image renderer
-  remains the automatic compatibility and failure fallback.
+  satellite and exact display-sized overlay proxies. The image renderer and
+  full catalog remain the automatic compatibility and failure fallback.
 - Dynamic clients can use `glm-lightning-points` and `hotspot-points` instead
   of the legacy symbol PNGs. Each compact JSON frame uses normalized top-left
   coordinates and tuple schemas `[x,y,ageMinutes,count]` for GLM or
@@ -110,8 +110,8 @@ GitHub Pages static viewer ◀────────────────�
   target grids render concurrently from that one download. Fixed
   geostationary-to-map neighbour lookups are cached separately so each scan
   does not rebuild the same multi-million-point resampling tree.
-- R2 publication is transactional: assets upload concurrently,
-  then `catalog.json` is committed last.
+- R2 publication is transactional: assets upload concurrently, the complete
+  compatibility catalog commits, then `catalog-index.json` commits last.
 - The publisher warns at 6.5 GB and refuses storage growth above 8 GB.
 - The R2 `frames/` lifecycle expires at 9 days as a failure backstop.
 - Allow roughly 8–10 GB free on the ingest host for processed output plus the

@@ -23,6 +23,7 @@ from radarsat.pipeline import (
 from radarsat.r2 import (
     PublicationSafetyError,
     R2Config,
+    build_catalog_index,
     cache_control,
     content_type,
     discover_objects,
@@ -466,11 +467,45 @@ class PublisherTests(unittest.TestCase):
                 now=now,
             )
 
-            catalog_index = fake.events.index(("put", "catalog.json"))
+            full_catalog_index = fake.events.index(("put", "catalog.json"))
+            catalog_index = fake.events.index(("put", "catalog-index.json"))
             self.assertTrue(all(event[0] == "put" for event in fake.events[:catalog_index]))
+            self.assertLess(full_catalog_index, catalog_index)
             self.assertEqual(fake.events[catalog_index + 1][0], "delete")
             self.assertEqual(result["deleted"], 1)
             self.assertTrue(result["catalogLast"])
+
+    def test_catalog_index_keeps_only_the_newest_frame_per_layer(self) -> None:
+        catalog = {
+            "schemaVersion": 1,
+            "generatedAt": "2026-07-20T23:42:00Z",
+            "domains": {
+                "bc": {
+                    "layers": {
+                        "radar-rain": {
+                            "frames": [
+                                {"validTime": "2026-07-20T23:40:00Z", "path": "new.png"},
+                                {"validTime": "2026-07-20T23:30:00Z", "path": "old.png"},
+                            ]
+                        },
+                        "empty": {"frames": []},
+                    }
+                }
+            },
+            "products": [{"id": "bc", "domain": "bc", "anchorLayer": "radar-rain"}],
+            "videoProfiles": {"bc": {"raw-visir": {"live": {"generation": "g"}}}},
+        }
+
+        index = json.loads(build_catalog_index(json.dumps(catalog).encode()))
+
+        self.assertEqual(index["catalogMode"], "index")
+        self.assertEqual(index["fullCatalogPath"], "catalog.json")
+        self.assertEqual(
+            index["domains"]["bc"]["layers"]["radar-rain"]["frames"],
+            [{"validTime": "2026-07-20T23:40:00Z", "path": "new.png"}],
+        )
+        self.assertEqual(index["domains"]["bc"]["layers"]["empty"]["frames"], [])
+        self.assertIn("videoProfiles", index)
 
     def test_video_manifest_media_proxies_and_static_overlay_are_discovered(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -664,7 +699,11 @@ class PublisherTests(unittest.TestCase):
             now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
             make_archive(root, now)
             objects, catalog = discover_objects(root)
-            local_bytes = sum(item.size for item in objects) + len(catalog)
+            local_bytes = (
+                sum(item.size for item in objects)
+                + len(catalog)
+                + len(build_catalog_index(catalog))
+            )
             expired = "frames/bc/radar-rain/2026/07/01/20260701T0000Z.png"
             result = size_guard(
                 objects,
@@ -791,6 +830,7 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(fake.events, [
                 ("put", "westwx-catalog.json"),
                 ("put", "catalog.json"),
+                ("put", "catalog-index.json"),
             ])
 
     def test_fast_over_cap_publish_refuses_before_snapshot(self) -> None:

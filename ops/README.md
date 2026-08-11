@@ -3,7 +3,10 @@
 Independent three-minute full-disk and five-minute-BC satellite workers, a
 five-minute observation worker, and a half-hour Pacific archive worker each use
 PID locks. Each completed run atomically rebuilds `catalog.json`, publishes its
-referenced assets through the shared R2 lock, then commits `catalog.json` last.
+referenced assets through the shared R2 lock, commits the complete catalog, then
+commits the compact `catalog-index.json` discovery document last. Browsers poll
+the index and fetch the complete image history only for a compatibility or
+failure fallback.
 Raw pruning runs only after observation rendering; any rejected source files
 are explicitly preserved for retry and surfaced by health checks. Expired remote
 objects are deleted only after the catalog commit and only when their timestamps
