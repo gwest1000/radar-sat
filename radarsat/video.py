@@ -1522,7 +1522,6 @@ def build_profile(
         "profiles": profiles,
     }
     _atomic_json(index_path, pointer)
-    prune_result = prune_local_video_orphans(output_root, spec.product_id, now=now)
     return {
         "status": "built",
         "productId": spec.product_id,
@@ -1537,7 +1536,6 @@ def build_profile(
         "frames": len(selected),
         "proxies": len(proxy_entries),
         "proxyWarnings": len(proxy_warnings),
-        **prune_result,
     }
 
 
@@ -1596,10 +1594,15 @@ def build_satellite_videos(
                     "error": f"{type(error).__name__}: {error}",
                 }
             )
+    prune_results = {
+        product_id: prune_local_video_orphans(output_root, product_id, now=now)
+        for product_id in sorted(requested)
+    }
     return {
         "status": "warning" if failures else "ok",
         "sourceRoot": str(source_root),
         "outputRoot": str(output_root),
         "profiles": results,
         "failures": failures,
+        "pruned": prune_results,
     }

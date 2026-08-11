@@ -514,6 +514,30 @@ class PublisherTests(unittest.TestCase):
             self.assertFalse(any(item.key.startswith("videos/") for item in objects))
             self.assertFalse(any(item.key.startswith("video-manifests/") for item in objects))
 
+    def test_existing_video_filter_retains_last_uploaded_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            previous_generation = "20260720T2320Z-111111111111"
+            previous = add_video_profile(root, previous_generation)
+            current_generation = "20260720T2340Z-222222222222"
+            current = add_video_profile(root, current_generation)
+
+            objects, payload = discover_objects(
+                root,
+                existing_video_keys=previous,
+            )
+
+            published = json.loads(payload)
+            pointer = published["videoProfiles"]["bc-northeast-overlay"]["raw-visir"]["live"]
+            self.assertEqual(pointer["generation"], previous_generation)
+            keys = {item.key for item in objects}
+            self.assertTrue(previous.issubset(keys))
+            self.assertFalse(
+                any(key in keys for key in current.difference(previous))
+            )
+
     def test_video_profile_cannot_escape_output_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

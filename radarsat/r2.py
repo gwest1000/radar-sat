@@ -591,7 +591,12 @@ def _video_manifest_paths(
     return paths
 
 
-def _sanitize_video_profiles(root: Path, catalog: dict[str, Any]) -> set[str]:
+def _sanitize_video_profiles(
+    root: Path,
+    catalog: dict[str, Any],
+    *,
+    existing_video_keys: set[str] | None = None,
+) -> set[str]:
     """Keep only complete optional video profiles and return their assets."""
     source = catalog.get("videoProfiles")
     if not isinstance(source, Mapping):
@@ -626,23 +631,56 @@ def _sanitize_video_profiles(root: Path, catalog: dict[str, Any]) -> set[str]:
             for track, pointer in tracks.items():
                 if not isinstance(track, str):
                     continue
-                paths = _video_manifest_paths(
-                    root,
-                    product_id,
-                    layer_id,
-                    track,
-                    pointer,
-                )
-                if paths is None:
+                candidates = [pointer]
+                if existing_video_keys is not None:
+                    manifest_dir = (
+                        root / "video-manifests" / product_id / layer_id / track
+                    )
+                    try:
+                        manifests = sorted(
+                            manifest_dir.glob("*.json"),
+                            key=lambda path: path.stat().st_mtime_ns,
+                            reverse=True,
+                        )
+                    except OSError:
+                        manifests = []
+                    candidates.extend(
+                        {
+                            "generation": manifest.stem,
+                            "manifestPath": manifest.relative_to(root).as_posix(),
+                        }
+                        for manifest in manifests
+                    )
+                selected: tuple[str, str, list[str]] | None = None
+                seen: set[str] = set()
+                for candidate in candidates:
+                    components = _video_manifest_components(
+                        product_id,
+                        layer_id,
+                        track,
+                        candidate,
+                    )
+                    if components is None or components[1] in seen:
+                        continue
+                    seen.add(components[1])
+                    paths = _video_manifest_paths(
+                        root,
+                        product_id,
+                        layer_id,
+                        track,
+                        candidate,
+                    )
+                    if paths is None:
+                        continue
+                    if existing_video_keys is not None and not set(paths).issubset(
+                        existing_video_keys
+                    ):
+                        continue
+                    selected = (*components, paths)
+                    break
+                if selected is None:
                     continue
-                components = _video_manifest_components(
-                    product_id,
-                    layer_id,
-                    track,
-                    pointer,
-                )
-                assert components is not None
-                generation, manifest_path = components
+                generation, manifest_path, paths = selected
                 sanitized.setdefault(product_id, {}).setdefault(layer_id, {})[track] = {
                     "generation": generation,
                     "manifestPath": manifest_path,
@@ -660,6 +698,7 @@ def discover_objects(
     *,
     whole_frame_only: bool = False,
     minimum_valid_time: dt.datetime | None = None,
+    existing_video_keys: set[str] | None = None,
 ) -> tuple[list[LocalObject], bytes]:
     """Return every object referenced by the catalog plus its metadata.
 
@@ -723,7 +762,11 @@ def discover_objects(
     # Video is an optional acceleration path. A torn encoder output must never
     # block publication of the complete image archive: validate every
     # immutable dependency and strip only an incomplete video pointer.
-    video_paths = _sanitize_video_profiles(root, catalog)
+    video_paths = _sanitize_video_profiles(
+        root,
+        catalog,
+        existing_video_keys=existing_video_keys,
+    )
     catalog_bytes = json.dumps(catalog, separators=(",", ":")).encode()
 
     relative_paths: set[str] = set()
@@ -769,6 +812,7 @@ def publication_snapshot(
     whole_frame_only: bool,
     minimum_valid_time: dt.datetime | None,
     known_objects: Mapping[str, tuple[int, int]] | None = None,
+    existing_video_keys: set[str] | None = None,
     attempts: int = 4,
 ) -> tuple[Path, list[LocalObject], bytes]:
     """Hard-link the upload set while live retention continues.
@@ -793,6 +837,7 @@ def publication_snapshot(
                 root,
                 whole_frame_only=whole_frame_only,
                 minimum_valid_time=minimum_valid_time,
+                existing_video_keys=existing_video_keys,
             )
             snapshot_objects: list[LocalObject] = []
             for item in objects:
@@ -1195,8 +1240,11 @@ def publish(
     dry_run: bool = False,
     whole_frame_only: bool = False,
     recovery_hours: float | None = None,
+    existing_video_only: bool = False,
     now: dt.datetime | None = None,
 ) -> dict[str, object]:
+    if existing_video_only and not fast:
+        raise ValueError("existing_video_only requires fast publication")
     now = (now or dt.datetime.now(UTC)).astimezone(UTC)
     snapshot_root: Path | None = None
     minimum_valid_time = (
@@ -1207,6 +1255,7 @@ def publish(
     state = PublishState(state_path, f"{config.account_id}/{config.bucket}")
     try:
         known_objects = state.known_objects()
+        existing_video_keys = set(known_objects) if existing_video_only else None
         if fast and not dry_run:
             # Refuse a known-over-cap rapid commit before creating thousands of
             # hard links for a snapshot that cannot be uploaded. The regular
@@ -1216,6 +1265,7 @@ def publish(
                 root,
                 whole_frame_only=whole_frame_only,
                 minimum_valid_time=minimum_valid_time,
+                existing_video_keys=existing_video_keys,
             )
             size_guard(
                 preflight_objects,
@@ -1228,6 +1278,7 @@ def publish(
                 root,
                 whole_frame_only=whole_frame_only,
                 minimum_valid_time=minimum_valid_time,
+                existing_video_keys=existing_video_keys,
             )
         else:
             snapshot_root, objects, catalog_bytes = publication_snapshot(
@@ -1236,6 +1287,7 @@ def publish(
                 whole_frame_only=whole_frame_only,
                 minimum_valid_time=minimum_valid_time,
                 known_objects=known_objects if fast else None,
+                existing_video_keys=existing_video_keys,
             )
         westwx_catalog_bytes = json.dumps(
             build_westwx_catalog(json.loads(catalog_bytes)),

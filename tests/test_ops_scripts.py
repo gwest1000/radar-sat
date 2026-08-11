@@ -221,7 +221,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertNotIn("scripts/run_ingest.py", satellite)
         self.assertIn("publish_locked.zsh", satellite)
         self.assertIn(
-            "publish_locked.zsh\" --fast --whole-frame-only --recovery-hours 6",
+            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 6",
             satellite,
         )
         self.assertNotIn("build_raster_tiles.py", satellite)
@@ -232,7 +232,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("--sector pacus", five_minute)
         self.assertIn("RADARSAT_NOAA_STAR_PACUS_MAX_FRAMES:-4", five_minute)
         self.assertIn(
-            "publish_locked.zsh\" --fast --whole-frame-only --recovery-hours 6",
+            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 6",
             five_minute,
         )
         self.assertNotIn("build_raster_tiles.py", five_minute)
@@ -243,7 +243,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("--spool-mode only", observations)
         self.assertIn("publish_locked.zsh", observations)
         self.assertIn(
-            "publish_locked.zsh\" --fast --whole-frame-only --recovery-hours 6",
+            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 6",
             observations,
         )
         self.assertIn("<string>10</string>", observation_plist)

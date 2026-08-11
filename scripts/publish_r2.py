@@ -49,9 +49,19 @@ def parse_args() -> argparse.Namespace:
             "entire bucket; a regular archive publication still reconciles R2."
         ),
     )
+    parser.add_argument(
+        "--existing-video-only",
+        action="store_true",
+        help=(
+            "Keep the newest locally available video generation whose complete "
+            "dependency set is already recorded as uploaded."
+        ),
+    )
     args = parser.parse_args()
     if args.recovery_hours is not None and args.recovery_hours <= 0:
         parser.error("recovery-hours must be positive")
+    if args.existing_video_only and not args.fast:
+        parser.error("--existing-video-only requires --fast")
     return args
 
 
@@ -68,6 +78,7 @@ def main() -> int:
             dry_run=args.dry_run,
             whole_frame_only=args.whole_frame_only,
             recovery_hours=args.recovery_hours,
+            existing_video_only=args.existing_video_only,
         )
     except Exception as error:
         write_publish_error(args.status_path, error)

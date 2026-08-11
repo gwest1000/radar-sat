@@ -86,5 +86,5 @@ else
   print -u2 "Warning: observation ingest failed with status ${ingest_status}; raw spool retained."
 fi
 
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast --whole-frame-only --recovery-hours 6
+"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast --existing-video-only --whole-frame-only --recovery-hours 6
 exit "${ingest_status}"
