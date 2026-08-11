@@ -4927,49 +4927,56 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-visir"
         },
         {
           "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-ir"
         },
         {
           "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "snowfog",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "smoke",
@@ -5017,7 +5024,8 @@
           "id": "lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "controlId": "lightning"
         },
         {
           "id": "hotspots",
@@ -5084,49 +5092,56 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-visir"
         },
         {
           "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-ir"
         },
         {
           "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "snowfog",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "smoke",
@@ -5174,7 +5189,8 @@
           "id": "lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "controlId": "lightning"
         },
         {
           "id": "hotspots",
@@ -5242,49 +5258,56 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-visir"
         },
         {
           "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-ir"
         },
         {
           "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "snowfog",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "smoke",
@@ -5332,7 +5355,8 @@
           "id": "lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "controlId": "lightning"
         },
         {
           "id": "hotspots",
@@ -5400,49 +5424,56 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-visir"
         },
         {
           "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-ir"
         },
         {
           "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "snowfog",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "smoke",
@@ -5490,7 +5521,8 @@
           "id": "lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "controlId": "lightning"
         },
         {
           "id": "hotspots",
@@ -5558,49 +5590,56 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-visir"
         },
         {
           "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-ir"
         },
         {
           "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "daynight",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "snowfog",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
         },
         {
           "id": "smoke",
@@ -5648,7 +5687,8 @@
           "id": "lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "controlId": "lightning"
         },
         {
           "id": "hotspots",
@@ -5716,14 +5756,16 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-visir"
         },
         {
           "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-ir"
         },
         {
           "id": "smoke",
@@ -5767,7 +5809,8 @@
           "id": "glm-lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "controlId": "lightning"
         },
         {
           "id": "lightning-trail",
@@ -5839,14 +5882,16 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-visir"
         },
         {
           "id": "westwx-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-ir"
         },
         {
           "id": "smoke",
@@ -5890,7 +5935,8 @@
           "id": "glm-lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "controlId": "lightning"
         },
         {
           "id": "lightning-trail",
@@ -5962,14 +6008,16 @@
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-visir"
         },
         {
           "id": "raw-ir",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": false,
-          "choiceGroup": "satellite"
+          "choiceGroup": "satellite",
+          "controlId": "noaa-ir"
         },
         {
           "id": "smoke",
@@ -6013,7 +6061,8 @@
           "id": "glm-lightning-trail",
           "opacity": 1.0,
           "optional": true,
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "controlId": "lightning"
         },
         {
           "id": "lightning-trail",

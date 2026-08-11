@@ -688,6 +688,37 @@ input:focus-visible {
   width: 100%;
 }
 
+.layer-control-section {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.layer-control-section + .layer-control-section {
+  margin-top: 5px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+}
+
+.layer-control-section-title {
+  margin: 0 1px 1px;
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.layer-availability-note {
+  margin: 5px 2px 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .range-button {
   padding: 5px 8px;
   color: var(--muted);

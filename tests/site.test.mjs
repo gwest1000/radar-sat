@@ -234,6 +234,10 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").optional, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-ir").choiceGroup, "satellite");
+  assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").controlId, "noaa-visir");
+  assert.equal(overlay.layers.find((layer) => layer.id === "raw-ir").controlId, "noaa-ir");
+  assert.equal(overlay.layers.find((layer) => layer.id === "convective").controlSection, "regional-satellite");
+  assert.equal(overlay.layers.find((layer) => layer.id === "lightning-trail").controlId, "lightning");
   assert.deepEqual(
     overlay.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
     ["raw-visir", "raw-ir", "eccc-geocolor", "daynight", "ir", "convective", "snowfog"],
@@ -271,6 +275,11 @@ test("ships a runtime data configuration", async () => {
     northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
     ["westwx-visir", "westwx-ir"],
   );
+  assert.equal(northAmerica.layers.find((layer) => layer.id === "westwx-visir").controlId, "noaa-visir");
+  assert.equal(northAmerica.layers.find((layer) => layer.id === "westwx-ir").controlId, "noaa-ir");
+  assert.equal(northAmerica.layers.find((layer) => layer.id === "glm-lightning-trail").controlId, "lightning");
+  assert.match(viewer, /normalizeLayerChoices/);
+  assert.match(viewer, /Additional BC satellite/);
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(northAmerica.layers.find((layer) => layer.id === "model-hgt500").optional, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);

@@ -92,6 +92,8 @@ type ProductLayer = {
   defaultEnabled?: boolean;
   choiceGroup?: string;
   enabledWith?: string;
+  controlId?: string;
+  controlSection?: string;
 };
 
 type Viewport = {
@@ -811,7 +813,41 @@ function isProductLayerEnabled(
     return Boolean(controller && isProductLayerEnabled(controller, optionalLayers, recipes));
   }
   if (!recipe.optional) return true;
-  return optionalLayers[recipe.id] ?? recipe.defaultEnabled ?? true;
+  return optionalLayers[recipe.controlId ?? recipe.id]
+    ?? optionalLayers[recipe.id]
+    ?? recipe.defaultEnabled
+    ?? true;
+}
+
+function normalizeLayerChoices(
+  current: Record<string, boolean>,
+  product: Product,
+  products: Product[],
+): Record<string, boolean> {
+  let next = current;
+  const choiceGroups = new Set(
+    product.layers.flatMap((recipe) => recipe.choiceGroup ? [recipe.choiceGroup] : []),
+  );
+  for (const choiceGroup of choiceGroups) {
+    const choices = product.layers.filter((recipe) => recipe.choiceGroup === choiceGroup);
+    if (choices.some((recipe) => isProductLayerEnabled(recipe, current, product.layers))) continue;
+    const configuredChoices = products.flatMap((item) => item.layers)
+      .filter((recipe) => recipe.choiceGroup === choiceGroup);
+    const hasUnavailableSelection = configuredChoices.some((recipe) => (
+      current[recipe.controlId ?? recipe.id] === true || current[recipe.id] === true
+    ));
+    if (!hasUnavailableSelection) continue;
+    const fallback = choices.find((recipe) => recipe.defaultEnabled) ?? choices[0];
+    if (!fallback) continue;
+    if (next === current) next = { ...current };
+    for (const candidate of configuredChoices) {
+      next[candidate.id] = false;
+      next[candidate.controlId ?? candidate.id] = false;
+    }
+    next[fallback.id] = true;
+    next[fallback.controlId ?? fallback.id] = true;
+  }
+  return next;
 }
 
 function activeAnchorLayer(product: Product, optionalLayers: Record<string, boolean>): string {
@@ -1572,7 +1608,11 @@ export function RadarViewer() {
                     : 3,
                 );
                 if (stored.optionalLayers && typeof stored.optionalLayers === "object") {
-                  setOptionalLayers(stored.optionalLayers);
+                  setOptionalLayers(normalizeLayerChoices(
+                    stored.optionalLayers,
+                    preferred,
+                    nextCatalog.products,
+                  ));
                 }
                 setFrameIndex(NEWEST_FRAME);
                 setPlaying(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -2295,18 +2335,27 @@ export function RadarViewer() {
     .filter((label, index, all) => all.indexOf(label) === index);
   const hasCoverage = [...composedLayerIds].some((layerId) => layerId.includes("coverage"));
   const optional = product.layers.filter((layer) => layer.optional);
+  const commonOptional = optional.filter((layer) => layer.controlSection !== "regional-satellite");
+  const regionalSatelliteOptional = optional.filter((layer) => layer.controlSection === "regional-satellite");
   const activeLayerLabels = optional
     .filter(isLayerEnabled)
     .map((layer) => layerControlLabel(layer.id));
   const toggleOptionalLayer = (layer: ProductLayer, checked: boolean) => {
     setOptionalLayers((current) => {
       const next = { ...current };
+      const allProductLayers = catalog.products.flatMap((item) => item.layers);
       if (checked && layer.choiceGroup) {
-        for (const peer of optional) {
-          if (peer.choiceGroup === layer.choiceGroup) next[peer.id] = false;
+        for (const peer of allProductLayers) {
+          if (peer.choiceGroup !== layer.choiceGroup) continue;
+          next[peer.id] = false;
+          next[peer.controlId ?? peer.id] = false;
         }
       }
-      next[layer.id] = checked;
+      const controlId = layer.controlId ?? layer.id;
+      for (const peer of allProductLayers) {
+        if ((peer.controlId ?? peer.id) === controlId) next[peer.id] = checked;
+      }
+      next[controlId] = checked;
       return next;
     });
     setFrameIndex(NEWEST_FRAME);
@@ -2390,6 +2439,11 @@ export function RadarViewer() {
                       key={item.id}
                       onClick={(event) => {
                         setPlaying(true);
+                        setOptionalLayers((current) => normalizeLayerChoices(
+                          current,
+                          item,
+                          availableProducts,
+                        ));
                         setProductId(item.id);
                         setFrameIndex(NEWEST_FRAME);
                         setRegionMenuOpen(false);
@@ -2543,21 +2597,46 @@ export function RadarViewer() {
                   <span>{activeLayerLabels.length} active</span>
                 </div>
                 <div className="sidebar-layer-controls">
-                  {optional.map((layer) => (
-                    <div className="field-select" key={layer.id}>
-                      <input
-                        aria-label={layerControlLabel(layer.id)}
-                        type="checkbox"
-                        data-layer-id={layer.id}
-                        id={`layer-${product.id}-${layer.id}`}
-                        checked={isLayerEnabled(layer)}
-                        onChange={(event) => toggleOptionalLayer(layer, event.target.checked)}
-                      />
-                      <label htmlFor={`layer-${product.id}-${layer.id}`}>
-                        {layerControlLabel(layer.id)}
-                      </label>
-                    </div>
-                  ))}
+                  <section className="layer-control-section" aria-label="Common weather layers">
+                    <p className="layer-control-section-title">Common</p>
+                    {commonOptional.map((layer) => (
+                      <div className="field-select" key={layer.id}>
+                        <input
+                          aria-label={layerControlLabel(layer.id)}
+                          type="checkbox"
+                          data-layer-id={layer.id}
+                          id={`layer-${product.id}-${layer.id}`}
+                          checked={isLayerEnabled(layer)}
+                          onChange={(event) => toggleOptionalLayer(layer, event.target.checked)}
+                        />
+                        <label htmlFor={`layer-${product.id}-${layer.id}`}>
+                          {layerControlLabel(layer.id)}
+                        </label>
+                      </div>
+                    ))}
+                  </section>
+                  {regionalSatelliteOptional.length > 0 ? (
+                    <section className="layer-control-section" aria-label="Additional BC satellite products">
+                      <p className="layer-control-section-title">Additional BC satellite</p>
+                      {regionalSatelliteOptional.map((layer) => (
+                        <div className="field-select" key={layer.id}>
+                          <input
+                            aria-label={layerControlLabel(layer.id)}
+                            type="checkbox"
+                            data-layer-id={layer.id}
+                            id={`layer-${product.id}-${layer.id}`}
+                            checked={isLayerEnabled(layer)}
+                            onChange={(event) => toggleOptionalLayer(layer, event.target.checked)}
+                          />
+                          <label htmlFor={`layer-${product.id}-${layer.id}`}>
+                            {layerControlLabel(layer.id)}
+                          </label>
+                        </div>
+                      ))}
+                    </section>
+                  ) : (
+                    <p className="layer-availability-note">Additional MSC/ECCC satellite views are available in the BC regions.</p>
+                  )}
                 </div>
               </div>
             </div>
