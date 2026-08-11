@@ -1320,6 +1320,7 @@ def prune_local_video_orphans(
     product_id: str,
     *,
     now: dt.datetime | None = None,
+    _prune_shared: bool = True,
 ) -> Mapping[str, int]:
     current = (now or dt.datetime.now(UTC)).timestamp()
     grace_seconds = LOCAL_ORPHAN_GRACE_HOURS * 3600
@@ -1343,10 +1344,6 @@ def prune_local_video_orphans(
                     manifest.unlink(missing_ok=True)
                     removed_manifests += 1
     dependencies = _manifest_dependencies(output_root, kept_manifests)
-    all_manifest_dependencies = _manifest_dependencies(
-        output_root,
-        (output_root / "video-manifests").rglob("*.json"),
-    )
     removed_dependencies = 0
     for prefix in ("videos", "video-proxies"):
         root = output_root / prefix / product_id
@@ -1359,29 +1356,34 @@ def prune_local_video_orphans(
                 continue
             path.unlink(missing_ok=True)
             removed_dependencies += 1
-    videos_root = output_root / "videos"
-    if videos_root.exists():
-        for shared_root in videos_root.glob("shared-*"):
-            if not shared_root.is_dir():
-                continue
-            for path in shared_root.rglob("*"):
-                if not path.is_file():
+    if _prune_shared:
+        all_manifest_dependencies = _manifest_dependencies(
+            output_root,
+            (output_root / "video-manifests").rglob("*.json"),
+        )
+        videos_root = output_root / "videos"
+        if videos_root.exists():
+            for shared_root in videos_root.glob("shared-*"):
+                if not shared_root.is_dir():
                     continue
+                for path in shared_root.rglob("*"):
+                    if not path.is_file():
+                        continue
+                    if path in all_manifest_dependencies:
+                        continue
+                    if current - path.stat().st_mtime <= grace_seconds:
+                        continue
+                    path.unlink(missing_ok=True)
+                    removed_dependencies += 1
+        segment_root = output_root / "video-segments"
+        if segment_root.exists():
+            for path in segment_root.rglob("*.ts"):
                 if path in all_manifest_dependencies:
                     continue
                 if current - path.stat().st_mtime <= grace_seconds:
                     continue
                 path.unlink(missing_ok=True)
                 removed_dependencies += 1
-    segment_root = output_root / "video-segments"
-    if segment_root.exists():
-        for path in segment_root.rglob("*.ts"):
-            if path in all_manifest_dependencies:
-                continue
-            if current - path.stat().st_mtime <= grace_seconds:
-                continue
-            path.unlink(missing_ok=True)
-            removed_dependencies += 1
     return {
         "removedManifests": removed_manifests,
         "removedDependencies": removed_dependencies,
@@ -1655,9 +1657,18 @@ def build_satellite_videos(
                     "error": f"{type(error).__name__}: {error}",
                 }
             )
+    sorted_products = sorted(requested)
     prune_results = {
-        product_id: prune_local_video_orphans(output_root, product_id, now=now)
-        for product_id in sorted(requested)
+        product_id: prune_local_video_orphans(
+            output_root,
+            product_id,
+            now=now,
+            # Shared media and segments are referenced across products. Scan
+            # that large tree only after every product's old manifests have
+            # been pruned, and only once per cycle.
+            _prune_shared=index == len(sorted_products) - 1,
+        )
+        for index, product_id in enumerate(sorted_products)
     }
     return {
         "status": "warning" if failures else "ok",

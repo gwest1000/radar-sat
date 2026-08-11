@@ -18,6 +18,7 @@ from radarsat.video import (
     _render_proxy,
     _selected_satellite_frames,
     build_profile,
+    prune_local_video_orphans,
 )
 
 
@@ -546,6 +547,33 @@ class VideoBuildTests(unittest.TestCase):
                     float(previous[-1]["best_effort_timestamp_time"]),
                     following_start,
                 )
+
+    def test_shared_orphan_scan_can_be_deferred_to_final_product(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            segment = output / "video-segments/shared-bc-full/raw-visir/live/old.ts"
+            segment.parent.mkdir(parents=True)
+            segment.write_bytes(b"old")
+            now = dt.datetime(2026, 8, 1, 12, tzinfo=UTC)
+            old = (now - dt.timedelta(hours=2)).timestamp()
+            os.utime(segment, (old, old))
+
+            deferred = prune_local_video_orphans(
+                output,
+                "bc-large-overlay",
+                now=now,
+                _prune_shared=False,
+            )
+            self.assertTrue(segment.is_file())
+            self.assertEqual(deferred["removedDependencies"], 0)
+
+            final = prune_local_video_orphans(
+                output,
+                "north-pacific-overlay",
+                now=now,
+            )
+            self.assertFalse(segment.exists())
+            self.assertEqual(final["removedDependencies"], 1)
 
     def test_failed_rebuild_preserves_previous_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
