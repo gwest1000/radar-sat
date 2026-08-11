@@ -606,6 +606,13 @@ export function VideoCompositeStage({
             ? HLS_LIVE_BUFFER_SECONDS
             : HLS_ARCHIVE_MAX_BUFFER_SECONDS,
           backBufferLength: HLS_BACK_BUFFER_SECONDS,
+          // After an archive loops from its end back to zero, the former tail
+          // becomes a disconnected future range. Without this threshold hls.js
+          // leaves that range resident and repeated loops eventually refill the
+          // entire archive despite the loading cap above.
+          frontBufferFlushThreshold: liveTrack
+            ? Number.POSITIVE_INFINITY
+            : HLS_ARCHIVE_MAX_BUFFER_SECONDS,
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
           const canvas = canvasRef.current;

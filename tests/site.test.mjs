@@ -98,6 +98,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(compositor, /HLS_LIVE_BUFFER_SECONDS = 40/);
   assert.match(compositor, /HLS_ARCHIVE_BUFFER_SECONDS = 45/);
   assert.match(compositor, /HLS_ARCHIVE_MAX_BUFFER_SECONDS = 60/);
+  assert.match(compositor, /frontBufferFlushThreshold: liveTrack/);
   assert.doesNotMatch(compositor, /maxMaxBufferLength: 300/);
   assert.match(compositor, /stopped making progress; using image frames/);
   assert.match(compositor, /video\.addEventListener\("ended", onEnded\)/);
