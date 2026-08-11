@@ -21,7 +21,7 @@ from .config import BROAD_VIEWPORTS, PRODUCTS, VIEWPORTS
 
 UTC = dt.timezone.utc
 VIDEO_SCHEMA_VERSION = 1
-VIDEO_RENDER_VERSION = 6
+VIDEO_RENDER_VERSION = 7
 PROXY_RENDER_VERSION = 1
 METEOROLOGICAL_MINUTE_SECONDS = 0.022
 FFCONCAT_TIMEBASE_FPS = 50
@@ -885,23 +885,16 @@ def _frame_durations(
     return durations
 
 
-def _segment_group_ordinal(valid_time: dt.datetime, track: str) -> int:
-    group_hours = 1 if track == "live" else 6
-    return math.floor(valid_time.astimezone(UTC).timestamp() / (group_hours * 3600))
-
-
-def _segment_pts_offset(valid_time: dt.datetime, track: str) -> float:
+def _segment_pts_offset(valid_time: dt.datetime) -> float:
     """Return a stable compressed-time PTS for an independent TS segment.
 
-    One 1/50-second interval per UTC segment group accounts for the concat
-    sentinel packet. The absolute compressed-weather clock is stable as a
-    rolling playlist gains or loses older segments; constraining it to the
-    MPEG-TS timestamp range preserves normal rollover handling.
+    The absolute compressed-weather clock is stable as a rolling playlist
+    gains or loses older segments; constraining it to the MPEG-TS timestamp
+    range preserves normal rollover handling.
     """
     utc = valid_time.astimezone(UTC)
     weather_clock = utc.timestamp() / 60 * METEOROLOGICAL_MINUTE_SECONDS
-    sentinel_clock = _segment_group_ordinal(utc, track) / FFCONCAT_TIMEBASE_FPS
-    return (weather_clock + sentinel_clock) % MPEGTS_TIMESTAMP_WRAP_SECONDS
+    return weather_clock % MPEGTS_TIMESTAMP_WRAP_SECONDS
 
 
 def _prepare_satellite_images(
@@ -972,16 +965,16 @@ def _encode_mp4(
                     f"duration {duration:.6f}",
                 )
             )
-        # ffconcat needs the next packet to materialize the preceding still's
-        # declared duration.  This duplicate end sentinel begins exactly at
-        # the loop end, so the final meteorological frame remains visible for
-        # its full duration without adding a frame to the public timeline.
         lines.extend(
             (
                 f"file '{_ffconcat_path(images[-1])}'",
                 f"option framerate {FFCONCAT_TIMEBASE_FPS}",
             )
         )
+        # ffconcat needs the next packet to materialize the preceding still's
+        # declared duration.  This duplicate end sentinel begins exactly at
+        # the loop end, so the final meteorological frame remains visible for
+        # its full duration without adding a frame to the public timeline.
         concat.write_text("\n".join(lines) + "\n")
         command = [
             ffmpeg,
@@ -1065,12 +1058,6 @@ def _encode_ts(
                     f"duration {duration:.6f}",
                 )
             )
-        lines.extend(
-            (
-                f"file '{_ffconcat_path(images[-1])}'",
-                f"option framerate {FFCONCAT_TIMEBASE_FPS}",
-            )
-        )
         concat.write_text("\n".join(lines) + "\n")
         command = [
             ffmpeg,
@@ -1182,32 +1169,9 @@ def _build_hls_media(
     groups = _segment_groups(selected, spec.track)
     adjusted_durations = list(durations)
     segment_entries: list[Mapping[str, Any]] = []
-    for group_index, indexes in enumerate(groups):
-        # The concat demuxer emits a final 1/50-second sentinel to materialize
-        # the preceding still's declared duration. Give every UTC segment
-        # group a stable compressed-time slot, including missing groups, so a
-        # rolling playlist can reuse immutable segments without timestamp
-        # resets or discontinuities at each boundary.
-        current_ordinal = _segment_group_ordinal(
-            selected[indexes[0]].valid_time,
-            spec.track,
-        )
-        if group_index + 1 < len(groups):
-            next_ordinal = _segment_group_ordinal(
-                selected[groups[group_index + 1][0]].valid_time,
-                spec.track,
-            )
-            boundary_count = max(1, next_ordinal - current_ordinal)
-        else:
-            boundary_count = 1
-        sentinel_seconds = boundary_count / FFCONCAT_TIMEBASE_FPS
-        adjusted_durations[indexes[-1]] += sentinel_seconds
+    for indexes in groups:
         encoded_durations = [durations[index] for index in indexes]
-        encoded_durations[-1] += sentinel_seconds - (1 / FFCONCAT_TIMEBASE_FPS)
-        pts_offset = _segment_pts_offset(
-            selected[indexes[0]].valid_time,
-            spec.track,
-        )
+        pts_offset = _segment_pts_offset(selected[indexes[0]].valid_time)
         segment_fingerprint = _hash_payload(
             {
                 "videoRenderVersion": VIDEO_RENDER_VERSION,

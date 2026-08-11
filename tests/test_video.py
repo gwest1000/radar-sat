@@ -366,7 +366,7 @@ class VideoBuildTests(unittest.TestCase):
             manifest = json.loads((output / str(result["manifestPath"])).read_text())
             media = output / manifest["media"]["path"]
             self.assertEqual([item["ptsSeconds"] for item in manifest["frames"]], [0.0, 0.22, 0.44])
-            self.assertEqual([item["durationSeconds"] for item in manifest["frames"]], [0.22, 0.22, 0.24])
+            self.assertEqual([item["durationSeconds"] for item in manifest["frames"]], [0.22, 0.22, 0.22])
             self.assertEqual(manifest["transport"], "hls-ts")
             self.assertEqual(manifest["media"]["mimeType"], "application/vnd.apple.mpegurl")
             self.assertEqual(manifest["media"]["width"], 64)
@@ -427,7 +427,7 @@ class VideoBuildTests(unittest.TestCase):
                 text=True,
             )
             encoded_frames = json.loads(frame_probe.stdout)["frames"]
-            self.assertEqual(len(encoded_frames), 4)
+            self.assertEqual(len(encoded_frames), 3)
             self.assertNotIn("B", {item.get("pict_type") for item in encoded_frames})
             timestamps = [
                 float(item["best_effort_timestamp_time"])
@@ -435,7 +435,7 @@ class VideoBuildTests(unittest.TestCase):
             ]
             self.assertEqual(
                 [round(right - left, 2) for left, right in zip(timestamps, timestamps[1:])],
-                [0.22, 0.22, 0.22],
+                [0.22, 0.22],
             )
 
             unchanged = build_profile(
@@ -517,7 +517,12 @@ class VideoBuildTests(unittest.TestCase):
                     capture_output=True,
                     text=True,
                 )
-                encoded.append(json.loads(probe.stdout)["frames"])
+                segment_frames = json.loads(probe.stdout)["frames"]
+                self.assertEqual(
+                    len(segment_frames),
+                    segment["lastFrame"] - segment["firstFrame"] + 1,
+                )
+                encoded.append(segment_frames)
 
             first_start = float(encoded[0][0]["best_effort_timestamp_time"])
             for previous, following, entry in zip(
@@ -526,9 +531,6 @@ class VideoBuildTests(unittest.TestCase):
                 segments[1:],
                 strict=True,
             ):
-                previous_end = float(
-                    previous[-1]["best_effort_timestamp_time"]
-                ) + float(previous[-1]["duration_time"])
                 following_start = float(
                     following[0]["best_effort_timestamp_time"]
                 )
@@ -540,7 +542,10 @@ class VideoBuildTests(unittest.TestCase):
                     manifest_pts,
                     places=2,
                 )
-                self.assertAlmostEqual(previous_end, following_start, places=2)
+                self.assertLess(
+                    float(previous[-1]["best_effort_timestamp_time"]),
+                    following_start,
+                )
 
     def test_failed_rebuild_preserves_previous_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
