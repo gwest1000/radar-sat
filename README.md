@@ -87,7 +87,11 @@ GitHub Pages static viewer ◀────────────────�
   live/archive time span that has a complete profile. A hidden hardware video
   decoder supplies the satellite clock while one canvas atomically commits the
   satellite and exact display-sized overlay proxies. The image renderer and
-  full catalog remain the automatic compatibility and failure fallback.
+  full catalog remain the automatic compatibility and failure fallback. Live
+  loops retain their complete 25–33 seconds of encoded media for smooth 4×
+  replay; longer seven-day tracks use a 45-second target and 60-second hard
+  forward-buffer ceiling instead of retaining most of the archive in
+  MediaSource.
 - Dynamic clients can use `glm-lightning-points` and `hotspot-points` instead
   of the legacy symbol PNGs. Each compact JSON frame uses normalized top-left
   coordinates and tuple schemas `[x,y,ageMinutes,count]` for GLM or

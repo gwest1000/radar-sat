@@ -44,6 +44,13 @@ small immutable HLS playlist. This keeps routine encoding, upload, and orphan
 storage proportional to the new data instead of rewriting a rolling 24-hour
 movie each cycle.
 
+The browser intentionally buffers complete live tracks because a 24-hour
+weather loop is only about 25–33 seconds of encoded playback and must remain
+smooth at 4×. Archive tracks are two to four minutes long, so hls.js targets a
+45-second forward buffer with a 60-second ceiling, a 48 MiB byte budget, and a
+15-second back buffer. Immutable segments already visited remain in the normal
+HTTP cache for later seeks and loop passes.
+
 The publisher always protects the current catalog's media and proxy objects,
 keeps the newest three generations unconditionally, and gives older orphaned
 generations a one-hour browser-transition grace. Content-addressed proxy and

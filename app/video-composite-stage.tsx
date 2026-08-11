@@ -52,6 +52,11 @@ type BitmapLease = {
 const BITMAP_CACHE_BYTES = 192 * 1024 * 1024;
 const FINAL_SURFACE_CACHE_SIZE = 4;
 const VIDEO_PROGRESS_TIMEOUT_MS = 30_000;
+const HLS_BUFFER_BYTES = 48 * 1024 * 1024;
+const HLS_LIVE_BUFFER_SECONDS = 40;
+const HLS_ARCHIVE_BUFFER_SECONDS = 45;
+const HLS_ARCHIVE_MAX_BUFFER_SECONDS = 60;
+const HLS_BACK_BUFFER_SECONDS = 15;
 
 class BitmapCache {
   private entries = new Map<string, BitmapEntry>();
@@ -583,11 +588,24 @@ export function VideoCompositeStage({
     if (!video) return;
     if (manifest.transport === "hls-ts") {
       if (Hls.isSupported()) {
+        // A live 24-hour weather loop is only about 25-33 seconds of encoded
+        // media, so retaining it in full is what makes repeated 4x playback
+        // smooth. Seven-day tracks are 2-4 minutes of media: cap those to a
+        // one-minute forward window instead of allowing hls.js to retain most
+        // or all of the archive in MediaSource. Already fetched immutable
+        // segments remain available through the normal HTTP cache for seeks
+        // and subsequent loops.
+        const liveTrack = manifest.track === "live";
         const hls = new Hls({
           enableWorker: true,
-          maxBufferLength: 120,
-          maxMaxBufferLength: 300,
-          backBufferLength: 30,
+          maxBufferSize: HLS_BUFFER_BYTES,
+          maxBufferLength: liveTrack
+            ? HLS_LIVE_BUFFER_SECONDS
+            : HLS_ARCHIVE_BUFFER_SECONDS,
+          maxMaxBufferLength: liveTrack
+            ? HLS_LIVE_BUFFER_SECONDS
+            : HLS_ARCHIVE_MAX_BUFFER_SECONDS,
+          backBufferLength: HLS_BACK_BUFFER_SECONDS,
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
           const canvas = canvasRef.current;
@@ -598,7 +616,15 @@ export function VideoCompositeStage({
         });
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           const canvas = canvasRef.current;
-          if (canvas) canvas.dataset.hlsState = "manifest-parsed";
+          if (canvas) {
+            canvas.dataset.hlsState = "manifest-parsed";
+            canvas.dataset.hlsBufferTarget = String(
+              liveTrack ? HLS_LIVE_BUFFER_SECONDS : HLS_ARCHIVE_BUFFER_SECONDS,
+            );
+            canvas.dataset.hlsBufferMaximum = String(
+              liveTrack ? HLS_LIVE_BUFFER_SECONDS : HLS_ARCHIVE_MAX_BUFFER_SECONDS,
+            );
+          }
         });
         hls.on(Hls.Events.BUFFER_APPENDED, () => {
           const canvas = canvasRef.current;
@@ -632,7 +658,7 @@ export function VideoCompositeStage({
       video.removeAttribute("src");
       video.load();
     };
-  }, [fail, manifest.media.mimeType, manifest.transport, mediaUrl]);
+  }, [fail, manifest.media.mimeType, manifest.track, manifest.transport, mediaUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
