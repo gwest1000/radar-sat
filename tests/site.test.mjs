@@ -51,6 +51,9 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /atOrBefore\(nativeLayer\?\.frames \?\? \[\], anchor\.validTime/);
   assert.match(viewer, /setPlaying\(true\)/);
   assert.match(viewer, /activeAnchorLayer/);
+  assert.match(viewer, /enabledChoices\.length === 1/);
+  assert.match(viewer, /enabledChoices\.length > 1/);
+  assert.match(viewer, /Prefer an explicit true/);
   assert.match(viewer, /> Radar coverage</);
   assert.doesNotMatch(viewer, /> No radar coverage</);
   assert.match(viewer, /method: "HEAD"/);

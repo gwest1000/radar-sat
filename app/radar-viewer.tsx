@@ -833,9 +833,31 @@ function normalizeLayerChoices(
   );
   for (const choiceGroup of choiceGroups) {
     const choices = product.layers.filter((recipe) => recipe.choiceGroup === choiceGroup);
-    if (choices.some((recipe) => isProductLayerEnabled(recipe, current, product.layers))) continue;
+    const enabledChoices = choices.filter((recipe) => (
+      isProductLayerEnabled(recipe, current, product.layers)
+    ));
+    if (enabledChoices.length === 1) continue;
     const configuredChoices = products.flatMap((item) => item.layers)
       .filter((recipe) => recipe.choiceGroup === choiceGroup);
+    if (enabledChoices.length > 1) {
+      // Older saved preferences can contain a newly selected layer without an
+      // explicit false for the prior/default layer. Prefer an explicit true
+      // over a layer that is enabled only by default, then use product order as
+      // the deterministic tie-breaker. Finally rewrite every alias so the
+      // invalid multi-selection cannot return on the next refresh.
+      const selected = enabledChoices.find((recipe) => (
+        current[recipe.controlId ?? recipe.id] === true
+        || current[recipe.id] === true
+      )) ?? enabledChoices[0];
+      if (next === current) next = { ...current };
+      for (const candidate of configuredChoices) {
+        next[candidate.id] = false;
+        next[candidate.controlId ?? candidate.id] = false;
+      }
+      next[selected.id] = true;
+      next[selected.controlId ?? selected.id] = true;
+      continue;
+    }
     const hasUnavailableSelection = configuredChoices.some((recipe) => (
       current[recipe.controlId ?? recipe.id] === true || current[recipe.id] === true
     ));
