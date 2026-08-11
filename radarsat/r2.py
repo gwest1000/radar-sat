@@ -663,6 +663,15 @@ def _sanitize_video_profiles(
                     if components is None or components[1] in seen:
                         continue
                     seen.add(components[1])
+                    # Immutable manifests are the root of each dependency
+                    # bundle. If this root was never recorded as uploaded,
+                    # reject it before parsing and statting hundreds of proxy
+                    # and segment paths.
+                    if (
+                        existing_video_keys is not None
+                        and components[1] not in existing_video_keys
+                    ):
+                        continue
                     paths = _video_manifest_paths(
                         root,
                         product_id,
@@ -813,6 +822,7 @@ def publication_snapshot(
     minimum_valid_time: dt.datetime | None,
     known_objects: Mapping[str, tuple[int, int]] | None = None,
     existing_video_keys: set[str] | None = None,
+    initial_discovery: tuple[list[LocalObject], bytes] | None = None,
     attempts: int = 4,
 ) -> tuple[Path, list[LocalObject], bytes]:
     """Hard-link the upload set while live retention continues.
@@ -828,17 +838,20 @@ def publication_snapshot(
         if stale.is_dir():
             shutil.rmtree(stale, ignore_errors=True)
     last_error: Exception | None = None
-    for _attempt in range(attempts):
+    for attempt in range(attempts):
         snapshot_root = Path(
             tempfile.mkdtemp(prefix="r2-publish-snapshot-", dir=state_path.parent)
         )
         try:
-            objects, catalog_bytes = discover_objects(
-                root,
-                whole_frame_only=whole_frame_only,
-                minimum_valid_time=minimum_valid_time,
-                existing_video_keys=existing_video_keys,
-            )
+            if attempt == 0 and initial_discovery is not None:
+                objects, catalog_bytes = initial_discovery
+            else:
+                objects, catalog_bytes = discover_objects(
+                    root,
+                    whole_frame_only=whole_frame_only,
+                    minimum_valid_time=minimum_valid_time,
+                    existing_video_keys=existing_video_keys,
+                )
             snapshot_objects: list[LocalObject] = []
             for item in objects:
                 if known_objects is not None and known_objects.get(item.key) == (
@@ -1256,6 +1269,7 @@ def publish(
     try:
         known_objects = state.known_objects()
         existing_video_keys = set(known_objects) if existing_video_only else None
+        preflight_discovery: tuple[list[LocalObject], bytes] | None = None
         if fast and not dry_run:
             # Refuse a known-over-cap rapid commit before creating thousands of
             # hard links for a snapshot that cannot be uploaded. The regular
@@ -1273,6 +1287,7 @@ def publish(
                 {key: values[0] for key, values in known_objects.items()},
                 config,
             )
+            preflight_discovery = (preflight_objects, preflight_catalog)
         if dry_run:
             objects, catalog_bytes = discover_objects(
                 root,
@@ -1288,6 +1303,7 @@ def publish(
                 minimum_valid_time=minimum_valid_time,
                 known_objects=known_objects if fast else None,
                 existing_video_keys=existing_video_keys,
+                initial_discovery=preflight_discovery,
             )
         westwx_catalog_bytes = json.dumps(
             build_westwx_catalog(json.loads(catalog_bytes)),
