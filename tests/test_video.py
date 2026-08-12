@@ -19,7 +19,9 @@ from radarsat.video import (
     _render_proxy,
     _selected_satellite_frames,
     build_profile,
+    build_satellite_videos,
     prune_local_video_orphans,
+    prune_shared_video_orphans,
 )
 
 
@@ -612,6 +614,37 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertFalse(segment.exists())
             self.assertEqual(final["removedDependencies"], 1)
+
+    def test_parallel_build_can_defer_shared_orphan_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, spec = self.make_source(root)
+            old_segment = root / "output/video-segments/shared-bc-full/raw-visir/live/old.ts"
+            old_segment.parent.mkdir(parents=True)
+            old_segment.write_bytes(b"old")
+            old = (dt.datetime.now(UTC) - dt.timedelta(hours=2)).timestamp()
+            os.utime(old_segment, (old, old))
+
+            with (
+                mock.patch("radarsat.video.VIDEO_PROFILES", (spec,)),
+                mock.patch("radarsat.video.build_catalog", return_value=catalog),
+                mock.patch("radarsat.video.build_profile", return_value={"status": "unchanged"}),
+            ):
+                build_satellite_videos(
+                    root / "source",
+                    root / "output",
+                    product_ids=(spec.product_id,),
+                    track_names=(spec.track,),
+                    ffmpeg=str(shutil.which("ffmpeg")),
+                    hours=1,
+                    prune_shared_assets=False,
+                )
+            self.assertTrue(old_segment.is_file())
+            self.assertEqual(
+                prune_shared_video_orphans(root / "output"),
+                1,
+            )
+            self.assertFalse(old_segment.exists())
 
     def test_failed_rebuild_preserves_previous_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

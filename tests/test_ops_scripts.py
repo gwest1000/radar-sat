@@ -211,6 +211,8 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("build_satellite_video.py", video)
         self.assertIn("run_parallel_video_groups live", video)
         self.assertIn("run_parallel_video_groups archive", video)
+        self.assertIn("--defer-shared-prune", video)
+        self.assertIn("--prune-shared-only", video)
         self.assertIn("north-america-overlay &", video)
         self.assertIn("pacific-wna-overlay north-pacific-overlay &", video)
         self.assertIn("RADARSAT_VIDEO_ENABLED", video)

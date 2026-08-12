@@ -1420,37 +1420,48 @@ def prune_local_video_orphans(
             path.unlink(missing_ok=True)
             removed_dependencies += 1
     if _prune_shared:
-        all_manifest_dependencies = _manifest_dependencies(
-            output_root,
-            (output_root / "video-manifests").rglob("*.json"),
-        )
-        videos_root = output_root / "videos"
-        if videos_root.exists():
-            for shared_root in videos_root.glob("shared-*"):
-                if not shared_root.is_dir():
-                    continue
-                for path in shared_root.rglob("*"):
-                    if not path.is_file():
-                        continue
-                    if path in all_manifest_dependencies:
-                        continue
-                    if current - path.stat().st_mtime <= grace_seconds:
-                        continue
-                    path.unlink(missing_ok=True)
-                    removed_dependencies += 1
-        segment_root = output_root / "video-segments"
-        if segment_root.exists():
-            for path in segment_root.rglob("*.ts"):
-                if path in all_manifest_dependencies:
-                    continue
-                if current - path.stat().st_mtime <= grace_seconds:
-                    continue
-                path.unlink(missing_ok=True)
-                removed_dependencies += 1
+        removed_dependencies += prune_shared_video_orphans(output_root, now=now)
     return {
         "removedManifests": removed_manifests,
         "removedDependencies": removed_dependencies,
     }
+
+
+def prune_shared_video_orphans(
+    output_root: Path,
+    *,
+    now: dt.datetime | None = None,
+) -> int:
+    """Prune shared media once, after every parallel product worker commits."""
+    current = (now or dt.datetime.now(UTC)).timestamp()
+    grace_seconds = LOCAL_ORPHAN_GRACE_HOURS * 3600
+    all_manifest_dependencies = _manifest_dependencies(
+        output_root,
+        (output_root / "video-manifests").rglob("*.json"),
+    )
+    removed = 0
+    videos_root = output_root / "videos"
+    if videos_root.exists():
+        for shared_root in videos_root.glob("shared-*"):
+            if not shared_root.is_dir():
+                continue
+            for path in shared_root.rglob("*"):
+                if not path.is_file() or path in all_manifest_dependencies:
+                    continue
+                if current - path.stat().st_mtime <= grace_seconds:
+                    continue
+                path.unlink(missing_ok=True)
+                removed += 1
+    segment_root = output_root / "video-segments"
+    if segment_root.exists():
+        for path in segment_root.rglob("*.ts"):
+            if path in all_manifest_dependencies:
+                continue
+            if current - path.stat().st_mtime <= grace_seconds:
+                continue
+            path.unlink(missing_ok=True)
+            removed += 1
+    return removed
 
 
 def build_profile(
@@ -1695,6 +1706,7 @@ def build_satellite_videos(
     hours: float = 24.0,
     archive_hours: float = 168.0,
     now: dt.datetime | None = None,
+    prune_shared_assets: bool = True,
 ) -> Mapping[str, Any]:
     if hours <= 0 or archive_hours <= 0:
         raise ValueError("hours and archive_hours must be positive")
@@ -1757,7 +1769,9 @@ def build_satellite_videos(
             # Shared media and segments are referenced across products. Scan
             # that large tree only after every product's old manifests have
             # been pruned, and only once per cycle.
-            _prune_shared=index == len(sorted_products) - 1,
+            _prune_shared=(
+                prune_shared_assets and index == len(sorted_products) - 1
+            ),
         )
         for index, product_id in enumerate(sorted_products)
     }

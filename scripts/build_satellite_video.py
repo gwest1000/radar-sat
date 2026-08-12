@@ -5,7 +5,11 @@ import argparse
 import json
 from pathlib import Path
 
-from radarsat.video import VIDEO_PROFILES, build_satellite_videos
+from radarsat.video import (
+    VIDEO_PROFILES,
+    build_satellite_videos,
+    prune_shared_video_orphans,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -51,6 +55,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--ffmpeg",
         help="Explicit ffmpeg executable; defaults to PATH discovery.",
     )
+    parser.add_argument(
+        "--defer-shared-prune",
+        action="store_true",
+        help="defer the shared media scan until all parallel workers finish",
+    )
+    parser.add_argument(
+        "--prune-shared-only",
+        action="store_true",
+        help="only prune unreferenced shared media and exit",
+    )
     args = parser.parse_args(argv)
     if args.hours <= 0 or args.archive_hours <= 0:
         parser.error("--hours and --archive-hours must be positive")
@@ -59,6 +73,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    output_root = (args.output_root or args.source_root).resolve()
+    if args.prune_shared_only:
+        removed = prune_shared_video_orphans(output_root)
+        print(json.dumps({"status": "ok", "removedSharedDependencies": removed}, indent=2))
+        return 0
     result = build_satellite_videos(
         args.source_root,
         args.output_root,
@@ -67,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         ffmpeg=args.ffmpeg,
         hours=min(args.hours, 24.0),
         archive_hours=min(args.archive_hours, 168.0),
+        prune_shared_assets=not args.defer_shared_prune,
     )
     print(json.dumps(result, indent=2))
     return 1 if result["status"] == "warning" else 0

@@ -58,6 +58,7 @@ run_video_group() {
     --track "${track}"
     --hours "${RADARSAT_VIDEO_LIVE_HOURS:-${RADARSAT_H264_PILOT_HOURS:-24}}"
     --archive-hours "${RADARSAT_VIDEO_ARCHIVE_HOURS:-168}"
+    --defer-shared-prune
   )
   local product=""
   for product in "$@"; do
@@ -83,6 +84,10 @@ run_parallel_video_groups() {
   wait "${bc_pid}" || build_status=1
   wait "${north_america_pid}" || build_status=1
   wait "${pacific_pid}" || build_status=1
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_satellite_video.py" \
+    --source-root "${OUTPUT_ROOT}" \
+    --output-root "${OUTPUT_ROOT}" \
+    --prune-shared-only || build_status=1
   return "${build_status}"
 }
 
