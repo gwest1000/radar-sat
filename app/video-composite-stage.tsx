@@ -55,7 +55,10 @@ type DecodeTask = {
 };
 
 const BITMAP_CACHE_BYTES = 128 * 1024 * 1024;
-const FINAL_SURFACE_CACHE_SIZE = 16;
+const MIN_SURFACE_CACHE_ENTRIES = 16;
+const LOW_MEMORY_SURFACE_CACHE_BYTES = 256 * 1024 * 1024;
+const STANDARD_SURFACE_CACHE_BYTES = 384 * 1024 * 1024;
+const HIGH_MEMORY_SURFACE_CACHE_BYTES = 768 * 1024 * 1024;
 const PLAYBACK_SURFACE_PIXELS = 1_300_000;
 const VIDEO_PROGRESS_TIMEOUT_MS = 30_000;
 const HLS_BUFFER_BYTES = 48 * 1024 * 1024;
@@ -78,6 +81,32 @@ function playbackLookahead(speed: number): number {
   if (speed >= 3) return 8;
   if (speed >= 2) return 4;
   return 2;
+}
+
+function surfaceCacheBudgetBytes(): number {
+  const deviceMemory = Number(
+    (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4,
+  );
+  if (deviceMemory >= 8) return HIGH_MEMORY_SURFACE_CACHE_BYTES;
+  if (deviceMemory >= 4) return STANDARD_SURFACE_CACHE_BYTES;
+  return LOW_MEMORY_SURFACE_CACHE_BYTES;
+}
+
+function surfaceCacheEntryLimit(
+  plans: VideoCompositeFramePlan[],
+  width: number,
+  height: number,
+  budgetBytes: number,
+): number {
+  const hasUnderlay = plans.some((plan) => plan.underlays.length > 0);
+  const hasOverlay = plans.some((plan) => plan.overlays.length > 0);
+  const surfacesPerFrame = Math.max(1, Number(hasUnderlay) + Number(hasOverlay));
+  const bytesPerFrame = width * height * 4 * surfacesPerFrame;
+  const budgetEntries = Math.max(1, Math.floor(budgetBytes / bytesPerFrame));
+  return Math.min(
+    plans.length,
+    Math.max(MIN_SURFACE_CACHE_ENTRIES, budgetEntries),
+  );
 }
 
 class BitmapCache {
@@ -132,6 +161,10 @@ class BitmapCache {
     this.decodeQueue = [];
     for (const entry of this.entries.values()) this.retire(entry);
     this.entries.clear();
+  }
+
+  activate(): void {
+    this.disposed = false;
   }
 
   private decode(blob: Blob): Promise<ImageBitmap> {
@@ -206,12 +239,31 @@ class SurfaceCache {
     promise: Promise<PreparedSurfaces>;
     value?: PreparedSurfaces;
   }>();
+  private preparedCount = 0;
 
   constructor(
     private readonly bitmaps: BitmapCache,
     private readonly width: number,
     private readonly height: number,
+    private maxEntries: number,
   ) {}
+
+  get size(): number {
+    return this.entries.size;
+  }
+
+  get limit(): number {
+    return this.maxEntries;
+  }
+
+  get builds(): number {
+    return this.preparedCount;
+  }
+
+  setLimit(value: number): void {
+    this.maxEntries = Math.max(1, value);
+    this.trim();
+  }
 
   peek(key: string): PreparedSurfaces | undefined {
     const entry = this.entries.get(key);
@@ -239,6 +291,7 @@ class SurfaceCache {
       return entry.value;
     });
     this.entries.set(plan.cacheKey, entry);
+    this.preparedCount += 1;
     this.trim();
     return entry.promise;
   }
@@ -255,6 +308,7 @@ class SurfaceCache {
       }).catch(() => undefined);
     }
     this.entries.clear();
+    this.preparedCount = 0;
   }
 
   private async render(layers: VideoCanvasProxyLayer[]): Promise<HTMLCanvasElement | undefined> {
@@ -290,7 +344,7 @@ class SurfaceCache {
   }
 
   private trim(): void {
-    while (this.entries.size > FINAL_SURFACE_CACHE_SIZE) {
+    while (this.entries.size > this.maxEntries) {
       const oldestKey = this.entries.keys().next().value;
       if (typeof oldestKey !== "string") break;
       const entry = this.entries.get(oldestKey);
@@ -339,6 +393,16 @@ export function VideoCompositeStage({
   const overlayHostRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [surfaceSize] = useState(() => playbackSurfaceSize(manifest.width, manifest.height));
+  const [surfaceBudgetBytes] = useState(surfaceCacheBudgetBytes);
+  const surfaceEntryLimit = useMemo(
+    () => surfaceCacheEntryLimit(
+      plans,
+      surfaceSize.width,
+      surfaceSize.height,
+      surfaceBudgetBytes,
+    ),
+    [plans, surfaceBudgetBytes, surfaceSize.height, surfaceSize.width],
+  );
   const [bitmapCache] = useState(() => new BitmapCache(
     surfaceSize.width,
     surfaceSize.height,
@@ -347,6 +411,7 @@ export function VideoCompositeStage({
     bitmapCache,
     surfaceSize.width,
     surfaceSize.height,
+    surfaceEntryLimit,
   ));
   const callbackIdRef = useRef<number | undefined>(undefined);
   const loopTimerRef = useRef<number | undefined>(undefined);
@@ -371,6 +436,9 @@ export function VideoCompositeStage({
 
   useLayoutEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { speedRef.current = speed; }, [speed]);
+  useEffect(() => {
+    surfaceCache.setLimit(surfaceEntryLimit);
+  }, [surfaceCache, surfaceEntryLimit]);
 
   const invalidateOperation = useCallback((video = videoRef.current) => {
     operationEpochRef.current += 1;
@@ -502,6 +570,10 @@ export function VideoCompositeStage({
       stage.dataset.overlayStalls = String(overlayStallsRef.current);
       const quality = video.getVideoPlaybackQuality?.();
       stage.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
+      stage.dataset.surfaceCacheEntries = String(surfaces.size);
+      stage.dataset.surfaceCacheLimit = String(surfaces.limit);
+      stage.dataset.surfaceBuilds = String(surfaces.builds);
+      stage.dataset.surfaceCacheMegabytes = String(Math.round(surfaceBudgetBytes / 1024 / 1024));
       onFramePresented(index);
       const lookahead = playbackLookahead(speedRef.current);
       for (let offset = 1; offset <= lookahead; offset += 1) {
@@ -535,7 +607,7 @@ export function VideoCompositeStage({
     }).catch((reason) => {
       if (operationEpochRef.current === operationEpoch) fail(reason);
     });
-  }, [commitSurfaces, fail, onFramePresented, planFrames, plans, playVideo, scheduleLoop, surfaceCache]);
+  }, [commitSurfaces, fail, onFramePresented, planFrames, plans, playVideo, scheduleLoop, surfaceBudgetBytes, surfaceCache]);
 
   useEffect(() => {
     requestFrameRef.current = () => {
@@ -626,6 +698,10 @@ export function VideoCompositeStage({
       stage.dataset.overlayStalls = String(overlayStallsRef.current);
       const quality = video.getVideoPlaybackQuality?.();
       stage.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
+      stage.dataset.surfaceCacheEntries = String(surfaceCache.size);
+      stage.dataset.surfaceCacheLimit = String(surfaceCache.limit);
+      stage.dataset.surfaceBuilds = String(surfaceCache.builds);
+      stage.dataset.surfaceCacheMegabytes = String(Math.round(surfaceBudgetBytes / 1024 / 1024));
       onFramePresented(index);
       requestFrameRef.current();
       if (playingRef.current) {
@@ -645,6 +721,7 @@ export function VideoCompositeStage({
     playVideo,
     requestedIndex,
     scheduleLoop,
+    surfaceBudgetBytes,
     surfaceCache,
   ]);
 
@@ -782,6 +859,10 @@ export function VideoCompositeStage({
 
   useLayoutEffect(() => {
     requestedIndexRef.current = requestedIndex;
+    // During playback the video clock is authoritative. The parent deliberately
+    // updates timeline/status state less often than the media track to avoid a
+    // full React render for every decoded video frame.
+    if (playingRef.current) return;
     if (committedIndexRef.current === requestedIndex) return;
     seekToIndexRef.current(requestedIndex);
   }, [requestedIndex]);
@@ -847,6 +928,7 @@ export function VideoCompositeStage({
 
   useLayoutEffect(() => {
     disposedRef.current = false;
+    bitmapCache.activate();
     const video = videoRef.current;
     return () => {
       disposedRef.current = true;
@@ -866,6 +948,10 @@ export function VideoCompositeStage({
       data-overlay-stalls="0"
       data-presented-frames="0"
       data-video-dropped="0"
+      data-surface-cache-entries="0"
+      data-surface-cache-limit={surfaceEntryLimit}
+      data-surface-builds="0"
+      data-surface-cache-megabytes={Math.round(surfaceBudgetBytes / 1024 / 1024)}
       style={style}
     >
       <div ref={underlayHostRef} className="video-surface-layer video-underlay-layer" />

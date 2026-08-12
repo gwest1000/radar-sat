@@ -75,6 +75,8 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /if \(videoModeReady \|\| !isAnimating/);
   assert.match(viewer, /data-renderer=\{videoModeReady \? "video" : "images"\}/);
   assert.match(viewer, /<VideoCompositeStage/);
+  assert.match(viewer, /VIDEO_UI_UPDATE_INTERVAL_MS = 200/);
+  assert.match(viewer, /presentedVideoIndexRef/);
   assert.match(videoLoop, /transport: "progressive-mp4"/);
   assert.match(videoLoop, /track: "live" \| "archive"/);
   assert.match(videoLoop, /mediaViewport/);
@@ -98,8 +100,14 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.doesNotMatch(compositor, /context\.drawImage\(\s*video/);
   assert.match(compositor, /MAX_CONCURRENT_OVERLAY_DECODES = 3/);
   assert.match(compositor, /Overlay decoding was cancelled/);
+  assert.match(compositor, /bitmapCache\.activate\(\)/);
   assert.match(compositor, /index === committedIndexRef\.current/);
-  assert.match(compositor, /FINAL_SURFACE_CACHE_SIZE = 16/);
+  assert.match(compositor, /HIGH_MEMORY_SURFACE_CACHE_BYTES = 768/);
+  assert.match(compositor, /surfaceCacheEntryLimit/);
+  assert.match(compositor, /surfaceCache\.setLimit\(surfaceEntryLimit\)/);
+  assert.match(compositor, /data-surface-cache-limit/);
+  assert.match(compositor, /data-surface-builds/);
+  assert.match(compositor, /if \(playingRef\.current\) return/);
   assert.match(compositor, /if \(speed >= 4\) return 12/);
   assert.match(compositor, /PLAYBACK_SURFACE_PIXELS = 1_300_000/);
   assert.match(compositor, /playbackSurfaceSize\(manifest\.width, manifest\.height\)/);

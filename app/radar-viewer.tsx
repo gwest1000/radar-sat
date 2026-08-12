@@ -150,6 +150,7 @@ type SiteConfig = {
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
+const VIDEO_UI_UPDATE_INTERVAL_MS = 200;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
@@ -1543,6 +1544,8 @@ export function RadarViewer() {
   const [loadedVideoManifest, setLoadedVideoManifest] = useState<VideoLoopManifest | null>(null);
   const [failedVideoGeneration, setFailedVideoGeneration] = useState("");
   const [videoFallbackReason, setVideoFallbackReason] = useState("");
+  const presentedVideoIndexRef = useRef(NEWEST_FRAME);
+  const lastVideoUiUpdateAtRef = useRef(0);
   const loadedVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const pendingVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const fullCatalogLoadRef = useRef("");
@@ -2044,16 +2047,37 @@ export function RadarViewer() {
     (amount: number) => {
       if (!anchorFrames.length) return;
       setFrameIndex((current) => {
-        const safeCurrent = Math.min(Math.max(0, current), anchorFrames.length - 1);
-        return (safeCurrent + amount + anchorFrames.length) % anchorFrames.length;
+        const presented = presentedVideoIndexRef.current;
+        const base = videoModeReady && presented !== NEWEST_FRAME ? presented : current;
+        const safeCurrent = Math.min(Math.max(0, base), anchorFrames.length - 1);
+        const next = (safeCurrent + amount + anchorFrames.length) % anchorFrames.length;
+        presentedVideoIndexRef.current = next;
+        lastVideoUiUpdateAtRef.current = 0;
+        return next;
       });
     },
-    [anchorFrames.length],
+    [anchorFrames.length, videoModeReady],
   );
 
   const handleVideoFramePresented = useCallback((index: number) => {
+    presentedVideoIndexRef.current = index;
+    const now = performance.now();
+    if (
+      index !== 0
+      && index !== anchorFrames.length - 1
+      && now - lastVideoUiUpdateAtRef.current < VIDEO_UI_UPDATE_INTERVAL_MS
+    ) return;
+    lastVideoUiUpdateAtRef.current = now;
     setFrameIndex((current) => current === index ? current : index);
-  }, []);
+  }, [anchorFrames.length]);
+
+  const togglePlayback = useCallback(() => {
+    if (isAnimating && videoModeReady) {
+      const presented = presentedVideoIndexRef.current;
+      if (presented >= 0 && presented < anchorFrames.length) setFrameIndex(presented);
+    }
+    setPlaying((value) => !value);
+  }, [anchorFrames.length, isAnimating, videoModeReady]);
 
   const handleVideoFailure = useCallback((generation: string) => {
     setFailedVideoGeneration(generation);
@@ -2304,12 +2328,12 @@ export function RadarViewer() {
         advance(1);
       } else if (event.key === " ") {
         event.preventDefault();
-        setPlaying((value) => !value);
+        togglePlayback();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [advance]);
+  }, [advance, togglePlayback]);
 
   useEffect(() => {
     if (!sourcesOpen) return;
@@ -2477,7 +2501,7 @@ export function RadarViewer() {
             <div className="transport-row">
               <div className="transport-actions">
                 <button className="control-button" type="button" aria-label="Previous frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(-1); }}>‹</button>
-                <button className="control-button primary play-control" type="button" aria-label={isAnimating ? "Pause animation" : "Play animation"} aria-pressed={isAnimating} disabled={anchorFrames.length < 2} onClick={() => setPlaying((value) => !value)}>
+                <button className="control-button primary play-control" type="button" aria-label={isAnimating ? "Pause animation" : "Play animation"} aria-pressed={isAnimating} disabled={anchorFrames.length < 2} onClick={togglePlayback}>
                   <span className={isAnimating ? "pause-icon" : "play-icon"} aria-hidden="true" />
                 </button>
                 <button className="control-button" type="button" aria-label="Next frame" disabled={anchorFrames.length < 2} onClick={() => { setPlaying(false); advance(1); }}>›</button>
