@@ -437,7 +437,7 @@ class VideoBuildTests(unittest.TestCase):
                 text=True,
             )
             encoded_frames = json.loads(frame_probe.stdout)["frames"]
-            self.assertEqual(len(encoded_frames), 6)
+            self.assertEqual(len(encoded_frames), 3)
             self.assertNotIn("B", {item.get("pict_type") for item in encoded_frames})
             timestamps = [
                 float(item["best_effort_timestamp_time"])
@@ -445,7 +445,7 @@ class VideoBuildTests(unittest.TestCase):
             ]
             self.assertEqual(
                 [round(right - left, 2) for left, right in zip(timestamps, timestamps[1:])],
-                [0.1] * 5,
+                [0.2] * 2,
             )
 
             unchanged = build_profile(

@@ -91,7 +91,13 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /if \(!videoModeReady && fireController/);
   assert.match(compositor, /class SurfaceCache/);
   assert.match(compositor, /displayViewport\.left - mediaViewport\.left/);
-  assert.match(compositor, /manifest\.media\.contentHeight \?\? video\.videoHeight/);
+  assert.match(compositor, /manifest\.media\.contentHeight \?\? manifest\.media\.height/);
+  assert.match(compositor, /underlayHost\.replaceChildren/);
+  assert.match(compositor, /overlayHost\.replaceChildren/);
+  assert.match(compositor, /resizeWidth: this\.width/);
+  assert.doesNotMatch(compositor, /context\.drawImage\(\s*video/);
+  assert.match(compositor, /MAX_CONCURRENT_OVERLAY_DECODES = 3/);
+  assert.match(compositor, /Overlay decoding was cancelled/);
   assert.match(compositor, /index === committedIndexRef\.current/);
   assert.match(compositor, /FINAL_SURFACE_CACHE_SIZE = 16/);
   assert.match(compositor, /if \(speed >= 4\) return 12/);

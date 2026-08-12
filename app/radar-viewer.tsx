@@ -1859,7 +1859,6 @@ export function RadarViewer() {
       }
       const cacheKey = [
         candidateVideoManifest.generation,
-        manifestFrame.validTime,
         ...underlays.map((layer) => `u:${layer.url}:${layer.opacity}`),
         ...overlays.map((layer) => `o:${layer.url}:${layer.opacity}`),
       ].join("|");

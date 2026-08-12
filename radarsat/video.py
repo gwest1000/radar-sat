@@ -21,11 +21,14 @@ from .config import BROAD_VIEWPORTS, PRODUCTS, VIEWPORTS
 
 UTC = dt.timezone.utc
 VIDEO_SCHEMA_VERSION = 1
-VIDEO_RENDER_VERSION = 15
+VIDEO_RENDER_VERSION = 16
 PROXY_RENDER_VERSION = 1
 METEOROLOGICAL_MINUTE_SECONDS = 0.02
 FFCONCAT_TIMEBASE_FPS = 50
-VIDEO_FRAME_RATE = 10
+# A 10-minute weather step lasts 0.2 media seconds, so 5 fps preserves every
+# source timestep exactly. Higher CFR values only repeat identical pictures
+# and multiply client decode work, especially at 4x playback.
+VIDEO_FRAME_RATE = 5
 VIDEO_CLOCK_STRIP_HEIGHT = 16
 MPEGTS_TIMESTAMP_WRAP_SECONDS = (1 << 33) / 90_000
 LOCAL_GENERATIONS_TO_KEEP = 3

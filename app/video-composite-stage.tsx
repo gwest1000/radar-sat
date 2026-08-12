@@ -49,7 +49,12 @@ type BitmapLease = {
   release: () => void;
 };
 
-const BITMAP_CACHE_BYTES = 192 * 1024 * 1024;
+type DecodeTask = {
+  start: () => void;
+  cancel: () => void;
+};
+
+const BITMAP_CACHE_BYTES = 128 * 1024 * 1024;
 const FINAL_SURFACE_CACHE_SIZE = 16;
 const PLAYBACK_SURFACE_PIXELS = 1_300_000;
 const VIDEO_PROGRESS_TIMEOUT_MS = 30_000;
@@ -58,6 +63,7 @@ const HLS_LIVE_BUFFER_SECONDS = 40;
 const HLS_ARCHIVE_BUFFER_SECONDS = 45;
 const HLS_ARCHIVE_MAX_BUFFER_SECONDS = 60;
 const HLS_BACK_BUFFER_SECONDS = 15;
+const MAX_CONCURRENT_OVERLAY_DECODES = 3;
 
 function playbackSurfaceSize(width: number, height: number): { width: number; height: number } {
   const scale = Math.min(1, Math.sqrt(PLAYBACK_SURFACE_PIXELS / (width * height)));
@@ -76,6 +82,14 @@ function playbackLookahead(speed: number): number {
 
 class BitmapCache {
   private entries = new Map<string, BitmapEntry>();
+  private activeDecodes = 0;
+  private decodeQueue: DecodeTask[] = [];
+  private disposed = false;
+
+  constructor(
+    private readonly width: number,
+    private readonly height: number,
+  ) {}
 
   acquire(layer: VideoCanvasProxyLayer): Promise<BitmapLease> {
     const existing = this.entries.get(layer.url);
@@ -89,7 +103,7 @@ class BitmapCache {
       }));
     }
     const entry: BitmapEntry = {
-      decodedBytes: layer.width * layer.height * 4,
+      decodedBytes: this.width * this.height * 4,
       promise: Promise.resolve(undefined as unknown as ImageBitmap),
       references: 1,
       retired: false,
@@ -97,7 +111,7 @@ class BitmapCache {
     entry.promise = fetch(layer.url, { cache: "force-cache", mode: "cors" })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Video overlay returned ${response.status}.`);
-        const bitmap = await createImageBitmap(await response.blob());
+        const bitmap = await this.decode(await response.blob());
         entry.bitmap = bitmap;
         return bitmap;
       })
@@ -113,8 +127,45 @@ class BitmapCache {
   }
 
   clear(): void {
+    this.disposed = true;
+    for (const task of this.decodeQueue) task.cancel();
+    this.decodeQueue = [];
     for (const entry of this.entries.values()) this.retire(entry);
     this.entries.clear();
+  }
+
+  private decode(blob: Blob): Promise<ImageBitmap> {
+    return new Promise((resolve, reject) => {
+      if (this.disposed) {
+        reject(new DOMException("Overlay decoding was cancelled.", "AbortError"));
+        return;
+      }
+      const start = () => {
+        this.activeDecodes += 1;
+        void createImageBitmap(blob, {
+          resizeWidth: this.width,
+          resizeHeight: this.height,
+          resizeQuality: "high",
+        }).then(resolve, reject).finally(() => {
+          this.activeDecodes = Math.max(0, this.activeDecodes - 1);
+          this.startQueuedDecodes();
+        });
+      };
+      this.decodeQueue.push({
+        start,
+        cancel: () => reject(new DOMException("Overlay decoding was cancelled.", "AbortError")),
+      });
+      this.startQueuedDecodes();
+    });
+  }
+
+  private startQueuedDecodes(): void {
+    while (
+      this.activeDecodes < MAX_CONCURRENT_OVERLAY_DECODES
+      && this.decodeQueue.length
+    ) {
+      this.decodeQueue.shift()?.start();
+    }
   }
 
   private trim(): void {
@@ -163,7 +214,11 @@ class SurfaceCache {
   ) {}
 
   peek(key: string): PreparedSurfaces | undefined {
-    return this.entries.get(key)?.value;
+    const entry = this.entries.get(key);
+    if (!entry) return undefined;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry.value;
   }
 
   prepare(plan: VideoCompositeFramePlan): Promise<PreparedSurfaces> {
@@ -279,10 +334,15 @@ export function VideoCompositeStage({
   onLoopBoundary?: () => void;
   style?: CSSProperties;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const underlayHostRef = useRef<HTMLDivElement>(null);
+  const overlayHostRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [bitmapCache] = useState(() => new BitmapCache());
   const [surfaceSize] = useState(() => playbackSurfaceSize(manifest.width, manifest.height));
+  const [bitmapCache] = useState(() => new BitmapCache(
+    surfaceSize.width,
+    surfaceSize.height,
+  ));
   const [surfaceCache] = useState(() => new SurfaceCache(
     bitmapCache,
     surfaceSize.width,
@@ -346,78 +406,42 @@ export function VideoCompositeStage({
     });
   }, [fail]);
 
-  const resizeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const bounds = canvas.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return;
-    const sourceScale = Math.min(
-      manifest.width / bounds.width,
-      manifest.height / bounds.height,
-    );
-    const scale = Math.max(0.25, Math.min(window.devicePixelRatio || 1, sourceScale));
-    const width = Math.max(1, Math.round(bounds.width * scale));
-    const height = Math.max(1, Math.round(bounds.height * scale));
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-    }
-  }, [manifest.height, manifest.width]);
-
-  const draw = useCallback((surfaces: PreparedSurfaces) => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) throw new Error("Video display is unavailable.");
-    resizeCanvas();
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("Canvas rendering is unavailable.");
-    context.save();
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    if (surfaces.underlay) {
-      context.globalAlpha = 1;
-      context.drawImage(surfaces.underlay, 0, 0, canvas.width, canvas.height);
-    }
-    context.filter = satelliteFilter ?? "none";
-    context.globalAlpha = 1;
+  // Keep the full-resolution satellite in the browser's hardware video plane.
+  // Canvas is reserved for transparent overlays, avoiding a full-frame
+  // video-to-canvas copy at every meteorological timestep.
+  const videoStyle = useMemo<CSSProperties>(() => {
     const displayViewport = manifest.viewport ?? { left: 0, top: 0, width: 1, height: 1 };
     const mediaViewport = manifest.mediaViewport ?? displayViewport;
-    const contentVideoHeight = manifest.media.contentHeight ?? video.videoHeight;
-    const sourceLeft = (
-      (displayViewport.left - mediaViewport.left) / mediaViewport.width
-    ) * video.videoWidth;
-    const sourceTop = (
+    const contentHeight = manifest.media.contentHeight ?? manifest.media.height;
+    const contentFraction = contentHeight / manifest.media.height;
+    const left = (displayViewport.left - mediaViewport.left) / mediaViewport.width;
+    const top = (
       (displayViewport.top - mediaViewport.top) / mediaViewport.height
-    ) * contentVideoHeight;
-    const sourceWidth = (
-      displayViewport.width / mediaViewport.width
-    ) * video.videoWidth;
-    const sourceHeight = (
-      displayViewport.height / mediaViewport.height
-    ) * contentVideoHeight;
-    context.drawImage(
-      video,
-      sourceLeft,
-      sourceTop,
-      sourceWidth,
-      sourceHeight,
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
-    context.filter = "none";
-    if (surfaces.overlay) {
-      context.globalAlpha = 1;
-      context.drawImage(surfaces.overlay, 0, 0, canvas.width, canvas.height);
-    }
-    context.restore();
+    ) * contentFraction;
+    const width = displayViewport.width / mediaViewport.width;
+    const height = (displayViewport.height / mediaViewport.height) * contentFraction;
+    return {
+      width: `${100 / width}%`,
+      height: `${100 / height}%`,
+      left: `${-100 * left / width}%`,
+      top: `${-100 * top / height}%`,
+      filter: satelliteFilter ?? "none",
+    };
   }, [
     manifest.media.contentHeight,
+    manifest.media.height,
     manifest.mediaViewport,
     manifest.viewport,
-    resizeCanvas,
     satelliteFilter,
   ]);
+
+  const commitSurfaces = useCallback((surfaces: PreparedSurfaces) => {
+    const underlayHost = underlayHostRef.current;
+    const overlayHost = overlayHostRef.current;
+    if (!underlayHost || !overlayHost) throw new Error("Video display is unavailable.");
+    underlayHost.replaceChildren(...(surfaces.underlay ? [surfaces.underlay] : []));
+    overlayHost.replaceChildren(...(surfaces.overlay ? [surfaces.overlay] : []));
+  }, []);
 
   const requestFrameRef = useRef<() => void>(() => undefined);
   const seekToIndexRef = useRef<(index: number) => void>(() => undefined);
@@ -441,9 +465,9 @@ export function VideoCompositeStage({
 
   const handleVideoFrame = useCallback((mediaTime: number) => {
     const video = videoRef.current;
-    const canvas = canvasRef.current;
+    const stage = stageRef.current;
     const surfaces = surfaceCache;
-    if (!video || !canvas || !surfaces || !plans.length || failedRef.current) return;
+    if (!video || !stage || !surfaces || !plans.length || failedRef.current) return;
     const index = videoFrameAtMediaTime(planFrames, mediaTime);
     const plan = plans[index];
     if (
@@ -469,15 +493,15 @@ export function VideoCompositeStage({
         || operationEpochRef.current !== operationEpoch
         || plans[index]?.cacheKey !== plan.cacheKey
       ) return false;
-      draw(prepared);
+      commitSurfaces(prepared);
       committedIndexRef.current = index;
       requestedIndexRef.current = index;
       presentedFramesRef.current += 1;
       lastProgressAtRef.current = Date.now();
-      canvas.dataset.presentedFrames = String(presentedFramesRef.current);
-      canvas.dataset.overlayStalls = String(overlayStallsRef.current);
+      stage.dataset.presentedFrames = String(presentedFramesRef.current);
+      stage.dataset.overlayStalls = String(overlayStallsRef.current);
       const quality = video.getVideoPlaybackQuality?.();
-      canvas.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
+      stage.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
       onFramePresented(index);
       const lookahead = playbackLookahead(speedRef.current);
       for (let offset = 1; offset <= lookahead; offset += 1) {
@@ -511,7 +535,7 @@ export function VideoCompositeStage({
     }).catch((reason) => {
       if (operationEpochRef.current === operationEpoch) fail(reason);
     });
-  }, [draw, fail, onFramePresented, planFrames, plans, playVideo, scheduleLoop, surfaceCache]);
+  }, [commitSurfaces, fail, onFramePresented, planFrames, plans, playVideo, scheduleLoop, surfaceCache]);
 
   useEffect(() => {
     requestFrameRef.current = () => {
@@ -565,7 +589,7 @@ export function VideoCompositeStage({
     if (previousPlanRevisionRef.current === planRevision) return;
     previousPlanRevisionRef.current = planRevision;
     const video = videoRef.current;
-    const canvas = canvasRef.current;
+    const stage = stageRef.current;
     const operationEpoch = invalidateOperation(video);
     surfaceCache.clear();
     if (loopTimerRef.current !== undefined) {
@@ -574,7 +598,7 @@ export function VideoCompositeStage({
     }
     if (
       !video
-      || !canvas
+      || !stage
       || !plans.length
       || video.readyState < HTMLMediaElement.HAVE_METADATA
       || failedRef.current
@@ -593,15 +617,15 @@ export function VideoCompositeStage({
         || operationEpochRef.current !== operationEpoch
         || plans[index]?.cacheKey !== plan.cacheKey
       ) return;
-      draw(prepared);
+      commitSurfaces(prepared);
       committedIndexRef.current = index;
       requestedIndexRef.current = index;
       presentedFramesRef.current += 1;
       lastProgressAtRef.current = Date.now();
-      canvas.dataset.presentedFrames = String(presentedFramesRef.current);
-      canvas.dataset.overlayStalls = String(overlayStallsRef.current);
+      stage.dataset.presentedFrames = String(presentedFramesRef.current);
+      stage.dataset.overlayStalls = String(overlayStallsRef.current);
       const quality = video.getVideoPlaybackQuality?.();
-      canvas.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
+      stage.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
       onFramePresented(index);
       requestFrameRef.current();
       if (playingRef.current) {
@@ -612,7 +636,7 @@ export function VideoCompositeStage({
       if (operationEpochRef.current === operationEpoch) fail(reason);
     });
   }, [
-    draw,
+    commitSurfaces,
     fail,
     invalidateOperation,
     onFramePresented,
@@ -656,32 +680,32 @@ export function VideoCompositeStage({
             : HLS_ARCHIVE_MAX_BUFFER_SECONDS,
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          const canvas = canvasRef.current;
-          if (canvas) {
-            canvas.dataset.hlsError = `${data.type}:${data.details}`;
+          const stage = stageRef.current;
+          if (stage) {
+            stage.dataset.hlsError = `${data.type}:${data.details}`;
           }
           if (data.fatal) fail(new Error(`Segmented H.264 playback failed: ${data.details}`));
         });
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          const canvas = canvasRef.current;
-          if (canvas) {
-            canvas.dataset.hlsState = "manifest-parsed";
-            canvas.dataset.hlsBufferTarget = String(
+          const stage = stageRef.current;
+          if (stage) {
+            stage.dataset.hlsState = "manifest-parsed";
+            stage.dataset.hlsBufferTarget = String(
               liveTrack ? HLS_LIVE_BUFFER_SECONDS : HLS_ARCHIVE_BUFFER_SECONDS,
             );
-            canvas.dataset.hlsBufferMaximum = String(
+            stage.dataset.hlsBufferMaximum = String(
               liveTrack ? HLS_LIVE_BUFFER_SECONDS : HLS_ARCHIVE_MAX_BUFFER_SECONDS,
             );
           }
         });
         hls.on(Hls.Events.BUFFER_APPENDED, () => {
-          const canvas = canvasRef.current;
-          if (canvas) {
-            canvas.dataset.hlsState = "buffer-appended";
-            canvas.dataset.hlsCurrentTime = String(video.currentTime);
-            canvas.dataset.hlsReadyState = String(video.readyState);
-            canvas.dataset.hlsDuration = String(video.duration);
-            canvas.dataset.hlsBuffered = Array.from(
+          const stage = stageRef.current;
+          if (stage) {
+            stage.dataset.hlsState = "buffer-appended";
+            stage.dataset.hlsCurrentTime = String(video.currentTime);
+            stage.dataset.hlsReadyState = String(video.readyState);
+            stage.dataset.hlsDuration = String(video.duration);
+            stage.dataset.hlsBuffered = Array.from(
               { length: video.buffered.length },
               (_, index) => `${video.buffered.start(index)}-${video.buffered.end(index)}`,
             ).join(",");
@@ -764,10 +788,10 @@ export function VideoCompositeStage({
 
   useEffect(() => {
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    const stage = stageRef.current;
+    if (!video || !stage) return;
     const onMetadata = () => {
-      canvas.dataset.hlsMetadata = `${video.videoWidth}x${video.videoHeight}@${video.duration}`;
+      stage.dataset.hlsMetadata = `${video.videoWidth}x${video.videoHeight}@${video.duration}`;
       if (
         video.videoWidth !== manifest.media.width
         || video.videoHeight !== manifest.media.height
@@ -805,31 +829,12 @@ export function VideoCompositeStage({
     video.addEventListener("ended", onEnded);
     requestFrameRef.current();
     if (video.readyState >= HTMLMediaElement.HAVE_METADATA) onMetadata();
-    const observer = new ResizeObserver(() => {
-      resizeCanvas();
-      const current = plans[committedIndexRef.current];
-      if (current) {
-        const operationEpoch = operationEpochRef.current;
-        const cacheKey = current.cacheKey;
-        void surfaceCache.prepare(current).then((prepared) => {
-          if (
-            operationEpochRef.current === operationEpoch
-            && plans[committedIndexRef.current]?.cacheKey === cacheKey
-          ) draw(prepared);
-        }).catch((reason) => {
-          if (operationEpochRef.current === operationEpoch) fail(reason);
-        });
-      }
-    });
-    observer.observe(canvas);
     return () => {
-      observer.disconnect();
       video.removeEventListener("loadedmetadata", onMetadata);
       video.removeEventListener("error", onError);
       video.removeEventListener("ended", onEnded);
     };
   }, [
-    draw,
     fail,
     handleVideoFrame,
     manifest.media.height,
@@ -837,9 +842,7 @@ export function VideoCompositeStage({
     manifest.media.width,
     manifest.transport,
     plans,
-    resizeCanvas,
     scheduleLoop,
-    surfaceCache,
   ]);
 
   useLayoutEffect(() => {
@@ -855,26 +858,28 @@ export function VideoCompositeStage({
   }, [bitmapCache, invalidateOperation, surfaceCache]);
 
   return (
-    <>
-      <canvas
-        ref={canvasRef}
-        className="video-composite-canvas"
-        data-renderer="video"
-        data-video-generation={manifest.generation}
-        data-overlay-stalls="0"
-        data-presented-frames="0"
-        data-video-dropped="0"
-        style={style}
-      />
+    <div
+      ref={stageRef}
+      className="video-composite-canvas"
+      data-renderer="video"
+      data-video-generation={manifest.generation}
+      data-overlay-stalls="0"
+      data-presented-frames="0"
+      data-video-dropped="0"
+      style={style}
+    >
+      <div ref={underlayHostRef} className="video-surface-layer video-underlay-layer" />
       <video
         ref={videoRef}
         className="video-loop-decoder"
+        style={videoStyle}
         crossOrigin="anonymous"
         muted
         playsInline
         preload="auto"
         aria-hidden="true"
       />
-    </>
+      <div ref={overlayHostRef} className="video-surface-layer video-overlay-layer" />
+    </div>
   );
 }
