@@ -51,12 +51,21 @@ type BitmapLease = {
 
 const BITMAP_CACHE_BYTES = 192 * 1024 * 1024;
 const FINAL_SURFACE_CACHE_SIZE = 4;
+const PLAYBACK_SURFACE_PIXELS = 1_300_000;
 const VIDEO_PROGRESS_TIMEOUT_MS = 30_000;
 const HLS_BUFFER_BYTES = 48 * 1024 * 1024;
 const HLS_LIVE_BUFFER_SECONDS = 40;
 const HLS_ARCHIVE_BUFFER_SECONDS = 45;
 const HLS_ARCHIVE_MAX_BUFFER_SECONDS = 60;
 const HLS_BACK_BUFFER_SECONDS = 15;
+
+function playbackSurfaceSize(width: number, height: number): { width: number; height: number } {
+  const scale = Math.min(1, Math.sqrt(PLAYBACK_SURFACE_PIXELS / (width * height)));
+  return {
+    width: Math.max(2, Math.round(width * scale / 2) * 2),
+    height: Math.max(2, Math.round(height * scale / 2) * 2),
+  };
+}
 
 class BitmapCache {
   private entries = new Map<string, BitmapEntry>();
@@ -266,10 +275,11 @@ export function VideoCompositeStage({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [bitmapCache] = useState(() => new BitmapCache());
+  const [surfaceSize] = useState(() => playbackSurfaceSize(manifest.width, manifest.height));
   const [surfaceCache] = useState(() => new SurfaceCache(
     bitmapCache,
-    manifest.width,
-    manifest.height,
+    surfaceSize.width,
+    surfaceSize.height,
   ));
   const callbackIdRef = useRef<number | undefined>(undefined);
   const loopTimerRef = useRef<number | undefined>(undefined);
