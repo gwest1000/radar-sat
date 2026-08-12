@@ -50,7 +50,7 @@ type BitmapLease = {
 };
 
 const BITMAP_CACHE_BYTES = 192 * 1024 * 1024;
-const FINAL_SURFACE_CACHE_SIZE = 4;
+const FINAL_SURFACE_CACHE_SIZE = 16;
 const PLAYBACK_SURFACE_PIXELS = 1_300_000;
 const VIDEO_PROGRESS_TIMEOUT_MS = 30_000;
 const HLS_BUFFER_BYTES = 48 * 1024 * 1024;
@@ -65,6 +65,13 @@ function playbackSurfaceSize(width: number, height: number): { width: number; he
     width: Math.max(2, Math.round(width * scale / 2) * 2),
     height: Math.max(2, Math.round(height * scale / 2) * 2),
   };
+}
+
+function playbackLookahead(speed: number): number {
+  if (speed >= 4) return 12;
+  if (speed >= 3) return 8;
+  if (speed >= 2) return 4;
+  return 2;
 }
 
 class BitmapCache {
@@ -472,7 +479,8 @@ export function VideoCompositeStage({
       const quality = video.getVideoPlaybackQuality?.();
       canvas.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
       onFramePresented(index);
-      for (let offset = 1; offset <= 2; offset += 1) {
+      const lookahead = playbackLookahead(speedRef.current);
+      for (let offset = 1; offset <= lookahead; offset += 1) {
         const candidate = plans[(index + offset) % plans.length];
         void surfaces.prepare(candidate).catch((reason) => {
           if (operationEpochRef.current === operationEpoch) fail(reason);
@@ -488,7 +496,15 @@ export function VideoCompositeStage({
     }
     overlayStallsRef.current += 1;
     video.pause();
-    void surfaces.prepare(plan).then((prepared) => {
+    const lookahead = playbackLookahead(speedRef.current);
+    const upcoming = Array.from(
+      { length: Math.min(lookahead, Math.max(0, plans.length - 1)) },
+      (_, offset) => plans[(index + offset + 1) % plans.length],
+    );
+    void Promise.all([
+      surfaces.prepare(plan),
+      ...upcoming.map((candidate) => surfaces.prepare(candidate)),
+    ]).then(([prepared]) => {
       if (commit(prepared) && playingRef.current && index < plans.length - 1) {
         playVideo(video);
       }
