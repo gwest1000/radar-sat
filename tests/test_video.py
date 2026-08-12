@@ -457,6 +457,39 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(unchanged["status"], "unchanged")
 
+    def test_satellite_choices_reuse_rendered_proxy_results(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, first_spec = self.make_source(root)
+            layers = catalog["domains"]["bc"]["layers"]
+            layers["daynight"] = dict(layers["raw-visir"])
+            second_spec = ProfileSpec(
+                first_spec.product_id,
+                first_spec.domain_id,
+                "daynight",
+                first_spec.viewport,
+                first_spec.width,
+                first_spec.height,
+                first_spec.cadence_minutes,
+                crf=first_spec.crf,
+                preset=first_spec.preset,
+            )
+            selection_cache = {}
+            render_cache = {}
+            with mock.patch("radarsat.video._render_proxy", wraps=_render_proxy) as render:
+                for spec in (first_spec, second_spec):
+                    build_profile(
+                        root / "source",
+                        root / "output",
+                        catalog,
+                        spec,
+                        ffmpeg=str(shutil.which("ffmpeg")),
+                        hours=1,
+                        proxy_selection_cache=selection_cache,
+                        proxy_render_cache=render_cache,
+                    )
+            self.assertEqual(render.call_count, 1)
+
     def test_hls_segments_pack_missing_observations_at_uniform_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

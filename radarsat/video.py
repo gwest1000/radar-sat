@@ -1465,6 +1465,9 @@ def build_profile(
     proxy_selection_cache: dict[
         tuple[str, str, dt.datetime], tuple[ProxyLayerSelection, ...]
     ] | None = None,
+    proxy_render_cache: dict[
+        tuple[str, str, str, int, int, bool], Mapping[str, Any]
+    ] | None = None,
 ) -> Mapping[str, Any]:
     source_root = source_root.resolve()
     output_root = output_root.resolve()
@@ -1505,8 +1508,24 @@ def build_profile(
     proxy_entries: dict[str, Mapping[str, Any]] = {}
     proxy_warnings: list[Mapping[str, str]] = []
     for source_key, selection in unique_proxy_sources.items():
+        render_cache_key = (
+            spec.product_id,
+            selection.rendered_layer_id,
+            source_key,
+            spec.width,
+            spec.height,
+            selection.stage_aligned,
+        )
+        cached_proxy = (
+            proxy_render_cache.get(render_cache_key)
+            if proxy_render_cache is not None
+            else None
+        )
+        if cached_proxy is not None:
+            proxy_entries[source_key] = cached_proxy
+            continue
         try:
-            proxy_entries[source_key] = _render_proxy(
+            rendered_proxy = _render_proxy(
                 source_root,
                 output_root,
                 spec,
@@ -1515,6 +1534,9 @@ def build_profile(
                 selection.source_path,
                 stage_aligned=selection.stage_aligned,
             )
+            proxy_entries[source_key] = rendered_proxy
+            if proxy_render_cache is not None:
+                proxy_render_cache[render_cache_key] = rendered_proxy
         except FileNotFoundError:
             # The ingest process can prune or replace an overlay after the catalog
             # snapshot is taken.  A missing optional overlay must not prevent a
@@ -1695,6 +1717,9 @@ def build_satellite_videos(
     proxy_selection_cache: dict[
         tuple[str, str, dt.datetime], tuple[ProxyLayerSelection, ...]
     ] = {}
+    proxy_render_cache: dict[
+        tuple[str, str, str, int, int, bool], Mapping[str, Any]
+    ] = {}
     for spec in VIDEO_PROFILES:
         if spec.product_id not in requested:
             continue
@@ -1711,6 +1736,7 @@ def build_satellite_videos(
                     hours=min(hours, 24.0) if spec.track == "live" else min(archive_hours, 168.0),
                     now=now,
                     proxy_selection_cache=proxy_selection_cache,
+                    proxy_render_cache=proxy_render_cache,
                 )
             )
         except Exception as error:
