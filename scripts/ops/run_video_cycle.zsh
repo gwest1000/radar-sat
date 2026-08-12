@@ -49,18 +49,44 @@ if [[ "${RADARSAT_VIDEO_ENABLED:-${RADARSAT_H264_PILOT_ENABLED:-0}}" != "1" ]]; 
   exit 0
 fi
 
-video_args=(
-  --source-root "${OUTPUT_ROOT}"
-  --output-root "${OUTPUT_ROOT}"
-  --track live
-  --hours "${RADARSAT_VIDEO_LIVE_HOURS:-${RADARSAT_H264_PILOT_HOURS:-24}}"
-  --archive-hours "${RADARSAT_VIDEO_ARCHIVE_HOURS:-168}"
-)
-if [[ -n "${RADARSAT_FFMPEG:-}" ]]; then
-  video_args+=(--ffmpeg "${RADARSAT_FFMPEG}")
-fi
+run_video_group() {
+  local track="$1"
+  shift
+  local -a args=(
+    --source-root "${OUTPUT_ROOT}"
+    --output-root "${OUTPUT_ROOT}"
+    --track "${track}"
+    --hours "${RADARSAT_VIDEO_LIVE_HOURS:-${RADARSAT_H264_PILOT_HOURS:-24}}"
+    --archive-hours "${RADARSAT_VIDEO_ARCHIVE_HOURS:-168}"
+  )
+  local product=""
+  for product in "$@"; do
+    args+=(--product "${product}")
+  done
+  if [[ -n "${RADARSAT_FFMPEG:-}" ]]; then
+    args+=(--ffmpeg "${RADARSAT_FFMPEG}")
+  fi
+  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_satellite_video.py" "${args[@]}"
+}
 
-"${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_satellite_video.py" "${video_args[@]}" \
+run_parallel_video_groups() {
+  local track="$1"
+  local bc_pid=0 north_america_pid=0 pacific_pid=0 status=0
+  run_video_group "${track}" \
+    bc-large-overlay bc-small-overlay bc-southwest-overlay \
+    bc-southeast-overlay bc-northeast-overlay &
+  bc_pid=$!
+  run_video_group "${track}" north-america-overlay &
+  north_america_pid=$!
+  run_video_group "${track}" pacific-wna-overlay north-pacific-overlay &
+  pacific_pid=$!
+  wait "${bc_pid}" || status=1
+  wait "${north_america_pid}" || status=1
+  wait "${pacific_pid}" || status=1
+  return "${status}"
+}
+
+run_parallel_video_groups live \
   || print -u2 "Warning: live H.264 refresh was partial; retaining last-good profiles."
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
 "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast --whole-frame-only --recovery-hours 6
@@ -77,17 +103,7 @@ if [[ "${current_hour}" != "${previous_hour}" ]]; then
   # on every ten-minute launch.
   mkdir -p "${archive_stamp:h}"
   print -r -- "${current_hour}" > "${archive_stamp}"
-  archive_args=(
-    --source-root "${OUTPUT_ROOT}"
-    --output-root "${OUTPUT_ROOT}"
-    --track archive
-    --hours "${RADARSAT_VIDEO_LIVE_HOURS:-${RADARSAT_H264_PILOT_HOURS:-24}}"
-    --archive-hours "${RADARSAT_VIDEO_ARCHIVE_HOURS:-168}"
-  )
-  if [[ -n "${RADARSAT_FFMPEG:-}" ]]; then
-    archive_args+=(--ffmpeg "${RADARSAT_FFMPEG}")
-  fi
-  if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_satellite_video.py" "${archive_args[@]}"; then
+  if ! run_parallel_video_groups archive; then
     print -u2 "Warning: archive H.264 refresh was partial; retaining last-good profiles."
   fi
   "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
