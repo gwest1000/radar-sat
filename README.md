@@ -83,10 +83,10 @@ GitHub Pages static viewer ◀────────────────�
   six-minute clock for 24 hours, then hourly through day 7.
 - The viewer uses server-rendered transparent lightning-trail PNGs (normally
   6–12 KB) instead of rebuilding hundreds of flash symbols in the browser.
-- Display-resolution H.264/HLS serves each satellite background, domain, and
-  live/archive time span that has a complete profile. A hidden hardware video
-  decoder supplies the satellite clock while one canvas atomically commits the
-  satellite and exact display-sized overlay proxies. The image renderer and
+- Display-resolution H.264/HLS serves the default satellite background in each
+  domain and any other satellite choice that has a current complete profile. A
+  hardware video decoder supplies the satellite clock while prepared,
+  display-sized overlay surfaces swap atomically over it. The image renderer and
   full catalog remain the automatic compatibility and failure fallback. Live
   loops retain their complete 25–33 seconds of encoded media for smooth 4×
   replay; longer seven-day tracks use a 45-second target and 60-second hard

@@ -258,6 +258,37 @@ class CatalogTests(unittest.TestCase):
             )
             self.assertNotIn("frames", json.dumps(catalog["videoProfiles"]))
 
+    def test_catalog_omits_obsolete_secondary_video_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            generation = "20260722T1200Z-abcdef012345"
+            manifest_path = (
+                "video-manifests/bc-northeast-overlay/raw-ir/live/"
+                f"{generation}.json"
+            )
+            manifest = root / manifest_path
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({
+                "schemaVersion": 1,
+                "generation": generation,
+                "productId": "bc-northeast-overlay",
+                "layerId": "raw-ir",
+                "track": "live",
+            }))
+            index = root / "video-index/bc-northeast-overlay/raw-ir.json"
+            index.parent.mkdir(parents=True)
+            index.write_text(json.dumps({
+                "schemaVersion": 1,
+                "productId": "bc-northeast-overlay",
+                "layerId": "raw-ir",
+                "profiles": {"live": {
+                    "generation": generation,
+                    "manifestPath": manifest_path,
+                }},
+            }))
+
+            self.assertNotIn("videoProfiles", build_catalog(root))
+
     def test_catalog_omits_mismatched_or_unsafe_video_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

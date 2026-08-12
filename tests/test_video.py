@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -645,6 +646,43 @@ class VideoBuildTests(unittest.TestCase):
                 1,
             )
             self.assertFalse(old_segment.exists())
+
+    def test_build_can_select_only_priority_layers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, spec = self.make_source(root)
+            secondary = replace(spec, layer_id="raw-ir")
+            with (
+                mock.patch("radarsat.video.VIDEO_PROFILES", (spec, secondary)),
+                mock.patch("radarsat.video.build_catalog", return_value=catalog),
+                mock.patch("radarsat.video.build_profile", return_value={"status": "unchanged"}) as build,
+            ):
+                result = build_satellite_videos(
+                    root / "source",
+                    root / "output",
+                    product_ids=(spec.product_id,),
+                    layer_ids=(spec.layer_id,),
+                    track_names=(spec.track,),
+                    ffmpeg=str(shutil.which("ffmpeg")),
+                    hours=1,
+                    prune_shared_assets=False,
+                )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(build.call_count, 1)
+            self.assertEqual(build.call_args.args[3].layer_id, spec.layer_id)
+
+            with self.assertRaisesRegex(ValueError, "Unsupported video layers"):
+                build_satellite_videos(
+                    root / "source",
+                    root / "output",
+                    product_ids=(spec.product_id,),
+                    layer_ids=("not-a-layer",),
+                    track_names=(spec.track,),
+                    ffmpeg="ffmpeg",
+                    hours=1,
+                    prune_shared_assets=False,
+                )
 
     def test_failed_rebuild_preserves_previous_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

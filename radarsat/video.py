@@ -1704,6 +1704,7 @@ def build_satellite_videos(
     output_root: Path | None = None,
     *,
     product_ids: Iterable[str] | None = None,
+    layer_ids: Iterable[str] | None = None,
     track_names: Iterable[str] | None = None,
     ffmpeg: str | None = None,
     hours: float = 24.0,
@@ -1722,6 +1723,10 @@ def build_satellite_videos(
     unknown = requested.difference(spec.product_id for spec in VIDEO_PROFILES)
     if unknown:
         raise ValueError(f"Unsupported video products: {sorted(unknown)}")
+    requested_layers = set(layer_ids or (spec.layer_id for spec in VIDEO_PROFILES))
+    unknown_layers = requested_layers.difference(spec.layer_id for spec in VIDEO_PROFILES)
+    if unknown_layers:
+        raise ValueError(f"Unsupported video layers: {sorted(unknown_layers)}")
     requested_tracks = set(track_names or ("live", "archive"))
     unknown_tracks = requested_tracks.difference({"live", "archive"})
     if unknown_tracks:
@@ -1737,6 +1742,8 @@ def build_satellite_videos(
     ] = {}
     for spec in VIDEO_PROFILES:
         if spec.product_id not in requested:
+            continue
+        if spec.layer_id not in requested_layers:
             continue
         if spec.track not in requested_tracks:
             continue

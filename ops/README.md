@@ -15,10 +15,10 @@ the final backstop.
 
 ## Display-resolution H.264 loops
 
-The optional video path accelerates every satellite background and loop domain. It does not encode
+The optional video path accelerates the default satellite background in every loop domain. It does not encode
 radar, precipitation type, lightning, fires, model contours, or line work into
 the lossy video. Those layers are cropped to the same display grid and the
-browser draws them with the decoded satellite into one atomic canvas frame.
+browser swaps their prepared transparent surfaces over the hardware-decoded satellite.
 
 Install ffmpeg with libx264, then enable the video renderer without reinstalling the
 LaunchAgent:
@@ -44,12 +44,23 @@ small immutable HLS playlist. This keeps routine encoding, upload, and orphan
 storage proportional to the new data instead of rewriting a rolling 24-hour
 movie each cycle.
 
+The ten-minute operational job refreshes only the satellite layer selected by
+default in each domain (`raw-visir`, regional `raw-visir-5min`, or
+`westwx-visir`). Building every alternative satellite choice before the next
+cycle took several hours and made the default loop stale. IR, GeoColor,
+day/night, convective, and snow/fog remain fully available through the
+lossless image renderer. Obsolete non-default video pointers are omitted from
+the public catalog so they do not consume protected R2 storage indefinitely.
+
 The browser intentionally buffers complete live tracks because a 24-hour
 weather loop is only about 25–33 seconds of encoded playback and must remain
 smooth at 4×. Archive tracks are two to four minutes long, so hls.js targets a
 45-second forward buffer with a 60-second ceiling, a 48 MiB byte budget, and a
 15-second back buffer. Immutable segments already visited remain in the normal
-HTTP cache for later seeks and loop passes.
+HTTP cache for later seeks and loop passes. Prepared overlay surfaces use an
+adaptive decoded-memory budget, allowing a six-hour loop—and, on an 8 GB+
+device, normally the full 24-hour loop—to avoid rebuilding overlays after its
+first circuit.
 
 The publisher always protects the current catalog's media and proxy objects,
 keeps the newest three generations unconditionally, and gives older orphaned

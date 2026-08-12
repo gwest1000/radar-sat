@@ -16,6 +16,16 @@ CANONICAL_FIVE_MINUTE_SOURCE = "NOAA/NESDIS/STAR"
 CANONICAL_FIVE_MINUTE_RENDER_VERSION = 4
 VIDEO_GENERATION_RE = re.compile(r"^\d{8}T\d{4}Z-[0-9a-f]{12}$")
 VIDEO_TRACKS = frozenset({"live", "archive"})
+PUBLIC_VIDEO_LAYERS = {
+    "bc-large-overlay": "raw-visir",
+    "bc-small-overlay": "raw-visir-5min",
+    "bc-southwest-overlay": "raw-visir-5min",
+    "bc-southeast-overlay": "raw-visir-5min",
+    "bc-northeast-overlay": "raw-visir",
+    "north-america-overlay": "westwx-visir",
+    "pacific-wna-overlay": "raw-visir",
+    "north-pacific-overlay": "raw-visir",
+}
 
 
 def retention_policy(tier: str) -> dict[str, int]:
@@ -183,7 +193,9 @@ def read_video_profiles(root: Path) -> dict[str, Any]:
     Each encoder profile owns one small pointer at
     ``video-index/<product>/<layer>.json``. Invalid, incomplete, or stale
     pointers are deliberately ignored so the conventional image archive
-    remains a complete fallback.
+    remains a complete fallback. Only the operational default satellite layer
+    is published for each domain; old secondary pointers would otherwise keep
+    stale video dependencies protected indefinitely.
     """
     index_root = root / "video-index"
     if not index_root.is_dir():
@@ -206,6 +218,7 @@ def read_video_profiles(root: Path) -> dict[str, Any]:
             not isinstance(product_id, str)
             or not isinstance(layer_id, str)
             or layer_id not in known_layers.get(product_id, ())
+            or PUBLIC_VIDEO_LAYERS.get(product_id) != layer_id
             or not isinstance(profiles, dict)
         ):
             continue

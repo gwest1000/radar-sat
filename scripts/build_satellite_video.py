@@ -40,6 +40,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Track to build; repeat to select both (default: both tracks).",
     )
     parser.add_argument(
+        "--layer",
+        action="append",
+        choices=sorted({spec.layer_id for spec in VIDEO_PROFILES}),
+        help="Satellite layer to build; repeat to select several (default: all layers).",
+    )
+    parser.add_argument(
         "--hours",
         type=float,
         default=24.0,
@@ -82,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         args.source_root,
         args.output_root,
         product_ids=args.product,
+        layer_ids=args.layer,
         track_names=args.track,
         ffmpeg=args.ffmpeg,
         hours=min(args.hours, 24.0),
