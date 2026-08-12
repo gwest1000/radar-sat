@@ -21,10 +21,11 @@ from .config import BROAD_VIEWPORTS, PRODUCTS, VIEWPORTS
 
 UTC = dt.timezone.utc
 VIDEO_SCHEMA_VERSION = 1
-VIDEO_RENDER_VERSION = 14
+VIDEO_RENDER_VERSION = 15
 PROXY_RENDER_VERSION = 1
-METEOROLOGICAL_MINUTE_SECONDS = 0.022
+METEOROLOGICAL_MINUTE_SECONDS = 0.02
 FFCONCAT_TIMEBASE_FPS = 50
+VIDEO_FRAME_RATE = 10
 VIDEO_CLOCK_STRIP_HEIGHT = 16
 MPEGTS_TIMESTAMP_WRAP_SECONDS = (1 << 33) / 90_000
 LOCAL_GENERATIONS_TO_KEEP = 3
@@ -992,10 +993,9 @@ def _encode_mp4(
                 f"option framerate {FFCONCAT_TIMEBASE_FPS}",
             )
         )
-        # ffconcat needs the next packet to materialize the preceding still's
-        # declared duration.  This duplicate end sentinel begins exactly at
-        # the loop end, so the final meteorological frame remains visible for
-        # its full duration without adding a frame to the public timeline.
+        # ffconcat needs the next input timestamp to materialize the preceding
+        # still's declared duration. The output duration below cuts this end
+        # sentinel at the exact loop boundary.
         concat.write_text("\n".join(lines) + "\n")
         command = [
             ffmpeg,
@@ -1019,14 +1019,19 @@ def _encode_mp4(
             "high",
             "-pix_fmt",
             "yuv420p",
+            "-vf",
+            f"fps={VIDEO_FRAME_RATE}",
             "-fps_mode",
-            "vfr",
+            "cfr",
+            "-r",
+            str(VIDEO_FRAME_RATE),
             "-enc_time_base",
-            "-1",
+            f"1:{VIDEO_FRAME_RATE}",
             "-x264-params",
             (
-                f"keyint={spec.gop_frames}:min-keyint={spec.gop_frames}:"
-                "scenecut=0:force-cfr=0:colorprim=bt709:transfer=bt709:"
+                f"keyint={max(1, round(sum(durations) * VIDEO_FRAME_RATE))}:"
+                f"min-keyint={max(1, round(sum(durations) * VIDEO_FRAME_RATE))}:"
+                "scenecut=0:force-cfr=1:colorprim=bt709:transfer=bt709:"
                 "colormatrix=bt709"
             ),
             "-color_primaries",
@@ -1041,6 +1046,8 @@ def _encode_mp4(
             "+faststart",
             "-video_track_timescale",
             "1000",
+            "-t",
+            f"{sum(durations):.6f}",
             "-y",
             str(temporary),
         ]
@@ -1079,6 +1086,12 @@ def _encode_ts(
                     f"duration {duration:.6f}",
                 )
             )
+        lines.extend(
+            (
+                f"file '{_ffconcat_path(images[-1])}'",
+                f"option framerate {FFCONCAT_TIMEBASE_FPS}",
+            )
+        )
         concat.write_text("\n".join(lines) + "\n")
         command = [
             ffmpeg,
@@ -1100,23 +1113,25 @@ def _encode_ts(
             str(spec.crf),
             "-profile:v",
             "high",
-            # Each immutable HLS segment is intentionally short and uses a
-            # sparse variable-frame-rate weather clock. B-frame reordering can
-            # push presentation timestamps beyond a segment's declared HLS
-            # duration (especially for one- to three-frame hourly groups),
-            # leaving MediaSource buffered but unable to present a frame.
+            # Independent segments start with an I-frame and avoid B-frame
+            # reordering so their presentation ranges match EXTINF exactly.
             "-bf",
             "0",
             "-pix_fmt",
             "yuv420p",
+            "-vf",
+            f"fps={VIDEO_FRAME_RATE}",
             "-fps_mode",
-            "vfr",
+            "cfr",
+            "-r",
+            str(VIDEO_FRAME_RATE),
             "-enc_time_base",
-            "-1",
+            f"1:{VIDEO_FRAME_RATE}",
             "-x264-params",
             (
-                f"keyint={len(images)}:min-keyint={len(images)}:"
-                "scenecut=0:bframes=0:force-cfr=0:colorprim=bt709:transfer=bt709:colormatrix=bt709"
+                f"keyint={max(1, round(sum(durations) * VIDEO_FRAME_RATE))}:"
+                f"min-keyint={max(1, round(sum(durations) * VIDEO_FRAME_RATE))}:"
+                "scenecut=0:bframes=0:force-cfr=1:colorprim=bt709:transfer=bt709:colormatrix=bt709"
             ),
             "-color_primaries",
             "bt709",
@@ -1128,6 +1143,8 @@ def _encode_ts(
             "tv",
             "-output_ts_offset",
             f"{pts_offset:.6f}",
+            "-t",
+            f"{sum(durations):.6f}",
             "-f",
             "mpegts",
             "-y",
@@ -1215,6 +1232,7 @@ def _build_hls_media(
                 "mediaWidth": spec.resolved_media_width,
                 "mediaHeight": spec.resolved_media_height,
                 "clockStripHeight": VIDEO_CLOCK_STRIP_HEIGHT,
+                "frameRate": VIDEO_FRAME_RATE,
                 "crf": spec.crf,
                 "preset": spec.preset,
                 "frames": [media_inputs[index] for index in indexes],
@@ -1601,6 +1619,7 @@ def build_profile(
             "width": spec.resolved_media_width,
             "height": spec.resolved_media_height + VIDEO_CLOCK_STRIP_HEIGHT,
             "contentHeight": spec.resolved_media_height,
+            "frameRate": VIDEO_FRAME_RATE,
             "byteLength": media_path.stat().st_size,
             "sha256": _sha256_file(media_path),
             "fingerprint": media_fingerprint,
