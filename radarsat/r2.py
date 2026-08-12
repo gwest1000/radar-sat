@@ -1120,11 +1120,11 @@ def expired_video_keys(
 ) -> list[str]:
     """Select unreachable video generations after a browser-safe grace.
 
-    The newest three generations per product/layer/track survive regardless of
-    age, which protects a recovery following a long feed stall. Older
-    generations and unreferenced content-hashed proxies survive for one hour
-    after their last upload. Catalog-referenced objects are always excluded
-    from this post-commit deletion pass.
+    For an active product/layer/track, the newest three generations survive
+    regardless of age, protecting recovery after a long feed stall. A retired
+    profile with no catalog-referenced object keeps only the one-hour browser
+    grace; otherwise old secondary profiles would occupy R2 indefinitely.
+    Catalog-referenced objects are always excluded from this post-commit pass.
     """
     desired = set(desired_keys)
     modifications = modified_at or {}
@@ -1139,7 +1139,12 @@ def expired_video_keys(
     cutoff = _as_utc(now) - VIDEO_ORPHAN_GRACE
     expired: set[str] = set()
     for generations in groups.values():
-        newest = set(sorted(generations, reverse=True)[:VIDEO_MIN_GENERATIONS])
+        active = any(key in desired for keys in generations.values() for key in keys)
+        newest = (
+            set(sorted(generations, reverse=True)[:VIDEO_MIN_GENERATIONS])
+            if active
+            else set()
+        )
         for generation, keys in generations.items():
             if generation in newest or any(key in desired for key in keys):
                 continue
@@ -1166,7 +1171,12 @@ def expired_video_keys(
     return sorted(expired)
 
 
-def retained_local_video_keys(root: Path, remote: Mapping[str, int]) -> set[str]:
+def retained_local_video_keys(
+    root: Path,
+    remote: Mapping[str, int],
+    *,
+    desired_keys: Iterable[str] = (),
+) -> set[str]:
     """Protect dependencies of the locally retained newest generations.
 
     The encoder keeps its newest three immutable manifests. Reading those
@@ -1175,6 +1185,7 @@ def retained_local_video_keys(root: Path, remote: Mapping[str, int]) -> set[str]
     No missing historical object is re-uploaded; this set only constrains the
     post-commit deletion pass.
     """
+    desired = set(desired_keys)
     groups: dict[tuple[str, str, str, str], set[str]] = {}
     for key in remote:
         parsed = _video_generation_key(key)
@@ -1185,6 +1196,9 @@ def retained_local_video_keys(root: Path, remote: Mapping[str, int]) -> set[str]
     retained: set[str] = set()
     for (prefix, product_id, layer_id, track), generations in groups.items():
         if prefix != "video-manifests":
+            continue
+        group_prefix = f"video-manifests/{product_id}/{layer_id}/{track}/"
+        if not any(key.startswith(group_prefix) for key in desired):
             continue
         for generation in sorted(generations, reverse=True)[:VIDEO_MIN_GENERATIONS]:
             pointer = {
@@ -1375,7 +1389,9 @@ def publish(
                 }
         desired_keys = {item.key for item in objects}
         retained_video_keys = (
-            retained_local_video_keys(root, remote) if not fast else set()
+            retained_local_video_keys(root, remote, desired_keys=desired_keys)
+            if not fast
+            else set()
         )
         expired = (
             sorted(

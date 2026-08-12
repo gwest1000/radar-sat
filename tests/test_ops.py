@@ -615,10 +615,13 @@ class PublisherTests(unittest.TestCase):
             desired_proxy: now - dt.timedelta(days=1),
         })
 
+        active_generation_keys = {
+            key for key in remote if generations[-1] in key
+        }
         expired = expired_video_keys(
             remote,
             now,
-            desired_keys={desired_proxy},
+            desired_keys={desired_proxy, *active_generation_keys},
             modified_at=modified,
         )
 
@@ -629,6 +632,10 @@ class PublisherTests(unittest.TestCase):
             self.assertFalse(any(generation in key for key in expired))
         for generation in generations[:2]:
             self.assertTrue(any(generation in key for key in expired))
+
+        retired = expired_video_keys(remote, now, modified_at=modified)
+        for generation in generations:
+            self.assertTrue(any(generation in key for key in retired))
 
     def test_expired_video_generation_is_deleted_only_after_catalog_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
