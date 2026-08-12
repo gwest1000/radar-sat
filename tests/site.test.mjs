@@ -91,6 +91,8 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /if \(!videoModeReady && fireController/);
   assert.match(compositor, /class SurfaceCache/);
   assert.match(compositor, /displayViewport\.left - mediaViewport\.left/);
+  assert.match(compositor, /manifest\.media\.contentHeight \?\? video\.videoHeight/);
+  assert.match(compositor, /index === committedIndexRef\.current/);
   assert.match(compositor, /FINAL_SURFACE_CACHE_SIZE = 4/);
   assert.match(compositor, /crossOrigin="anonymous"/);
   assert.match(compositor, /requestVideoFrameCallback/);

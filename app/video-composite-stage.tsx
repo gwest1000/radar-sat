@@ -364,18 +364,19 @@ export function VideoCompositeStage({
     context.globalAlpha = 1;
     const displayViewport = manifest.viewport ?? { left: 0, top: 0, width: 1, height: 1 };
     const mediaViewport = manifest.mediaViewport ?? displayViewport;
+    const contentVideoHeight = manifest.media.contentHeight ?? video.videoHeight;
     const sourceLeft = (
       (displayViewport.left - mediaViewport.left) / mediaViewport.width
     ) * video.videoWidth;
     const sourceTop = (
       (displayViewport.top - mediaViewport.top) / mediaViewport.height
-    ) * video.videoHeight;
+    ) * contentVideoHeight;
     const sourceWidth = (
       displayViewport.width / mediaViewport.width
     ) * video.videoWidth;
     const sourceHeight = (
       displayViewport.height / mediaViewport.height
-    ) * video.videoHeight;
+    ) * contentVideoHeight;
     context.drawImage(
       video,
       sourceLeft,
@@ -393,7 +394,13 @@ export function VideoCompositeStage({
       context.drawImage(surfaces.overlay, 0, 0, canvas.width, canvas.height);
     }
     context.restore();
-  }, [manifest.mediaViewport, manifest.viewport, resizeCanvas, satelliteFilter]);
+  }, [
+    manifest.media.contentHeight,
+    manifest.mediaViewport,
+    manifest.viewport,
+    resizeCanvas,
+    satelliteFilter,
+  ]);
 
   const requestFrameRef = useRef<() => void>(() => undefined);
   const seekToIndexRef = useRef<(index: number) => void>(() => undefined);
@@ -427,6 +434,14 @@ export function VideoCompositeStage({
       || mediaTime >= plan.frame.ptsSeconds + plan.frame.durationSeconds + 0.001
     ) {
       seekToIndexRef.current(requestedIndexRef.current);
+      return;
+    }
+    // Some decoders can emit a redundant callback at a segment transition.
+    // It maps to the frame already on screen, so skip the duplicate canvas
+    // composition and wait for the next meteorological frame callback.
+    if (index === committedIndexRef.current && !seekingRef.current) {
+      lastProgressAtRef.current = Date.now();
+      requestFrameRef.current();
       return;
     }
     const ready = surfaces.peek(plan.cacheKey);

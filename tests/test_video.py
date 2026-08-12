@@ -194,6 +194,8 @@ class VideoSelectionTests(unittest.TestCase):
             [
                 base,
                 base + dt.timedelta(hours=1),
+                base + dt.timedelta(hours=2),
+                base + dt.timedelta(hours=3),
                 base + dt.timedelta(hours=4),
             ],
         )
@@ -201,6 +203,8 @@ class VideoSelectionTests(unittest.TestCase):
             [item.source_valid_time for item in selected],
             [
                 base + dt.timedelta(seconds=22),
+                base + dt.timedelta(hours=1, seconds=22),
+                base + dt.timedelta(hours=1, seconds=22),
                 base + dt.timedelta(hours=1, seconds=22),
                 base + dt.timedelta(hours=4, seconds=22),
             ],
@@ -371,7 +375,8 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(manifest["transport"], "hls-ts")
             self.assertEqual(manifest["media"]["mimeType"], "application/vnd.apple.mpegurl")
             self.assertEqual(manifest["media"]["width"], 64)
-            self.assertEqual(manifest["media"]["height"], 48)
+            self.assertEqual(manifest["media"]["height"], 64)
+            self.assertEqual(manifest["media"]["contentHeight"], 48)
             self.assertIn("static/bc/boundaries.png?v=1", manifest["proxies"])
             self.assertEqual(
                 [layer["id"] for layer in manifest["frames"][0]["proxyLayers"]],
@@ -435,7 +440,7 @@ class VideoBuildTests(unittest.TestCase):
                 for item in encoded_frames
             ]
             self.assertEqual(
-                [round(right - left, 2) for left, right in zip(timestamps, timestamps[1:])],
+                [round(right - left, 2) for left, right in zip(timestamps[:2], timestamps[1:3])],
                 [0.22, 0.22],
             )
 
@@ -450,7 +455,7 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(unchanged["status"], "unchanged")
 
-    def test_hls_segments_have_one_continuous_timeline(self) -> None:
+    def test_hls_segments_pack_missing_observations_at_uniform_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             catalog, spec = self.make_source(root)
@@ -471,12 +476,16 @@ class VideoBuildTests(unittest.TestCase):
             frames = layers["daynight"]["frames"]
             assert isinstance(frames, list)
             layers["daynight"]["maxAgeMinutes"] = 0
-            # Cover both an ordinary adjacent-hour boundary and a skipped UTC
-            # segment group. Neither may introduce a timestamp reset or gap.
-            for item, minute in zip(frames, (50, 60, 180), strict=True):
+            # Two complete playback chunks with a skipped UTC segment group.
+            # The gap must not change any frame's display duration.
+            originals = list(frames)
+            frames.clear()
+            for index, minute in enumerate((*range(0, 60, 10), *range(180, 240, 10))):
+                item = dict(originals[index % len(originals)])
                 valid = base + dt.timedelta(minutes=minute)
                 item["validTime"] = stamp(valid)
                 item["sourceTimes"] = {"GOES-18": stamp(valid)}
+                frames.append(item)
 
             result = build_profile(
                 root / "source",
@@ -492,12 +501,20 @@ class VideoBuildTests(unittest.TestCase):
                 (root / "output" / str(result["manifestPath"])).read_text()
             )
             segments = manifest["media"]["segments"]
-            self.assertEqual(len(segments), 3)
+            self.assertEqual(len(segments), 2)
             playlist = (
                 root / "output" / str(manifest["media"]["path"])
             ).read_text()
             self.assertIn("#EXT-X-INDEPENDENT-SEGMENTS", playlist)
-            self.assertNotIn("#EXT-X-DISCONTINUITY", playlist)
+            self.assertEqual(playlist.count("#EXT-X-DISCONTINUITY"), 1)
+            self.assertEqual(
+                [item["ptsSeconds"] for item in manifest["frames"]],
+                [round(index * 0.22, 2) for index in range(12)],
+            )
+            self.assertEqual(
+                [item["durationSeconds"] for item in manifest["frames"]],
+                [0.22] * 12,
+            )
 
             encoded: list[list[dict[str, str]]] = []
             for segment in segments:
@@ -525,28 +542,14 @@ class VideoBuildTests(unittest.TestCase):
                 )
                 encoded.append(segment_frames)
 
-            first_start = float(encoded[0][0]["best_effort_timestamp_time"])
-            for previous, following, entry in zip(
-                encoded[:-1],
-                encoded[1:],
-                segments[1:],
-                strict=True,
-            ):
-                following_start = float(
-                    following[0]["best_effort_timestamp_time"]
-                )
-                manifest_pts = float(
-                    manifest["frames"][entry["firstFrame"]]["ptsSeconds"]
-                )
-                self.assertAlmostEqual(
-                    following_start - first_start,
-                    manifest_pts,
-                    places=2,
-                )
-                self.assertLess(
-                    float(previous[-1]["best_effort_timestamp_time"]),
-                    following_start,
-                )
+            starts = [
+                float(segment[0]["best_effort_timestamp_time"])
+                for segment in encoded
+            ]
+            # Adjacent observations remain continuous on the absolute media
+            # clock. The skipped group keeps its stable timestamp for segment
+            # reuse; EXT-X-DISCONTINUITY instructs HLS to pack it at playback.
+            self.assertGreater(starts[1] - starts[0], 1.32)
 
     def test_shared_orphan_scan_can_be_deferred_to_final_product(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

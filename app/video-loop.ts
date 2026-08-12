@@ -49,6 +49,7 @@ export type VideoLoopManifest = {
     codec: string;
     width: number;
     height: number;
+    contentHeight?: number;
     byteLength: number;
     sha256: string;
     segments?: Array<{
@@ -156,6 +157,13 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
     || typeof manifest.media.codec !== "string"
     || !finitePositive(manifest.media.width)
     || !finitePositive(manifest.media.height)
+    || (
+      manifest.media.contentHeight !== undefined
+      && (
+        !finitePositive(manifest.media.contentHeight)
+        || manifest.media.contentHeight > manifest.media.height
+      )
+    )
     || typeof manifest.media.byteLength !== "number"
     || manifest.media.byteLength < 0
     || typeof manifest.media.sha256 !== "string"

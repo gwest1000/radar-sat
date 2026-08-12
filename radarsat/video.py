@@ -21,10 +21,11 @@ from .config import BROAD_VIEWPORTS, PRODUCTS, VIEWPORTS
 
 UTC = dt.timezone.utc
 VIDEO_SCHEMA_VERSION = 1
-VIDEO_RENDER_VERSION = 7
+VIDEO_RENDER_VERSION = 14
 PROXY_RENDER_VERSION = 1
 METEOROLOGICAL_MINUTE_SECONDS = 0.022
 FFCONCAT_TIMEBASE_FPS = 50
+VIDEO_CLOCK_STRIP_HEIGHT = 16
 MPEGTS_TIMESTAMP_WRAP_SECONDS = (1 << 33) / 90_000
 LOCAL_GENERATIONS_TO_KEEP = 3
 LOCAL_ORPHAN_GRACE_HOURS = 1
@@ -519,7 +520,9 @@ def _selected_satellite_frames(
                 continue
             previous = selected[-1]
             previous_max_age = (
-                25
+                None
+                if spec.track == "archive"
+                else 25
                 if previous.encoded_source_layer == "raw-visir-native"
                 else 90
                 if spec.domain_id == "bc" and spec.layer_id == "raw-visir" and spec.track == "live"
@@ -877,12 +880,12 @@ def _frame_durations(
     if not selected:
         return []
     nominal = cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS
-    durations: list[float] = []
-    for current, following in zip(selected, selected[1:]):
-        minutes = (following.valid_time - current.valid_time).total_seconds() / 60
-        durations.append(max(1 / FFCONCAT_TIMEBASE_FPS, minutes * METEOROLOGICAL_MINUTE_SECONDS))
-    durations.append(nominal)
-    return durations
+    # Playback is a sequence of available observations, not a wall-clock
+    # reconstruction of missing data. Encoding a four-hour source gap as a
+    # four-times-long frame makes an otherwise healthy loop appear frozen.
+    # Keep every displayed frame on the same cadence; its VALID timestamp can
+    # still jump across a genuine historical gap.
+    return [nominal] * len(selected)
 
 
 def _segment_pts_offset(valid_time: dt.datetime) -> float:
@@ -916,11 +919,11 @@ def _prepare_satellite_images(
         ).convert("RGB")
     rendered: dict[tuple[str, str], Path] = {}
     paths: list[Path] = []
-    for frame in selected:
+    for index, frame in enumerate(selected):
         key = (frame.source_path, frame.source_fetched_at)
-        destination = rendered.get(key)
-        if destination is None:
-            destination = temporary_root / f"sat-{len(rendered):04d}.png"
+        cached = rendered.get(key)
+        destination = temporary_root / f"sat-{index:04d}.png"
+        if cached is None:
             with Image.open(_safe_path(source_root, frame.source_path)) as source_image:
                 satellite = _crop_resize(
                     source_image,
@@ -930,7 +933,25 @@ def _prepare_satellite_images(
                 )
                 composed = base.copy()
                 composed.paste(satellite.convert("RGB"), (0, 0), satellite.getchannel("A"))
-                composed.save(destination, "PNG", optimize=False, compress_level=1)
+        else:
+            with Image.open(cached) as cached_image:
+                composed = cached_image.crop(
+                    (0, 0, spec.resolved_media_width, spec.resolved_media_height)
+                ).convert("RGB")
+        clock_phase = int(
+            frame.valid_time.timestamp() // (spec.cadence_minutes * 60)
+        ) % 2
+        encoded = Image.new(
+            "RGB",
+            (
+                spec.resolved_media_width,
+                spec.resolved_media_height + VIDEO_CLOCK_STRIP_HEIGHT,
+            ),
+            (255, 255, 255) if clock_phase else (0, 0, 0),
+        )
+        encoded.paste(composed, (0, 0))
+        encoded.save(destination, "PNG", optimize=False, compress_level=1)
+        if cached is None:
             rendered[key] = destination
         paths.append(destination)
     return paths
@@ -1127,6 +1148,7 @@ def _encode_ts(
 def _segment_groups(
     selected: Sequence[SelectedFrame],
     track: str,
+    cadence_minutes: int,
 ) -> list[list[int]]:
     grouped: dict[dt.datetime, list[int]] = {}
     for index, frame in enumerate(selected):
@@ -1139,7 +1161,17 @@ def _segment_groups(
             microsecond=0,
         )
         grouped.setdefault(key, []).append(index)
-    return [grouped[key] for key in sorted(grouped)]
+    expected = max(1, round(group_hours * 60 / cadence_minutes))
+    results: list[list[int]] = []
+    pending: list[int] = []
+    for key in sorted(grouped):
+        pending.extend(grouped[key])
+        if len(pending) >= expected:
+            results.append(pending)
+            pending = []
+    if pending:
+        results.append(pending)
+    return results
 
 
 def _atomic_text(path: Path, value: str) -> None:
@@ -1166,7 +1198,7 @@ def _build_hls_media(
     ffmpeg: str,
 ) -> tuple[Path, str, list[Mapping[str, Any]], list[float]]:
     owner = f"shared-{spec.domain_id}-{spec.media_group}"
-    groups = _segment_groups(selected, spec.track)
+    groups = _segment_groups(selected, spec.track, spec.cadence_minutes)
     adjusted_durations = list(durations)
     segment_entries: list[Mapping[str, Any]] = []
     for indexes in groups:
@@ -1182,6 +1214,7 @@ def _build_hls_media(
                 "mediaViewport": dict(spec.resolved_media_viewport),
                 "mediaWidth": spec.resolved_media_width,
                 "mediaHeight": spec.resolved_media_height,
+                "clockStripHeight": VIDEO_CLOCK_STRIP_HEIGHT,
                 "crf": spec.crf,
                 "preset": spec.preset,
                 "frames": [media_inputs[index] for index in indexes],
@@ -1257,6 +1290,18 @@ def _build_hls_media(
             "#EXT-X-PLAYLIST-TYPE:VOD",
         ]
         for entry in segment_entries:
+            if int(entry["firstFrame"]) > 0:
+                previous = selected[int(entry["firstFrame"]) - 1]
+                current = selected[int(entry["firstFrame"])]
+                expected = previous.valid_time + dt.timedelta(
+                    minutes=spec.cadence_minutes
+                )
+                # Absolute compressed PTS make ordinary rolling segments reusable.
+                # If observations are missing across a segment boundary, tell HLS
+                # to pack the next segment immediately after the previous one
+                # instead of preserving a long, visibly frozen media-time gap.
+                if current.valid_time != expected:
+                    lines.append("#EXT-X-DISCONTINUITY")
             lines.append(f"#EXTINF:{float(entry['durationSeconds']):.6f},")
             segment_absolute = output_root / str(entry["path"])
             lines.append(os.path.relpath(segment_absolute, playlist_path.parent))
@@ -1554,7 +1599,8 @@ def build_profile(
             "mimeType": "application/vnd.apple.mpegurl",
             "codec": "avc1",
             "width": spec.resolved_media_width,
-            "height": spec.resolved_media_height,
+            "height": spec.resolved_media_height + VIDEO_CLOCK_STRIP_HEIGHT,
+            "contentHeight": spec.resolved_media_height,
             "byteLength": media_path.stat().st_size,
             "sha256": _sha256_file(media_path),
             "fingerprint": media_fingerprint,
