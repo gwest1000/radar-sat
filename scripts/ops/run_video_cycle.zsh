@@ -71,7 +71,7 @@ run_video_group() {
 
 run_parallel_video_groups() {
   local track="$1"
-  local bc_pid=0 north_america_pid=0 pacific_pid=0 status=0
+  local bc_pid=0 north_america_pid=0 pacific_pid=0 build_status=0
   run_video_group "${track}" \
     bc-large-overlay bc-small-overlay bc-southwest-overlay \
     bc-southeast-overlay bc-northeast-overlay &
@@ -80,10 +80,10 @@ run_parallel_video_groups() {
   north_america_pid=$!
   run_video_group "${track}" pacific-wna-overlay north-pacific-overlay &
   pacific_pid=$!
-  wait "${bc_pid}" || status=1
-  wait "${north_america_pid}" || status=1
-  wait "${pacific_pid}" || status=1
-  return "${status}"
+  wait "${bc_pid}" || build_status=1
+  wait "${north_america_pid}" || build_status=1
+  wait "${pacific_pid}" || build_status=1
+  return "${build_status}"
 }
 
 run_parallel_video_groups live \
