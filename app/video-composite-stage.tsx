@@ -56,9 +56,9 @@ type DecodeTask = {
 
 const BITMAP_CACHE_BYTES = 128 * 1024 * 1024;
 const MIN_SURFACE_CACHE_ENTRIES = 16;
-const LOW_MEMORY_SURFACE_CACHE_BYTES = 320 * 1024 * 1024;
-const STANDARD_SURFACE_CACHE_BYTES = 512 * 1024 * 1024;
-const HIGH_MEMORY_SURFACE_CACHE_BYTES = 1_024 * 1024 * 1024;
+const LOW_MEMORY_SURFACE_CACHE_BYTES = 192 * 1024 * 1024;
+const STANDARD_SURFACE_CACHE_BYTES = 256 * 1024 * 1024;
+const HIGH_MEMORY_SURFACE_CACHE_BYTES = 384 * 1024 * 1024;
 const PLAYBACK_SURFACE_PIXELS = 1_300_000;
 const VIDEO_PROGRESS_TIMEOUT_MS = 30_000;
 const HLS_BUFFER_BYTES = 48 * 1024 * 1024;
@@ -297,19 +297,18 @@ class SurfaceCache {
   }
 
   clear(): void {
-    for (const entry of this.entries.values()) {
-      void entry.promise.then((surfaces) => {
-        for (const surface of [surfaces.underlay, surfaces.overlay]) {
-          if (surface) {
-            surface.remove();
-            surface.width = 0;
-            surface.height = 0;
-          }
-        }
-      }).catch(() => undefined);
-    }
+    for (const entry of this.entries.values()) this.dispose(entry);
     this.entries.clear();
     this.preparedCount = 0;
+  }
+
+  retain(keys: ReadonlySet<string>): void {
+    for (const [key, entry] of this.entries) {
+      if (keys.has(key)) continue;
+      this.entries.delete(key);
+      this.dispose(entry);
+    }
+    this.trim();
   }
 
   private async render(layers: VideoCanvasProxyLayer[]): Promise<HTMLCanvasElement | undefined> {
@@ -350,18 +349,19 @@ class SurfaceCache {
       if (typeof oldestKey !== "string") break;
       const entry = this.entries.get(oldestKey);
       this.entries.delete(oldestKey);
-      if (entry) {
-        void entry.promise.then((surfaces) => {
-          for (const surface of [surfaces.underlay, surfaces.overlay]) {
-            if (surface) {
-              surface.remove();
-              surface.width = 0;
-              surface.height = 0;
-            }
-          }
-        }).catch(() => undefined);
-      }
+      if (entry) this.dispose(entry);
     }
+  }
+
+  private dispose(entry: { promise: Promise<PreparedSurfaces> }): void {
+    void entry.promise.then((surfaces) => {
+      for (const surface of [surfaces.underlay, surfaces.overlay]) {
+        if (!surface) continue;
+        surface.remove();
+        surface.width = 0;
+        surface.height = 0;
+      }
+    }).catch(() => undefined);
   }
 }
 
@@ -425,6 +425,7 @@ export function VideoCompositeStage({
   const failedRef = useRef(false);
   const overlayStallsRef = useRef(0);
   const presentedFramesRef = useRef(0);
+  const lastDiagnosticsAtRef = useRef(0);
   const lastProgressAtRef = useRef(0);
   const seekingRef = useRef(false);
   const disposedRef = useRef(false);
@@ -540,7 +541,7 @@ export function VideoCompositeStage({
       || loopTimerRef.current !== undefined
     ) return;
     video.pause();
-    const delay = (plans[index].frame.durationSeconds * 1_000 + 215) / speedRef.current;
+    const delay = plans[index].frame.durationSeconds * 1_000 / speedRef.current;
     loopTimerRef.current = window.setTimeout(() => {
       loopTimerRef.current = undefined;
       onLoopBoundary?.();
@@ -583,14 +584,22 @@ export function VideoCompositeStage({
       requestedIndexRef.current = index;
       presentedFramesRef.current += 1;
       lastProgressAtRef.current = Date.now();
-      stage.dataset.presentedFrames = String(presentedFramesRef.current);
-      stage.dataset.overlayStalls = String(overlayStallsRef.current);
-      const quality = video.getVideoPlaybackQuality?.();
-      stage.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
-      stage.dataset.surfaceCacheEntries = String(surfaces.size);
-      stage.dataset.surfaceCacheLimit = String(surfaces.limit);
-      stage.dataset.surfaceBuilds = String(surfaces.builds);
-      stage.dataset.surfaceCacheMegabytes = String(Math.round(surfaceBudgetBytes / 1024 / 1024));
+      const now = Date.now();
+      if (
+        index === 0
+        || index === plans.length - 1
+        || now - lastDiagnosticsAtRef.current >= 1_000
+      ) {
+        lastDiagnosticsAtRef.current = now;
+        stage.dataset.presentedFrames = String(presentedFramesRef.current);
+        stage.dataset.overlayStalls = String(overlayStallsRef.current);
+        const quality = video.getVideoPlaybackQuality?.();
+        stage.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
+        stage.dataset.surfaceCacheEntries = String(surfaces.size);
+        stage.dataset.surfaceCacheLimit = String(surfaces.limit);
+        stage.dataset.surfaceBuilds = String(surfaces.builds);
+        stage.dataset.surfaceCacheMegabytes = String(Math.round(surfaceBudgetBytes / 1024 / 1024));
+      }
       onFramePresented(index);
       const lookahead = playbackLookahead(speedRef.current);
       for (let offset = 1; offset <= lookahead; offset += 1) {
@@ -614,10 +623,17 @@ export function VideoCompositeStage({
       { length: Math.min(lookahead, Math.max(0, plans.length - 1)) },
       (_, offset) => plans[(index + offset + 1) % plans.length],
     );
-    void Promise.all([
-      surfaces.prepare(plan),
-      ...upcoming.map((candidate) => surfaces.prepare(candidate)),
-    ]).then(([prepared]) => {
+    const current = surfaces.prepare(plan);
+    const future = upcoming.map((candidate) => surfaces.prepare(candidate));
+    for (const pending of future) {
+      void pending.catch((reason) => {
+        if (operationEpochRef.current === operationEpoch) fail(reason);
+      });
+    }
+    const readyToResume = committedIndexRef.current < 0
+      ? Promise.all([current, ...future]).then(([prepared]) => prepared)
+      : current;
+    void readyToResume.then((prepared) => {
       if (commit(prepared) && playingRef.current && index < plans.length - 1) {
         playVideo(video);
       }
@@ -680,7 +696,13 @@ export function VideoCompositeStage({
     const video = videoRef.current;
     const stage = stageRef.current;
     const operationEpoch = invalidateOperation(video);
-    surfaceCache.clear();
+    for (const surface of [
+      visibleSurfacesRef.current.underlay,
+      visibleSurfacesRef.current.overlay,
+    ]) {
+      if (surface) surface.hidden = true;
+    }
+    surfaceCache.retain(new Set(plans.map((plan) => plan.cacheKey)));
     visibleSurfacesRef.current = {};
     if (loopTimerRef.current !== undefined) {
       window.clearTimeout(loopTimerRef.current);

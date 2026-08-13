@@ -75,8 +75,11 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /if \(videoModeReady \|\| !isAnimating/);
   assert.match(viewer, /data-renderer=\{videoModeReady \? "video" : "images"\}/);
   assert.match(viewer, /<VideoCompositeStage/);
-  assert.match(viewer, /VIDEO_UI_UPDATE_INTERVAL_MS = 400/);
+  assert.match(viewer, /VIDEO_HUD_UPDATE_INTERVAL_MS = 180/);
   assert.match(viewer, /presentedVideoIndexRef/);
+  assert.match(viewer, /timelineRangeRef\.current\.value = String\(index\)/);
+  assert.match(viewer, /validLineRef\.current\.textContent/);
+  assert.doesNotMatch(viewer, /setFrameIndex\(\(current\) => current === index \? current : index\)/);
   assert.match(videoLoop, /transport: "progressive-mp4"/);
   assert.match(videoLoop, /track: "live" \| "archive"/);
   assert.match(videoLoop, /mediaViewport/);
@@ -104,9 +107,12 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(compositor, /Overlay decoding was cancelled/);
   assert.match(compositor, /bitmapCache\.activate\(\)/);
   assert.match(compositor, /index === committedIndexRef\.current/);
-  assert.match(compositor, /HIGH_MEMORY_SURFACE_CACHE_BYTES = 1_024/);
+  assert.match(compositor, /HIGH_MEMORY_SURFACE_CACHE_BYTES = 384/);
   assert.match(compositor, /surfaceCacheEntryLimit/);
   assert.match(compositor, /surfaceCache\.setLimit\(surfaceEntryLimit\)/);
+  assert.match(compositor, /surfaceCache\.retain\(new Set\(plans\.map/);
+  assert.match(compositor, /const readyToResume = committedIndexRef\.current < 0/);
+  assert.match(compositor, /const delay = plans\[index\]\.frame\.durationSeconds \* 1_000 \/ speedRef\.current/);
   assert.match(compositor, /data-surface-cache-limit/);
   assert.match(compositor, /data-surface-builds/);
   assert.match(compositor, /if \(playingRef\.current\) return/);

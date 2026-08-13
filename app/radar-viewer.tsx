@@ -150,7 +150,7 @@ type SiteConfig = {
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
-const VIDEO_UI_UPDATE_INTERVAL_MS = 400;
+const VIDEO_HUD_UPDATE_INTERVAL_MS = 180;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
@@ -1545,7 +1545,12 @@ export function RadarViewer() {
   const [failedVideoGeneration, setFailedVideoGeneration] = useState("");
   const [videoFallbackReason, setVideoFallbackReason] = useState("");
   const presentedVideoIndexRef = useRef(NEWEST_FRAME);
-  const lastVideoUiUpdateAtRef = useRef(0);
+  const lastVideoHudUpdateAtRef = useRef(0);
+  const frameCountRef = useRef<HTMLSpanElement>(null);
+  const timelineRangeRef = useRef<HTMLInputElement>(null);
+  const mapStageRef = useRef<HTMLDivElement>(null);
+  const validLineRef = useRef<HTMLParagraphElement>(null);
+  const sourceTimesRef = useRef<HTMLParagraphElement>(null);
   const loadedVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const pendingVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const fullCatalogLoadRef = useRef("");
@@ -1861,7 +1866,6 @@ export function RadarViewer() {
         else overlays.push(layer);
       }
       const cacheKey = [
-        candidateVideoManifest.generation,
         ...underlays.map((layer) => `u:${layer.url}:${layer.opacity}`),
         ...overlays.map((layer) => `o:${layer.url}:${layer.opacity}`),
       ].join("|");
@@ -1887,6 +1891,22 @@ export function RadarViewer() {
     && videoPlans.length >= 2
     && videoPlans.length === videoAnchorFrames.length,
   );
+  const videoHudSourceTimes = useMemo(() => videoPlans.map((plan) => (
+    plan.frame.proxyLayers.filter((selection) => {
+      const recipe = product?.layers.find((candidate) => candidate.id === selection.id);
+      return Boolean(recipe && product && isProductLayerEnabled(recipe, optionalLayers, product.layers));
+    }).flatMap((selection): { label: string; validTime: string }[] => {
+      const label = sourceLabel(selection.id);
+      return label && selection.sourceValidTime
+        ? [{ label, validTime: selection.sourceValidTime }]
+        : [];
+    }).concat([{ label: "SAT", validTime: plan.frame.sourceValidTime }])
+      .filter((item, index, all) => all.findIndex((candidate) => (
+        candidate.label === item.label && candidate.validTime === item.validTime
+      )) === index)
+      .map((item) => `${item.label} ${shortClock(item.validTime)}`)
+      .join(" · ")
+  )), [optionalLayers, product, videoPlans]);
 
   useEffect(() => {
     if (catalog?.catalogMode !== "index" || !catalog.fullCatalogPath || !product) return;
@@ -2052,7 +2072,7 @@ export function RadarViewer() {
         const safeCurrent = Math.min(Math.max(0, base), anchorFrames.length - 1);
         const next = (safeCurrent + amount + anchorFrames.length) % anchorFrames.length;
         presentedVideoIndexRef.current = next;
-        lastVideoUiUpdateAtRef.current = 0;
+        lastVideoHudUpdateAtRef.current = 0;
         return next;
       });
     },
@@ -2065,11 +2085,28 @@ export function RadarViewer() {
     if (
       index !== 0
       && index !== anchorFrames.length - 1
-      && now - lastVideoUiUpdateAtRef.current < VIDEO_UI_UPDATE_INTERVAL_MS
+      && now - lastVideoHudUpdateAtRef.current < VIDEO_HUD_UPDATE_INTERVAL_MS
     ) return;
-    lastVideoUiUpdateAtRef.current = now;
-    setFrameIndex((current) => current === index ? current : index);
-  }, [anchorFrames.length]);
+    lastVideoHudUpdateAtRef.current = now;
+    const frame = videoAnchorFrames[index];
+    const plan = videoPlans[index];
+    if (!frame || !plan || !product) return;
+    const times = videoHudSourceTimes[index] ?? "";
+    if (frameCountRef.current) {
+      frameCountRef.current.textContent = `${index + 1} / ${anchorFrames.length}`;
+    }
+    if (timelineRangeRef.current) timelineRangeRef.current.value = String(index);
+    if (validLineRef.current) {
+      validLineRef.current.textContent = `VALID ${utcClock(frame.validTime)} UTC · ${localClock(frame.validTime)}`;
+    }
+    if (sourceTimesRef.current) sourceTimesRef.current.textContent = times;
+    if (mapStageRef.current) {
+      mapStageRef.current.setAttribute(
+        "aria-label",
+        `${product.title}, valid ${utcClock(frame.validTime)} UTC. ${times}`,
+      );
+    }
+  }, [anchorFrames.length, product, videoAnchorFrames, videoHudSourceTimes, videoPlans]);
 
   const togglePlayback = useCallback(() => {
     if (isAnimating && videoModeReady) {
@@ -2110,7 +2147,9 @@ export function RadarViewer() {
   useEffect(() => {
     let cancelled = false;
     if (!lightningPointReferences.length) {
-      const clearMarkers = window.setTimeout(() => setLightningMarkers([]), 0);
+      const clearMarkers = window.setTimeout(() => {
+        setLightningMarkers((current) => current.length ? [] : current);
+      }, 0);
       return () => window.clearTimeout(clearMarkers);
     }
 
@@ -2122,7 +2161,7 @@ export function RadarViewer() {
     ).then((markers) => {
       if (!cancelled) setLightningMarkers(markers);
     }).catch(() => {
-      if (!cancelled) setLightningMarkers([]);
+      if (!cancelled) setLightningMarkers((current) => current.length ? [] : current);
     });
     return () => { cancelled = true; };
   }, [domain?.id, lightningPointReferences, product?.domain]);
@@ -2130,14 +2169,18 @@ export function RadarViewer() {
   useEffect(() => {
     let cancelled = false;
     if (!ecccFallbackPointReferences.length) {
-      const clearMarkers = window.setTimeout(() => setEcccFallbackLightningMarkers([]), 0);
+      const clearMarkers = window.setTimeout(() => {
+        setEcccFallbackLightningMarkers((current) => current.length ? [] : current);
+      }, 0);
       return () => window.clearTimeout(clearMarkers);
     }
 
     void cachedLightningMarkers(ecccFallbackPointReferences, "eccc-", 250, "bc").then((markers) => {
       if (!cancelled) setEcccFallbackLightningMarkers(markers);
     }).catch(() => {
-      if (!cancelled) setEcccFallbackLightningMarkers([]);
+      if (!cancelled) {
+        setEcccFallbackLightningMarkers((current) => current.length ? [] : current);
+      }
     });
     return () => { cancelled = true; };
   }, [ecccFallbackPointReferences]);
@@ -2145,20 +2188,24 @@ export function RadarViewer() {
   useEffect(() => {
     let cancelled = false;
     if (usesRasterFire(product)) {
-      const clearMarkers = window.setTimeout(() => setFireMarkers([]), 0);
+      const clearMarkers = window.setTimeout(() => {
+        setFireMarkers((current) => current.length ? [] : current);
+      }, 0);
       return () => window.clearTimeout(clearMarkers);
     }
     const hotspotReference = firePointReferences[0];
     const activeReference = activeFirePointReferences[0];
     if (!hotspotReference && !activeReference) {
-      const clearMarkers = window.setTimeout(() => setFireMarkers([]), 0);
+      const clearMarkers = window.setTimeout(() => {
+        setFireMarkers((current) => current.length ? [] : current);
+      }, 0);
       return () => window.clearTimeout(clearMarkers);
     }
 
     void cachedFireMarkers(activeReference, hotspotReference, product?.domain ?? "bc").then((markers) => {
       if (!cancelled) setFireMarkers(markers);
     }).catch(() => {
-      if (!cancelled) setFireMarkers([]);
+      if (!cancelled) setFireMarkers((current) => current.length ? [] : current);
     });
     return () => { cancelled = true; };
   }, [activeFirePointReferences, firePointReferences, product]);
@@ -2582,13 +2629,14 @@ export function RadarViewer() {
                 </div>
               </div>
               <div className="timeline-metadata">
-                <span className="frame-count">{anchorFrames.length ? `${currentFrameIndex + 1} / ${anchorFrames.length}` : "0 / 0"}</span>
+                <span ref={frameCountRef} className="frame-count">{anchorFrames.length ? `${currentFrameIndex + 1} / ${anchorFrames.length}` : "0 / 0"}</span>
                 <span className="archive-span">{selectedArchiveSpan}</span>
               </div>
             </div>
           </div>
           <div className="timeline-scrubber">
             <input
+              ref={timelineRangeRef}
               className="timeline-range"
               aria-label="Loop frame"
               type="range"
@@ -2601,6 +2649,7 @@ export function RadarViewer() {
           </div>
 
           <div
+            ref={mapStageRef}
             className="map-stage"
             data-renderer={videoModeReady ? "video" : "images"}
             data-video-fallback={videoFallbackReason || undefined}
@@ -2620,7 +2669,7 @@ export function RadarViewer() {
                 onFramePresented={handleVideoFramePresented}
                 onFailure={handleActiveVideoFailure}
                 onLoopBoundary={handleVideoLoopBoundary}
-                key={`${product.id}-${candidateVideoManifest.layerId}-${candidateVideoManifest.track}-${candidateVideoManifest.generation}`}
+                key={`${product.id}-${candidateVideoManifest.layerId}-${candidateVideoManifest.track}-${candidateVideoManifest.width}x${candidateVideoManifest.height}`}
               />
             ) : composedLayers.map((layer) => (
               <StableMapImage
@@ -2658,8 +2707,8 @@ export function RadarViewer() {
             )}
             {anchor && (
               <div className="map-status">
-                <p className="valid-line">VALID {utcClock(anchor.validTime)} UTC · {localClock(anchor.validTime)}</p>
-                <p className="source-times">{sourceTimes || `SOURCE ${shortClock(anchor.validTime)}`}</p>
+                <p ref={validLineRef} className="valid-line">VALID {utcClock(anchor.validTime)} UTC · {localClock(anchor.validTime)}</p>
+                <p ref={sourceTimesRef} className="source-times">{sourceTimes || `SOURCE ${shortClock(anchor.validTime)}`}</p>
                 {missingLayers.length > 0 && (
                   <p className="source-warning">Unavailable: {missingLayers.join(", ")}</p>
                 )}
