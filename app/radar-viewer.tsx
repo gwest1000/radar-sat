@@ -150,7 +150,7 @@ type SiteConfig = {
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
-const VIDEO_UI_UPDATE_INTERVAL_MS = 200;
+const VIDEO_UI_UPDATE_INTERVAL_MS = 400;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;

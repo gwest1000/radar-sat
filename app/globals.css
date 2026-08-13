@@ -186,7 +186,7 @@ input:focus-visible {
 .product-switcher .selector-options,
 .range-selector .selector-options {
   top: auto;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% - 1px);
   left: 0;
   display: grid;
   grid-template-columns: 1fr;
@@ -323,6 +323,10 @@ input:focus-visible {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.video-surface-layer canvas[hidden] {
+  display: none;
 }
 
 .video-underlay-layer {
@@ -1261,14 +1265,14 @@ input:focus-visible {
   }
 
   .selector-options {
-    top: calc(100% + 3px);
+    top: calc(100% - 1px);
     left: 0;
     max-width: calc(100vw - 18px);
   }
 
   .product-switcher .selector-options,
   .range-selector .selector-options {
-    top: calc(100% + 3px);
+    top: calc(100% - 1px);
     bottom: auto;
   }
 

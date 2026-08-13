@@ -56,9 +56,9 @@ type DecodeTask = {
 
 const BITMAP_CACHE_BYTES = 128 * 1024 * 1024;
 const MIN_SURFACE_CACHE_ENTRIES = 16;
-const LOW_MEMORY_SURFACE_CACHE_BYTES = 256 * 1024 * 1024;
-const STANDARD_SURFACE_CACHE_BYTES = 384 * 1024 * 1024;
-const HIGH_MEMORY_SURFACE_CACHE_BYTES = 768 * 1024 * 1024;
+const LOW_MEMORY_SURFACE_CACHE_BYTES = 320 * 1024 * 1024;
+const STANDARD_SURFACE_CACHE_BYTES = 512 * 1024 * 1024;
+const HIGH_MEMORY_SURFACE_CACHE_BYTES = 1_024 * 1024 * 1024;
 const PLAYBACK_SURFACE_PIXELS = 1_300_000;
 const VIDEO_PROGRESS_TIMEOUT_MS = 30_000;
 const HLS_BUFFER_BYTES = 48 * 1024 * 1024;
@@ -301,6 +301,7 @@ class SurfaceCache {
       void entry.promise.then((surfaces) => {
         for (const surface of [surfaces.underlay, surfaces.overlay]) {
           if (surface) {
+            surface.remove();
             surface.width = 0;
             surface.height = 0;
           }
@@ -353,6 +354,7 @@ class SurfaceCache {
         void entry.promise.then((surfaces) => {
           for (const surface of [surfaces.underlay, surfaces.overlay]) {
             if (surface) {
+              surface.remove();
               surface.width = 0;
               surface.height = 0;
             }
@@ -391,6 +393,7 @@ export function VideoCompositeStage({
   const stageRef = useRef<HTMLDivElement>(null);
   const underlayHostRef = useRef<HTMLDivElement>(null);
   const overlayHostRef = useRef<HTMLDivElement>(null);
+  const visibleSurfacesRef = useRef<PreparedSurfaces>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const [surfaceSize] = useState(() => playbackSurfaceSize(manifest.width, manifest.height));
   const [surfaceBudgetBytes] = useState(surfaceCacheBudgetBytes);
@@ -507,8 +510,22 @@ export function VideoCompositeStage({
     const underlayHost = underlayHostRef.current;
     const overlayHost = overlayHostRef.current;
     if (!underlayHost || !overlayHost) throw new Error("Video display is unavailable.");
-    underlayHost.replaceChildren(...(surfaces.underlay ? [surfaces.underlay] : []));
-    overlayHost.replaceChildren(...(surfaces.overlay ? [surfaces.overlay] : []));
+
+    const showSurface = (
+      host: HTMLDivElement,
+      previous: HTMLCanvasElement | undefined,
+      next: HTMLCanvasElement | undefined,
+    ) => {
+      if (previous && previous !== next) previous.hidden = true;
+      if (!next) return;
+      if (next.parentElement !== host) host.append(next);
+      next.hidden = false;
+    };
+
+    const previous = visibleSurfacesRef.current;
+    showSurface(underlayHost, previous.underlay, surfaces.underlay);
+    showSurface(overlayHost, previous.overlay, surfaces.overlay);
+    visibleSurfacesRef.current = surfaces;
   }, []);
 
   const requestFrameRef = useRef<() => void>(() => undefined);
@@ -664,6 +681,7 @@ export function VideoCompositeStage({
     const stage = stageRef.current;
     const operationEpoch = invalidateOperation(video);
     surfaceCache.clear();
+    visibleSurfacesRef.current = {};
     if (loopTimerRef.current !== undefined) {
       window.clearTimeout(loopTimerRef.current);
       loopTimerRef.current = undefined;
@@ -935,6 +953,7 @@ export function VideoCompositeStage({
       invalidateOperation(video);
       if (loopTimerRef.current !== undefined) window.clearTimeout(loopTimerRef.current);
       surfaceCache.clear();
+      visibleSurfacesRef.current = {};
       bitmapCache.clear();
     };
   }, [bitmapCache, invalidateOperation, surfaceCache]);
