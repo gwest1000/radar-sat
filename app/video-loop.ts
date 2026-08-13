@@ -30,6 +30,32 @@ export type VideoManifestFrame = {
   proxyLayers: VideoProxyLayerSelection[];
 };
 
+export type VideoMedia = {
+  path: string;
+  mimeType: string;
+  codec: string;
+  width: number;
+  height: number;
+  contentHeight?: number;
+  byteLength: number;
+  sha256: string;
+  segments?: Array<{
+    path: string;
+    byteLength: number;
+    sha256: string;
+    durationSeconds: number;
+    firstFrame: number;
+    lastFrame: number;
+  }>;
+};
+
+export type VideoDefaultComposite = {
+  id: string;
+  layerIds: string[];
+  mediaViewport: Record<string, number>;
+  media: VideoMedia;
+};
+
 export type VideoLoopManifest = {
   schemaVersion: 1;
   generation: string;
@@ -43,24 +69,8 @@ export type VideoLoopManifest = {
   height: number;
   viewport?: Record<string, number>;
   mediaViewport?: Record<string, number>;
-  media: {
-    path: string;
-    mimeType: string;
-    codec: string;
-    width: number;
-    height: number;
-    contentHeight?: number;
-    byteLength: number;
-    sha256: string;
-    segments?: Array<{
-      path: string;
-      byteLength: number;
-      sha256: string;
-      durationSeconds: number;
-      firstFrame: number;
-      lastFrame: number;
-    }>;
-  };
+  media: VideoMedia;
+  defaultComposite?: VideoDefaultComposite;
   frames: VideoManifestFrame[];
   proxies: Record<string, VideoProxy>;
   staticOverlay?: VideoProxy;
@@ -131,6 +141,73 @@ function validFrame(value: unknown): value is VideoManifestFrame {
     });
 }
 
+function validMedia(value: unknown, transport: unknown): value is VideoMedia {
+  if (!value || typeof value !== "object") return false;
+  const media = value as Partial<VideoMedia>;
+  if (
+    typeof media.path !== "string"
+    || !media.path
+    || typeof media.mimeType !== "string"
+    || (
+      !media.mimeType.startsWith("video/mp4")
+      && media.mimeType !== "application/vnd.apple.mpegurl"
+    )
+    || typeof media.codec !== "string"
+    || !media.codec
+    || !finitePositive(media.width)
+    || !finitePositive(media.height)
+    || (
+      media.contentHeight !== undefined
+      && (!finitePositive(media.contentHeight) || media.contentHeight > media.height)
+    )
+    || typeof media.byteLength !== "number"
+    || !Number.isFinite(media.byteLength)
+    || media.byteLength < 0
+    || typeof media.sha256 !== "string"
+    || !media.sha256
+  ) return false;
+  if (transport !== "hls-ts") return true;
+  return Array.isArray(media.segments)
+    && media.segments.length > 0
+    && media.segments.every((segment) => (
+      Boolean(segment)
+      && typeof segment.path === "string"
+      && Boolean(segment.path)
+      && finitePositive(segment.byteLength)
+      && typeof segment.sha256 === "string"
+      && Boolean(segment.sha256)
+      && finitePositive(segment.durationSeconds)
+      && Number.isInteger(segment.firstFrame)
+      && Number.isInteger(segment.lastFrame)
+    ));
+}
+
+function validDefaultComposite(
+  value: unknown,
+  manifest: Partial<VideoLoopManifest>,
+): value is VideoDefaultComposite {
+  if (!value || typeof value !== "object") return false;
+  const composite = value as Partial<VideoDefaultComposite>;
+  const layerIds = composite.layerIds;
+  const contentHeight = composite.media?.contentHeight ?? composite.media?.height;
+  const viewport = manifest.viewport ?? { left: 0, top: 0, width: 1, height: 1 };
+  const mediaViewport = composite.mediaViewport;
+  return typeof composite.id === "string"
+    && composite.id.length > 0
+    && Array.isArray(layerIds)
+    && layerIds.length > 0
+    && layerIds.every((id) => typeof id === "string" && id.length > 0)
+    && new Set(layerIds).size === layerIds.length
+    && validViewport(mediaViewport)
+    && mediaViewport.left === viewport.left
+    && mediaViewport.top === viewport.top
+    && mediaViewport.width === viewport.width
+    && mediaViewport.height === viewport.height
+    && validMedia(composite.media, manifest.transport)
+    && composite.media.width === manifest.width
+    && contentHeight === manifest.height;
+}
+
 export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
   if (!value || typeof value !== "object") throw new Error("Video manifest is not an object.");
   const manifest = value as Partial<VideoLoopManifest>;
@@ -147,26 +224,7 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
     || !finitePositive(manifest.height)
     || (manifest.viewport !== undefined && !validViewport(manifest.viewport))
     || (manifest.mediaViewport !== undefined && !validViewport(manifest.mediaViewport))
-    || !manifest.media
-    || typeof manifest.media.path !== "string"
-    || typeof manifest.media.mimeType !== "string"
-    || (
-      !manifest.media.mimeType.startsWith("video/mp4")
-      && manifest.media.mimeType !== "application/vnd.apple.mpegurl"
-    )
-    || typeof manifest.media.codec !== "string"
-    || !finitePositive(manifest.media.width)
-    || !finitePositive(manifest.media.height)
-    || (
-      manifest.media.contentHeight !== undefined
-      && (
-        !finitePositive(manifest.media.contentHeight)
-        || manifest.media.contentHeight > manifest.media.height
-      )
-    )
-    || typeof manifest.media.byteLength !== "number"
-    || manifest.media.byteLength < 0
-    || typeof manifest.media.sha256 !== "string"
+    || !validMedia(manifest.media, manifest.transport)
     || !Array.isArray(manifest.frames)
     || manifest.frames.length < 2
     || !manifest.frames.every(validFrame)
@@ -193,26 +251,17 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
       throw new Error("Video manifest times are not strictly increasing.");
     }
   }
+  const parsed = manifest as VideoLoopManifest;
+  // The composite is an optional fast path. A malformed or partially
+  // published preset must never take the healthy satellite-video + proxy
+  // compositor down with it.
   if (
-    manifest.transport === "hls-ts"
-    && (
-      !Array.isArray(manifest.media.segments)
-      || !manifest.media.segments.length
-      || manifest.media.segments.some((segment) => (
-        !segment
-        || typeof segment.path !== "string"
-        || !segment.path
-        || !finitePositive(segment.byteLength)
-        || typeof segment.sha256 !== "string"
-        || !finitePositive(segment.durationSeconds)
-        || !Number.isInteger(segment.firstFrame)
-        || !Number.isInteger(segment.lastFrame)
-      ))
-    )
+    parsed.defaultComposite !== undefined
+    && !validDefaultComposite(parsed.defaultComposite, parsed)
   ) {
-    throw new Error("HLS video manifest has invalid segments.");
+    return { ...parsed, defaultComposite: undefined };
   }
-  return manifest as VideoLoopManifest;
+  return parsed;
 }
 
 export function loadVideoLoopManifest(url: string): Promise<VideoLoopManifest> {

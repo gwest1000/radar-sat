@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import tempfile
@@ -32,6 +33,7 @@ from radarsat.r2 import (
     publish,
     size_guard,
 )
+from radarsat.r2 import _default_composite_paths
 from radarsat.retention import keep_frame, keep_layer_frame
 
 
@@ -77,8 +79,9 @@ def make_archive(root: Path, valid: dt.datetime) -> None:
 def add_video_profile(
     root: Path,
     generation: str = "20260720T2340Z-abcdef012345",
+    *,
+    product_id: str = "bc-northeast-overlay",
 ) -> set[str]:
-    product_id = "bc-northeast-overlay"
     layer_id = "raw-visir"
     track = "live"
     media_generation = f"{generation[:14]}-fedcba543210"
@@ -87,10 +90,10 @@ def add_video_profile(
         f"video-manifests/{product_id}/{layer_id}/{track}/{generation}.json"
     )
     proxy_relative = (
-        "video-proxies/bc-northeast-overlay/radar-rain/abcdef0123456789.webp"
+        f"video-proxies/{product_id}/radar-rain/abcdef0123456789.webp"
     )
     static_relative = (
-        "video-static-overlays/bc-northeast-overlay/abcdef0123456789.png"
+        f"video-static-overlays/{product_id}/abcdef0123456789.png"
     )
     media = root / media_relative
     media.parent.mkdir(parents=True, exist_ok=True)
@@ -177,8 +180,10 @@ def add_video_profile(
 def add_hls_video_profile(
     root: Path,
     generation: str = "20260720T2340Z-abcdef012345",
+    *,
+    product_id: str = "bc-northeast-overlay",
 ) -> set[str]:
-    expected = add_video_profile(root, generation)
+    expected = add_video_profile(root, generation, product_id=product_id)
     manifest_relative = next(key for key in expected if key.startswith("video-manifests/"))
     manifest_path = root / manifest_relative
     payload = json.loads(manifest_path.read_text())
@@ -218,6 +223,71 @@ def add_hls_video_profile(
     expected.remove(old_media.relative_to(root).as_posix())
     expected.update({media_relative, segment_relative})
     return expected
+
+
+def add_default_composite_profile(root: Path) -> set[str]:
+    product_id = "bc-large-overlay"
+    expected = add_hls_video_profile(root, product_id=product_id)
+    manifest_relative = next(key for key in expected if key.startswith("video-manifests/"))
+    manifest_path = root / manifest_relative
+    payload = json.loads(manifest_path.read_text())
+    payload["viewport"] = {"left": 0.0, "top": 0.05, "width": 1.0, "height": 0.9}
+    payload["width"] = 1280
+    payload["height"] = 860
+    owner = f"composite-{product_id}"
+    media_relative = (
+        f"videos/{owner}/raw-visir/live/"
+        "20260720T2340Z-123456789abc.m3u8"
+    )
+    segment_relative = (
+        f"video-segments/{owner}/raw-visir/live/"
+        "20260720T2300Z-1234567890abcdef.ts"
+    )
+    media = root / media_relative
+    segment = root / segment_relative
+    media.parent.mkdir(parents=True, exist_ok=True)
+    segment.parent.mkdir(parents=True, exist_ok=True)
+    segment.write_bytes(b"fully-composited-mpeg-ts")
+    relative_segment = os.path.relpath(segment, media.parent)
+    media.write_text(
+        f"#EXTM3U\n#EXTINF:1.0,\n{relative_segment}\n#EXT-X-ENDLIST\n"
+    )
+    payload["defaultComposite"] = {
+        "id": "operational-default-v1",
+        "layerIds": [
+            "base-dark",
+            "raw-visir",
+            "radar-coverage",
+            "radar-rain",
+            "watersheds",
+            "transmission-lines",
+            "boundaries",
+            "lightning-trail",
+            "hotspots",
+        ],
+        "mediaViewport": payload["viewport"],
+        "media": {
+            "path": media_relative,
+            "mimeType": "application/vnd.apple.mpegurl",
+            "codec": "avc1",
+            "width": 1280,
+            "height": 876,
+            "contentHeight": 860,
+            "frameRate": 5,
+            "byteLength": media.stat().st_size,
+            "sha256": hashlib.sha256(media.read_bytes()).hexdigest(),
+            "segments": [{
+                "path": segment_relative,
+                "byteLength": segment.stat().st_size,
+                "sha256": hashlib.sha256(segment.read_bytes()).hexdigest(),
+                "durationSeconds": 1.0,
+                "firstFrame": 0,
+                "lastFrame": 1,
+            }],
+        },
+    }
+    manifest_path.write_text(json.dumps(payload))
+    return {*expected, media_relative, segment_relative}
 
 
 class FakeR2:
@@ -532,6 +602,155 @@ class PublisherTests(unittest.TestCase):
 
             self.assertTrue(expected.issubset({item.key for item in objects}))
             self.assertIn("videoProfiles", json.loads(payload))
+
+    def test_default_composite_playlist_and_segments_are_discovered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_default_composite_profile(root)
+
+            objects, payload = discover_objects(root)
+
+            keys = {item.key for item in objects}
+            self.assertTrue(expected.issubset(keys))
+            composite_keys = {
+                key
+                for key in expected
+                if "/composite-bc-large-overlay/" in key
+            }
+            self.assertEqual(len(composite_keys), 2)
+            self.assertTrue(composite_keys.issubset(keys))
+            self.assertIn("videoProfiles", json.loads(payload))
+
+    def test_default_composite_assets_upload_before_catalog_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_default_composite_profile(root)
+            objects, catalog = discover_objects(root)
+            expected_local_bytes = (
+                sum(item.size for item in objects)
+                + len(catalog)
+                + len(build_catalog_index(catalog))
+            )
+            fake = FakeR2()
+
+            result = publish(
+                root,
+                self.config(max_bytes=10_000_000),
+                base / "state.sqlite3",
+                base / "publish.json",
+                client=fake,
+                now=now,
+            )
+
+            catalog_index = fake.events.index(("put", "catalog.json"))
+            uploaded_before_catalog = {
+                str(event[1]) for event in fake.events[:catalog_index]
+            }
+            composite_keys = {
+                key for key in expected if "/composite-bc-large-overlay/" in key
+            }
+            self.assertTrue(composite_keys.issubset(uploaded_before_catalog))
+            self.assertEqual(result["localBytes"], expected_local_bytes)
+
+    def test_referenced_default_composite_is_protected_from_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            add_default_composite_profile(root)
+            objects, _catalog = discover_objects(root)
+            desired = {item.key for item in objects}
+            composite_keys = {
+                key for key in desired if "/composite-bc-large-overlay/" in key
+            }
+            remote = {key: (root / key).stat().st_size for key in composite_keys}
+            modified = {
+                key: now - dt.timedelta(days=2) for key in composite_keys
+            }
+
+            expired = expired_video_keys(
+                remote,
+                now,
+                desired_keys=desired,
+                modified_at=modified,
+            )
+
+            self.assertTrue(composite_keys)
+            self.assertTrue(composite_keys.isdisjoint(expired))
+
+    def test_incomplete_default_composite_fails_open_to_base_video(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_default_composite_profile(root)
+            composite_segment = next(
+                key
+                for key in expected
+                if key.startswith("video-segments/composite-")
+            )
+            (root / composite_segment).unlink()
+
+            objects, payload = discover_objects(root)
+
+            keys = {item.key for item in objects}
+            published = json.loads(payload)
+            self.assertIn("videoProfiles", published)
+            self.assertTrue(any(key.startswith("videos/shared-") for key in keys))
+            self.assertTrue(any(key.startswith("video-segments/shared-") for key in keys))
+            self.assertFalse(
+                any("/composite-bc-large-overlay/" in key for key in keys)
+            )
+
+    def test_default_composite_rejects_misaligned_viewport(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_default_composite_profile(root)
+            manifest_relative = next(
+                key for key in expected if key.startswith("video-manifests/")
+            )
+            manifest_path = root / manifest_relative
+            manifest = json.loads(manifest_path.read_text())
+            manifest["defaultComposite"]["mediaViewport"]["left"] = 0.1
+            manifest_path.write_text(json.dumps(manifest))
+
+            objects, payload = discover_objects(root)
+
+            keys = {item.key for item in objects}
+            self.assertIn("videoProfiles", json.loads(payload))
+            self.assertFalse(
+                any("/composite-bc-large-overlay/" in key for key in keys)
+            )
+
+    def test_default_composite_rejects_non_pilot_satellite_layer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_default_composite_profile(root)
+            manifest_relative = next(
+                key for key in expected if key.startswith("video-manifests/")
+            )
+            manifest = json.loads((root / manifest_relative).read_text())
+
+            self.assertEqual(
+                _default_composite_paths(
+                    root,
+                    "bc-large-overlay",
+                    "raw-ir",
+                    "live",
+                    manifest,
+                ),
+                [],
+            )
 
     def test_incomplete_video_profile_fails_open_to_image_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

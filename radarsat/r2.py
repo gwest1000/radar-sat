@@ -49,6 +49,11 @@ VIDEO_GENERATION_RE = re.compile(r"^(\d{8}T\d{4}Z)-([0-9a-f]{12})$")
 VIDEO_TRACKS = frozenset({"live", "archive"})
 VIDEO_MIN_GENERATIONS = 3
 VIDEO_ORPHAN_GRACE = dt.timedelta(hours=1)
+DEFAULT_COMPOSITE_PRESET_ID = "operational-default-v1"
+DEFAULT_COMPOSITE_PILOT_PROFILES = frozenset({
+    ("bc-large-overlay", "raw-visir"),
+    ("north-america-overlay", "westwx-visir"),
+})
 VIDEO_IMMUTABLE_PREFIXES = (
     "videos/",
     "video-segments/",
@@ -463,6 +468,130 @@ def _static_overlay_path(root: Path, product_id: str, value: object) -> str | No
     return relative
 
 
+def _default_composite_paths(
+    root: Path,
+    product_id: str,
+    layer_id: str,
+    track: str,
+    payload: Mapping[str, object],
+) -> list[str]:
+    """Validate an optional fully composited HLS preset.
+
+    The regular satellite video and proxy overlays remain the authoritative
+    fallback. A malformed or torn optional preset therefore contributes no
+    publication dependencies, rather than invalidating the complete base
+    video profile. The browser applies the same fail-open rule when reading
+    the immutable manifest.
+    """
+    value = payload.get("defaultComposite")
+    if value is None:
+        return []
+    if (
+        (product_id, layer_id) not in DEFAULT_COMPOSITE_PILOT_PROFILES
+        or not isinstance(value, Mapping)
+        or value.get("id") != DEFAULT_COMPOSITE_PRESET_ID
+        or payload.get("transport") != "hls-ts"
+    ):
+        return []
+    layer_ids = value.get("layerIds")
+    if (
+        not isinstance(layer_ids, list)
+        or not layer_ids
+        or any(
+            not isinstance(item, str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9-]*", item) is None
+            for item in layer_ids
+        )
+        or len(set(layer_ids)) != len(layer_ids)
+    ):
+        return []
+    # The composited raster must use the same display crop as the manifest;
+    # otherwise toggling to the dynamic proxy fallback would move the map.
+    if value.get("mediaViewport") != payload.get("viewport"):
+        return []
+    media = value.get("media")
+    if not isinstance(media, Mapping):
+        return []
+    media_relative = _safe_relative_value(media.get("path"))
+    media_parts = Path(media_relative).parts if media_relative is not None else ()
+    owner = f"composite-{product_id}"
+    media_width = media.get("width")
+    media_height = media.get("height")
+    content_height = media.get("contentHeight", media_height)
+    if (
+        media_relative is None
+        or media_parts[:4] != ("videos", owner, layer_id, track)
+        or len(media_parts) != 5
+        or Path(media_parts[4]).suffix != ".m3u8"
+        or not VIDEO_GENERATION_RE.fullmatch(Path(media_parts[4]).stem)
+        or media.get("mimeType") != "application/vnd.apple.mpegurl"
+        or media.get("codec") != "avc1"
+        or not isinstance(media_width, int)
+        or isinstance(media_width, bool)
+        or media_width <= 0
+        or media_width != payload.get("width")
+        or not isinstance(media_height, int)
+        or isinstance(media_height, bool)
+        or media_height <= 0
+        or not isinstance(content_height, int)
+        or isinstance(content_height, bool)
+        or content_height <= 0
+        or content_height > media_height
+        or content_height != payload.get("height")
+        or not isinstance(media.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", str(media.get("sha256"))) is None
+        or not _video_asset_available(root, media_relative, media.get("byteLength"))
+    ):
+        return []
+    segments = media.get("segments")
+    if not isinstance(segments, list) or not segments:
+        return []
+    segment_paths: list[str] = []
+    for segment in segments:
+        if not isinstance(segment, Mapping):
+            return []
+        segment_relative = _safe_relative_value(segment.get("path"))
+        segment_parts = (
+            Path(segment_relative).parts if segment_relative is not None else ()
+        )
+        if (
+            segment_relative is None
+            or len(segment_parts) != 5
+            or segment_parts[:4]
+            != ("video-segments", owner, layer_id, track)
+            or re.fullmatch(
+                r"\d{8}T\d{4}Z-[0-9a-f]{16}\.ts", segment_parts[4]
+            )
+            is None
+            or not isinstance(segment.get("sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", str(segment.get("sha256"))) is None
+            or not _video_asset_available(
+                root,
+                segment_relative,
+                segment.get("byteLength"),
+            )
+        ):
+            return []
+        segment_paths.append(segment_relative)
+    try:
+        playlist_lines = (root / media_relative).read_text().splitlines()
+        playlist_uris = [
+            line.strip()
+            for line in playlist_lines
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        playlist_root = (root / media_relative).parent
+        referenced_segments = [
+            (playlist_root / uri).resolve().relative_to(root.resolve()).as_posix()
+            for uri in playlist_uris
+        ]
+    except (OSError, UnicodeDecodeError, ValueError):
+        return []
+    if referenced_segments != segment_paths:
+        return []
+    return [media_relative, *segment_paths]
+
+
 def _video_manifest_paths(
     root: Path,
     product_id: str,
@@ -588,6 +717,17 @@ def _video_manifest_paths(
     paths = [manifest_relative, media_relative, *segment_paths, *proxy_paths]
     if static_path:
         paths.append(static_path)
+    # A corrupt optional composite is deliberately omitted while the valid
+    # base media/proxy profile remains publishable.
+    paths.extend(
+        _default_composite_paths(
+            root,
+            product_id,
+            layer_id,
+            track,
+            payload,
+        )
+    )
     return paths
 
 

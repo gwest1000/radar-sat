@@ -67,6 +67,7 @@ const HLS_ARCHIVE_BUFFER_SECONDS = 45;
 const HLS_ARCHIVE_MAX_BUFFER_SECONDS = 60;
 const HLS_BACK_BUFFER_SECONDS = 15;
 const MAX_CONCURRENT_OVERLAY_DECODES = 3;
+const EMPTY_PREPARED_SURFACES: PreparedSurfaces = {};
 
 function playbackSurfaceSize(width: number, height: number): { width: number; height: number } {
   const scale = Math.min(1, Math.sqrt(PLAYBACK_SURFACE_PIXELS / (width * height)));
@@ -373,6 +374,8 @@ export function VideoCompositeStage({
   playing,
   speed,
   satelliteFilter,
+  compositePresetId,
+  compositeMediaPath,
   onFramePresented,
   onFailure,
   onLoopBoundary,
@@ -385,6 +388,8 @@ export function VideoCompositeStage({
   playing: boolean;
   speed: number;
   satelliteFilter?: string;
+  compositePresetId?: string;
+  compositeMediaPath?: string;
   onFramePresented: (index: number) => void;
   onFailure: (message: string) => void;
   onLoopBoundary?: () => void;
@@ -397,6 +402,9 @@ export function VideoCompositeStage({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [surfaceSize] = useState(() => playbackSurfaceSize(manifest.width, manifest.height));
   const [surfaceBudgetBytes] = useState(surfaceCacheBudgetBytes);
+  const fullyComposited = Boolean(compositePresetId) && plans.every((plan) => (
+    plan.underlays.length === 0 && plan.overlays.length === 0
+  ));
   const surfaceEntryLimit = useMemo(
     () => surfaceCacheEntryLimit(
       plans,
@@ -571,7 +579,7 @@ export function VideoCompositeStage({
       requestFrameRef.current();
       return;
     }
-    const ready = surfaces.peek(plan.cacheKey);
+    const ready = fullyComposited ? EMPTY_PREPARED_SURFACES : surfaces.peek(plan.cacheKey);
     const operationEpoch = operationEpochRef.current;
     const commit = (prepared: PreparedSurfaces): boolean => {
       if (
@@ -579,7 +587,7 @@ export function VideoCompositeStage({
         || operationEpochRef.current !== operationEpoch
         || plans[index]?.cacheKey !== plan.cacheKey
       ) return false;
-      commitSurfaces(prepared);
+      if (!fullyComposited) commitSurfaces(prepared);
       committedIndexRef.current = index;
       requestedIndexRef.current = index;
       presentedFramesRef.current += 1;
@@ -601,12 +609,14 @@ export function VideoCompositeStage({
         stage.dataset.surfaceCacheMegabytes = String(Math.round(surfaceBudgetBytes / 1024 / 1024));
       }
       onFramePresented(index);
-      const lookahead = playbackLookahead(speedRef.current);
-      for (let offset = 1; offset <= lookahead; offset += 1) {
-        const candidate = plans[(index + offset) % plans.length];
-        void surfaces.prepare(candidate).catch((reason) => {
-          if (operationEpochRef.current === operationEpoch) fail(reason);
-        });
+      if (!fullyComposited) {
+        const lookahead = playbackLookahead(speedRef.current);
+        for (let offset = 1; offset <= lookahead; offset += 1) {
+          const candidate = plans[(index + offset) % plans.length];
+          void surfaces.prepare(candidate).catch((reason) => {
+            if (operationEpochRef.current === operationEpoch) fail(reason);
+          });
+        }
       }
       if (index === plans.length - 1) scheduleLoop(index);
       else requestFrameRef.current();
@@ -640,7 +650,7 @@ export function VideoCompositeStage({
     }).catch((reason) => {
       if (operationEpochRef.current === operationEpoch) fail(reason);
     });
-  }, [commitSurfaces, fail, onFramePresented, planFrames, plans, playVideo, scheduleLoop, surfaceBudgetBytes, surfaceCache]);
+  }, [commitSurfaces, fail, fullyComposited, onFramePresented, planFrames, plans, playVideo, scheduleLoop, surfaceBudgetBytes, surfaceCache]);
 
   useEffect(() => {
     requestFrameRef.current = () => {
@@ -723,13 +733,16 @@ export function VideoCompositeStage({
       seekToIndexRef.current(index);
       return;
     }
-    void surfaceCache.prepare(plan).then((prepared) => {
+    const preparedSurfaces = fullyComposited
+      ? Promise.resolve(EMPTY_PREPARED_SURFACES)
+      : surfaceCache.prepare(plan);
+    void preparedSurfaces.then((prepared) => {
       if (
         failedRef.current
         || operationEpochRef.current !== operationEpoch
         || plans[index]?.cacheKey !== plan.cacheKey
       ) return;
-      commitSurfaces(prepared);
+      if (!fullyComposited) commitSurfaces(prepared);
       committedIndexRef.current = index;
       requestedIndexRef.current = index;
       presentedFramesRef.current += 1;
@@ -754,6 +767,7 @@ export function VideoCompositeStage({
   }, [
     commitSurfaces,
     fail,
+    fullyComposited,
     invalidateOperation,
     onFramePresented,
     planRevision,
@@ -986,6 +1000,8 @@ export function VideoCompositeStage({
       className="video-composite-canvas"
       data-renderer="video"
       data-video-generation={manifest.generation}
+      data-composite-preset={compositePresetId ?? "dynamic"}
+      data-composite-path={compositeMediaPath}
       data-overlay-stalls="0"
       data-presented-frames="0"
       data-video-dropped="0"

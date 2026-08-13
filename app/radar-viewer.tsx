@@ -823,6 +823,14 @@ function isProductLayerEnabled(
     ?? true;
 }
 
+function sameLayerSet(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const expected = new Set(right);
+  return expected.size === right.length
+    && new Set(left).size === left.length
+    && left.every((id) => expected.has(id));
+}
+
 function normalizeLayerChoices(
   current: Record<string, boolean>,
   product: Product,
@@ -1544,6 +1552,10 @@ export function RadarViewer() {
   const [loadedVideoManifest, setLoadedVideoManifest] = useState<VideoLoopManifest | null>(null);
   const [failedVideoGeneration, setFailedVideoGeneration] = useState("");
   const [videoFallbackReason, setVideoFallbackReason] = useState("");
+  const [failedDefaultComposite, setFailedDefaultComposite] = useState<{
+    key: string;
+    reason: string;
+  } | null>(null);
   const presentedVideoIndexRef = useRef(NEWEST_FRAME);
   const lastVideoHudUpdateAtRef = useRef(0);
   const frameCountRef = useRef<HTMLSpanElement>(null);
@@ -1810,6 +1822,27 @@ export function RadarViewer() {
       ? loadedVideoManifest
       : null
   ), [failedVideoGeneration, loadedVideoManifest, product?.id, videoFreshEnough, videoLayerId, videoPointer, videoTrack]);
+  const enabledVideoLayerIds = useMemo(() => product?.layers
+    .filter((recipe) => isProductLayerEnabled(recipe, optionalLayers, product.layers))
+    .map((recipe) => recipe.id) ?? [], [optionalLayers, product]);
+  const candidateDefaultComposite = candidateVideoManifest?.defaultComposite;
+  const candidateDefaultCompositeKey = candidateDefaultComposite && candidateVideoManifest
+    ? `${candidateVideoManifest.generation}/${candidateDefaultComposite.id}/${candidateDefaultComposite.media.path}`
+    : "";
+  const activeDefaultComposite = candidateDefaultComposite
+    && candidateDefaultCompositeKey !== failedDefaultComposite?.key
+    && sameLayerSet(enabledVideoLayerIds, candidateDefaultComposite.layerIds)
+    ? candidateDefaultComposite
+    : undefined;
+  const playbackVideoManifest = useMemo<VideoLoopManifest | null>(() => (
+    candidateVideoManifest && activeDefaultComposite
+      ? {
+          ...candidateVideoManifest,
+          media: activeDefaultComposite.media,
+          mediaViewport: activeDefaultComposite.mediaViewport,
+        }
+      : candidateVideoManifest
+  ), [activeDefaultComposite, candidateVideoManifest]);
   const videoManifestFrames = useMemo(
     () => candidateVideoManifest
       ? selectVideoFrames(candidateVideoManifest, effectiveRangeHours)
@@ -1831,7 +1864,7 @@ export function RadarViewer() {
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const videoPlans = useMemo<VideoCompositeFramePlan[]>(() => {
     if (
-      !candidateVideoManifest
+      !playbackVideoManifest
       || !product
       || !videoLayerId
       || videoAnchorFrames.length !== videoManifestFrames.length
@@ -1844,17 +1877,26 @@ export function RadarViewer() {
       const manifestFrame = videoManifestFrames[index];
       const underlays: VideoCanvasProxyLayer[] = [];
       const overlays: VideoCanvasProxyLayer[] = [];
+      if (activeDefaultComposite) {
+        plans.push({
+          frame: manifestFrame,
+          cacheKey: `composite:${activeDefaultComposite.id}:${activeDefaultComposite.media.path}`,
+          underlays,
+          overlays,
+        });
+        continue;
+      }
       for (const selection of manifestFrame.proxyLayers) {
         const configured = recipeById.get(selection.id);
         if (
           !configured
           || !isProductLayerEnabled(configured.recipe, optionalLayers, product.layers)
         ) continue;
-        const proxy = candidateVideoManifest.proxies[selection.sourceKey];
+        const proxy = playbackVideoManifest.proxies[selection.sourceKey];
         if (
           !proxy
-          || proxy.width !== candidateVideoManifest.width
-          || proxy.height !== candidateVideoManifest.height
+          || proxy.width !== playbackVideoManifest.width
+          || proxy.height !== playbackVideoManifest.height
         ) return [];
         const layer = {
           url: absoluteUrl(proxy.path, catalogBase),
@@ -1878,16 +1920,17 @@ export function RadarViewer() {
     }
     return plans;
   }, [
-    candidateVideoManifest,
+    activeDefaultComposite,
     catalogBase,
     optionalLayers,
+    playbackVideoManifest,
     videoLayerId,
     product,
     videoAnchorFrames,
     videoManifestFrames,
   ]);
   const videoModeReady = Boolean(
-    candidateVideoManifest
+    playbackVideoManifest
     && videoPlans.length >= 2
     && videoPlans.length === videoAnchorFrames.length,
   );
@@ -2129,11 +2172,21 @@ export function RadarViewer() {
       setLoadedVideoManifest(pending);
       return;
     }
+    if (activeDefaultComposite && candidateDefaultCompositeKey) {
+      setFailedDefaultComposite({ key: candidateDefaultCompositeKey, reason: message });
+      setVideoFallbackReason("");
+      return;
+    }
     if (activeVideoGeneration) {
       setVideoFallbackReason(message);
       handleVideoFailure(activeVideoGeneration);
     }
-  }, [activeVideoGeneration, handleVideoFailure]);
+  }, [
+    activeDefaultComposite,
+    activeVideoGeneration,
+    candidateDefaultCompositeKey,
+    handleVideoFailure,
+  ]);
 
   const handleVideoLoopBoundary = useCallback(() => {
     const pending = pendingVideoManifestRef.current;
@@ -2653,23 +2706,32 @@ export function RadarViewer() {
             className="map-stage"
             data-renderer={videoModeReady ? "video" : "images"}
             data-video-fallback={videoFallbackReason || undefined}
+            data-composite-preset={activeDefaultComposite?.id ?? "dynamic"}
+            data-composite-path={activeDefaultComposite?.media.path || undefined}
+            data-composite-fallback={
+              candidateDefaultCompositeKey === failedDefaultComposite?.key
+                ? failedDefaultComposite.reason
+                : undefined
+            }
             role="img"
             aria-label={`${product.title}${anchor ? `, valid ${utcClock(anchor.validTime)} UTC. ${sourceTimes}` : ", no frames available"}`}
           >
             {!anchor && <div className="map-loading">No frames are available for this product yet.</div>}
-            {videoModeReady && candidateVideoManifest ? (
+            {videoModeReady && playbackVideoManifest ? (
               <VideoCompositeStage
-                manifest={candidateVideoManifest}
-                mediaUrl={absoluteUrl(candidateVideoManifest.media.path, catalogBase)}
+                manifest={playbackVideoManifest}
+                mediaUrl={absoluteUrl(playbackVideoManifest.media.path, catalogBase)}
                 plans={videoPlans}
                 requestedIndex={currentFrameIndex}
                 playing={isAnimating}
                 speed={speed}
-                satelliteFilter={satelliteFilter}
+                satelliteFilter={activeDefaultComposite ? undefined : satelliteFilter}
+                compositePresetId={activeDefaultComposite?.id}
+                compositeMediaPath={activeDefaultComposite?.media.path}
                 onFramePresented={handleVideoFramePresented}
                 onFailure={handleActiveVideoFailure}
                 onLoopBoundary={handleVideoLoopBoundary}
-                key={`${product.id}-${candidateVideoManifest.layerId}-${candidateVideoManifest.track}-${candidateVideoManifest.width}x${candidateVideoManifest.height}`}
+                key={`${product.id}-${playbackVideoManifest.layerId}-${playbackVideoManifest.track}-${playbackVideoManifest.width}x${playbackVideoManifest.height}-${activeDefaultComposite ? `composite:${activeDefaultComposite.id}:${activeDefaultComposite.media.path}` : "dynamic"}`}
               />
             ) : composedLayers.map((layer) => (
               <StableMapImage

@@ -460,6 +460,112 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(unchanged["status"], "unchanged")
 
+    def test_default_composite_pilot_bakes_default_stack_and_is_content_addressed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, original_spec = self.make_source(root)
+            spec = replace(original_spec, product_id="bc-large-overlay")
+            output = root / "output"
+
+            first = build_profile(
+                root / "source",
+                output,
+                catalog,
+                spec,
+                ffmpeg=str(shutil.which("ffmpeg")),
+                hours=1,
+            )
+            first_manifest = json.loads(
+                (output / str(first["manifestPath"])).read_text()
+            )
+            composite = first_manifest["defaultComposite"]
+            self.assertEqual(composite["id"], "operational-default-v1")
+            self.assertEqual(
+                composite["layerIds"],
+                [
+                    "base-dark",
+                    "raw-visir",
+                    "radar-coverage",
+                    "radar-rain",
+                    "watersheds",
+                    "transmission-lines",
+                    "boundaries",
+                    "lightning-trail",
+                    "hotspots",
+                ],
+            )
+            self.assertEqual(composite["mediaViewport"], spec.viewport)
+            self.assertEqual(composite["media"]["width"], 64)
+            self.assertEqual(composite["media"]["contentHeight"], 48)
+            self.assertIn(
+                "videos/composite-bc-large-overlay/raw-visir/live/",
+                composite["media"]["path"],
+            )
+            first_segment = composite["media"]["segments"][0]
+            self.assertIn(
+                "video-segments/composite-bc-large-overlay/raw-visir/live/",
+                first_segment["path"],
+            )
+            self.assertTrue((output / first_segment["path"]).is_file())
+            self.assertGreater(first["compositeMediaBytes"], 0)
+
+            # A static-overlay content change leaves the satellite-only media
+            # reusable, but must produce a new composite segment and manifest.
+            boundary = root / "source/static/bc/boundaries.png"
+            write_rgba(boundary, (255, 0, 0, 255), (64, 48))
+            stat = boundary.stat()
+            os.utime(boundary, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+            second = build_profile(
+                root / "source",
+                output,
+                catalog,
+                spec,
+                ffmpeg=str(shutil.which("ffmpeg")),
+                hours=1,
+            )
+            second_manifest = json.loads(
+                (output / str(second["manifestPath"])).read_text()
+            )
+            self.assertNotEqual(second["generation"], first["generation"])
+            self.assertEqual(
+                second_manifest["media"]["segments"][0]["path"],
+                first_manifest["media"]["segments"][0]["path"],
+            )
+            self.assertNotEqual(
+                second_manifest["defaultComposite"]["media"]["segments"][0]["path"],
+                first_segment["path"],
+            )
+            protected = output / second_manifest["defaultComposite"]["media"][
+                "segments"
+            ][0]["path"]
+            orphan = protected.with_name("orphan.ts")
+            orphan.write_bytes(b"orphan")
+            old = dt.datetime.now(UTC) - dt.timedelta(hours=2)
+            os.utime(orphan, (old.timestamp(), old.timestamp()))
+            prune_shared_video_orphans(
+                output,
+                now=dt.datetime.now(UTC) + dt.timedelta(hours=2),
+            )
+            self.assertTrue(protected.is_file())
+            self.assertFalse(orphan.exists())
+
+    def test_nonpilot_profile_keeps_dynamic_proxy_fallback_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, spec = self.make_source(root)
+            result = build_profile(
+                root / "source",
+                root / "output",
+                catalog,
+                spec,
+                ffmpeg=str(shutil.which("ffmpeg")),
+                hours=1,
+            )
+            manifest = json.loads(
+                (root / "output" / str(result["manifestPath"])).read_text()
+            )
+            self.assertNotIn("defaultComposite", manifest)
+
     def test_satellite_choices_reuse_rendered_proxy_results(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

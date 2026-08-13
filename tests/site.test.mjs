@@ -71,7 +71,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /effectiveRangeHours <= 24 \? "live" : "archive"/);
   assert.match(viewer, /videoProfiles\?\.\[product\.id\]\?\.\[videoLayerId\]\?\.\[videoTrack\]/);
   assert.match(viewer, /videoPlans\.length === videoAnchorFrames\.length/);
-  assert.match(viewer, /proxy\.width !== candidateVideoManifest\.width/);
+  assert.match(viewer, /proxy\.width !== playbackVideoManifest\.width/);
   assert.match(viewer, /if \(videoModeReady \|\| !isAnimating/);
   assert.match(viewer, /data-renderer=\{videoModeReady \? "video" : "images"\}/);
   assert.match(viewer, /<VideoCompositeStage/);
@@ -89,7 +89,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(videoLoop, /manifestCache\.size > MAX_MANIFEST_CACHE_ENTRIES/);
   assert.match(videoLoop, /requestVideoFrameCallback/);
   assert.match(viewer, /for \(const selection of manifestFrame\.proxyLayers\)/);
-  assert.match(viewer, /candidateVideoManifest\.proxies\[selection\.sourceKey\]/);
+  assert.match(viewer, /playbackVideoManifest\.proxies\[selection\.sourceKey\]/);
   assert.match(viewer, /activeVideoProxyLayers/);
   assert.match(viewer, /const pointSourceTimes = \(videoModeReady \? \[\] : \[/);
   assert.match(viewer, /if \(!videoModeReady && lightningController/);
@@ -122,6 +122,17 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(compositor, /crossOrigin="anonymous"/);
   assert.match(compositor, /requestVideoFrameCallback/);
   assert.match(compositor, /data-overlay-stalls="0"/);
+  assert.match(videoLoop, /defaultComposite\?: VideoDefaultComposite/);
+  assert.match(videoLoop, /validDefaultComposite/);
+  assert.match(videoLoop, /return \{ \.\.\.parsed, defaultComposite: undefined \}/);
+  assert.match(viewer, /sameLayerSet\(enabledVideoLayerIds, candidateDefaultComposite\.layerIds\)/);
+  assert.match(viewer, /mediaViewport: activeDefaultComposite\.mediaViewport/);
+  assert.match(viewer, /satelliteFilter=\{activeDefaultComposite \? undefined : satelliteFilter\}/);
+  assert.match(viewer, /setFailedDefaultComposite/);
+  assert.match(viewer, /data-composite-preset=/);
+  assert.match(compositor, /const fullyComposited = Boolean\(compositePresetId\)/);
+  assert.match(compositor, /fullyComposited \? EMPTY_PREPARED_SURFACES/);
+  assert.match(compositor, /if \(!fullyComposited\) commitSurfaces\(prepared\)/);
   assert.match(compositor, /getVideoPlaybackQuality/);
   assert.match(compositor, /VIDEO_PROGRESS_TIMEOUT_MS = 30_000/);
   assert.match(compositor, /maxBufferSize: HLS_BUFFER_BYTES/);

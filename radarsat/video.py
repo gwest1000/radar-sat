@@ -9,8 +9,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlencode
 
 from PIL import Image
@@ -23,6 +23,8 @@ UTC = dt.timezone.utc
 VIDEO_SCHEMA_VERSION = 1
 VIDEO_RENDER_VERSION = 16
 PROXY_RENDER_VERSION = 1
+COMPOSITE_RENDER_VERSION = 1
+DEFAULT_COMPOSITE_ID = "operational-default-v1"
 METEOROLOGICAL_MINUTE_SECONDS = 0.02
 FFCONCAT_TIMEBASE_FPS = 50
 # A 10-minute weather step lasts 0.2 media seconds, so 5 fps preserves every
@@ -93,6 +95,15 @@ SOURCE_MEDIA_SIZES: Mapping[tuple[str, str], tuple[int, int]] = {
     ("north-pacific", "raw-visir"): (1600, 900),
     ("north-pacific", "raw-ir"): (1600, 900),
 }
+
+# Start with the two representative profiles used for browser/power testing.
+# Every other product retains the satellite-video + transparent-proxy path.
+DEFAULT_COMPOSITE_PILOTS = frozenset(
+    {
+        ("bc-large-overlay", "raw-visir"),
+        ("north-america-overlay", "westwx-visir"),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -746,6 +757,43 @@ def _product(product_id: str) -> Mapping[str, Any]:
     return next(product for product in PRODUCTS if product["id"] == product_id)
 
 
+def _default_composite_layer_ids(spec: ProfileSpec) -> tuple[str, ...]:
+    """Return the exact recipe stack selected by a fresh viewer session."""
+    if (spec.product_id, spec.layer_id) not in DEFAULT_COMPOSITE_PILOTS:
+        return ()
+    product = _product(spec.product_id)
+    recipes = list(product.get("layers", []))
+    defaults = {
+        str(recipe.get("id", "")): bool(recipe.get("defaultEnabled", False))
+        for recipe in recipes
+    }
+    selected: list[str] = []
+    for recipe in recipes:
+        recipe_id = str(recipe.get("id", ""))
+        if not recipe_id:
+            continue
+        enabled_with = str(recipe.get("enabledWith", ""))
+        if enabled_with:
+            if defaults.get(enabled_with, False):
+                selected.append(recipe_id)
+            continue
+        if recipe_id in SATELLITE_LAYER_IDS:
+            if recipe_id == spec.layer_id:
+                selected.append(recipe_id)
+            continue
+        if recipe.get("optional") and not recipe.get("defaultEnabled", False):
+            continue
+        selected.append(recipe_id)
+    return tuple(selected)
+
+
+def _recipe_opacities(product_id: str) -> Mapping[str, float]:
+    return {
+        str(recipe.get("id", "")): float(recipe.get("opacity", 1.0))
+        for recipe in _product(product_id).get("layers", [])
+    }
+
+
 def _rendered_layer_id(
     recipe_id: str,
     spec: ProfileSpec,
@@ -957,6 +1005,135 @@ def _prepare_satellite_images(
         encoded.save(destination, "PNG", optimize=False, compress_level=1)
         if cached is None:
             rendered[key] = destination
+        paths.append(destination)
+    return paths
+
+
+def _operational_satellite_filter(image: Image.Image) -> Image.Image:
+    """Bake the viewer's radar/ptype satellite filter in sRGB space."""
+    saturation = 0.52
+    saturated = image.convert(
+        "RGB",
+        (
+            0.213 + 0.787 * saturation,
+            0.715 - 0.715 * saturation,
+            0.072 - 0.072 * saturation,
+            0,
+            0.213 - 0.213 * saturation,
+            0.715 + 0.285 * saturation,
+            0.072 - 0.072 * saturation,
+            0,
+            0.213 - 0.213 * saturation,
+            0.715 - 0.715 * saturation,
+            0.072 + 0.928 * saturation,
+            0,
+        ),
+    )
+    brightness = 0.78
+    brightened = saturated.convert(
+        "RGB",
+        (
+            brightness, 0, 0, 0,
+            0, brightness, 0, 0,
+            0, 0, brightness, 0,
+        ),
+    )
+    contrast = 1.06
+    offset = 255 * 0.5 * (1 - contrast)
+    return brightened.convert(
+        "RGB",
+        (
+            contrast, 0, 0, offset,
+            0, contrast, 0, offset,
+            0, 0, contrast, offset,
+        ),
+    )
+
+
+def _prepare_composite_images(
+    source_root: Path,
+    output_root: Path,
+    spec: ProfileSpec,
+    selected: Sequence[SelectedFrame],
+    temporary_root: Path,
+    layer_ids: Sequence[str],
+    frame_proxy_layers: Mapping[dt.datetime, Sequence[Mapping[str, Any]]],
+    proxy_entries: Mapping[str, Mapping[str, Any]],
+) -> list[Path]:
+    """Render a stage-aligned default stack for single-video playback."""
+    base_path = _safe_path(source_root, f"static/{spec.domain_id}/base-dark.png")
+    with Image.open(base_path) as base_image:
+        base = _crop_resize(
+            base_image,
+            spec.viewport,
+            spec.width,
+            spec.height,
+        ).convert("RGB")
+    opacities = _recipe_opacities(spec.product_id)
+    stack_order = {
+        layer_id: index for index, layer_id in enumerate(layer_ids)
+    }
+    last_satellite_key: tuple[str, str] | None = None
+    last_satellite: Image.Image | None = None
+    paths: list[Path] = []
+    for index, frame in enumerate(selected):
+        key = (frame.source_path, frame.source_fetched_at)
+        satellite_base = last_satellite if key == last_satellite_key else None
+        if satellite_base is None:
+            with Image.open(_safe_path(source_root, frame.source_path)) as source_image:
+                satellite = _crop_resize(
+                    source_image,
+                    spec.viewport,
+                    spec.width,
+                    spec.height,
+                )
+                satellite_base = base.copy()
+                satellite_base.paste(
+                    satellite.convert("RGB"),
+                    (0, 0),
+                    satellite.getchannel("A"),
+                )
+            satellite_base = _operational_satellite_filter(satellite_base)
+            last_satellite_key = key
+            last_satellite = satellite_base
+        composed = satellite_base.convert("RGBA")
+        layers = sorted(
+            frame_proxy_layers.get(frame.valid_time, ()),
+            key=lambda item: stack_order.get(str(item.get("id", "")), len(stack_order)),
+        )
+        for layer in layers:
+            recipe_id = str(layer.get("id", ""))
+            if recipe_id not in stack_order:
+                continue
+            proxy = proxy_entries.get(str(layer.get("sourceKey", "")))
+            if not isinstance(proxy, Mapping) or not proxy.get("path"):
+                continue
+            with Image.open(_safe_path(output_root, str(proxy["path"]))) as image:
+                overlay = image.convert("RGBA")
+            if overlay.size != (spec.width, spec.height):
+                raise ValueError(
+                    f"Composite proxy {recipe_id!r} is {overlay.size}, expected "
+                    f"{(spec.width, spec.height)}"
+                )
+            opacity = opacities.get(recipe_id, 1.0)
+            if opacity < 1:
+                overlay.putalpha(
+                    overlay.getchannel("A").point(
+                        lambda value, factor=opacity: round(value * factor)
+                    )
+                )
+            composed.alpha_composite(overlay)
+        clock_phase = int(
+            frame.valid_time.timestamp() // (spec.cadence_minutes * 60)
+        ) % 2
+        encoded = Image.new(
+            "RGB",
+            (spec.width, spec.height + VIDEO_CLOCK_STRIP_HEIGHT),
+            (255, 255, 255) if clock_phase else (0, 0, 0),
+        )
+        encoded.paste(composed.convert("RGB"), (0, 0))
+        destination = temporary_root / f"composite-{index:04d}.png"
+        encoded.save(destination, "PNG", optimize=False, compress_level=1)
         paths.append(destination)
     return paths
 
@@ -1216,34 +1393,39 @@ def _build_hls_media(
     durations: Sequence[float],
     *,
     ffmpeg: str,
+    owner: str | None = None,
+    variant: Mapping[str, Any] | None = None,
+    prepare_images: Callable[
+        [Sequence[SelectedFrame], Path], list[Path]
+    ] | None = None,
 ) -> tuple[Path, str, list[Mapping[str, Any]], list[float]]:
-    owner = f"shared-{spec.domain_id}-{spec.media_group}"
+    owner = owner or f"shared-{spec.domain_id}-{spec.media_group}"
     groups = _segment_groups(selected, spec.track, spec.cadence_minutes)
     adjusted_durations = list(durations)
     segment_entries: list[Mapping[str, Any]] = []
     for indexes in groups:
         encoded_durations = [durations[index] for index in indexes]
         pts_offset = _segment_pts_offset(selected[indexes[0]].valid_time)
-        segment_fingerprint = _hash_payload(
-            {
-                "videoRenderVersion": VIDEO_RENDER_VERSION,
-                "domainId": spec.domain_id,
-                "layerId": spec.layer_id,
-                "track": spec.track,
-                "mediaGroup": spec.media_group,
-                "mediaViewport": dict(spec.resolved_media_viewport),
-                "mediaWidth": spec.resolved_media_width,
-                "mediaHeight": spec.resolved_media_height,
-                "clockStripHeight": VIDEO_CLOCK_STRIP_HEIGHT,
-                "frameRate": VIDEO_FRAME_RATE,
-                "crf": spec.crf,
-                "preset": spec.preset,
-                "frames": [media_inputs[index] for index in indexes],
-                "durations": encoded_durations,
-                "ptsOffset": round(pts_offset, 6),
-            },
-            16,
-        )
+        segment_payload: dict[str, Any] = {
+            "videoRenderVersion": VIDEO_RENDER_VERSION,
+            "domainId": spec.domain_id,
+            "layerId": spec.layer_id,
+            "track": spec.track,
+            "mediaGroup": spec.media_group,
+            "mediaViewport": dict(spec.resolved_media_viewport),
+            "mediaWidth": spec.resolved_media_width,
+            "mediaHeight": spec.resolved_media_height,
+            "clockStripHeight": VIDEO_CLOCK_STRIP_HEIGHT,
+            "frameRate": VIDEO_FRAME_RATE,
+            "crf": spec.crf,
+            "preset": spec.preset,
+            "frames": [media_inputs[index] for index in indexes],
+            "durations": encoded_durations,
+            "ptsOffset": round(pts_offset, 6),
+        }
+        if variant is not None:
+            segment_payload["variant"] = dict(variant)
+        segment_fingerprint = _hash_payload(segment_payload, 16)
         start_stamp = selected[indexes[0]].valid_time.strftime("%Y%m%dT%H%MZ")
         segment_path = (
             output_root
@@ -1256,11 +1438,15 @@ def _build_hls_media(
         if not segment_path.is_file():
             with tempfile.TemporaryDirectory(prefix=f"radarsat-{owner}-segment-") as temporary:
                 group_frames = [selected[index] for index in indexes]
-                prepared = _prepare_satellite_images(
-                    source_root,
-                    spec,
-                    group_frames,
-                    Path(temporary),
+                prepared = (
+                    prepare_images(group_frames, Path(temporary))
+                    if prepare_images is not None
+                    else _prepare_satellite_images(
+                        source_root,
+                        spec,
+                        group_frames,
+                        Path(temporary),
+                    )
                 )
                 _encode_ts(
                     ffmpeg,
@@ -1282,12 +1468,13 @@ def _build_hls_media(
                 "lastFrame": indexes[-1],
             }
         )
-    playlist_fingerprint = _hash_payload(
-        {
-            "videoRenderVersion": VIDEO_RENDER_VERSION,
-            "segments": segment_entries,
-        }
-    )
+    playlist_payload: dict[str, Any] = {
+        "videoRenderVersion": VIDEO_RENDER_VERSION,
+        "segments": segment_entries,
+    }
+    if variant is not None:
+        playlist_payload["variant"] = dict(variant)
+    playlist_fingerprint = _hash_payload(playlist_payload)
     end_stamp = selected[-1].valid_time.strftime("%Y%m%dT%H%MZ")
     playlist_path = (
         output_root
@@ -1354,8 +1541,13 @@ def _manifest_dependencies(output_root: Path, manifests: Iterable[Path]) -> set[
             manifest = json.loads(manifest_path.read_text())
         except (OSError, json.JSONDecodeError):
             continue
-        media = manifest.get("media")
-        if isinstance(media, Mapping) and media.get("path"):
+        media_values: list[object] = [manifest.get("media")]
+        default_composite = manifest.get("defaultComposite")
+        if isinstance(default_composite, Mapping):
+            media_values.append(default_composite.get("media"))
+        for media in media_values:
+            if not isinstance(media, Mapping) or not media.get("path"):
+                continue
             try:
                 dependencies.add(_safe_path(output_root, str(media["path"])))
             except (ValueError, FileNotFoundError):
@@ -1388,6 +1580,7 @@ def prune_local_video_orphans(
     now: dt.datetime | None = None,
     _prune_shared: bool = True,
 ) -> Mapping[str, int]:
+    output_root = output_root.resolve()
     current = (now or dt.datetime.now(UTC)).timestamp()
     grace_seconds = LOCAL_ORPHAN_GRACE_HOURS * 3600
     manifest_root = output_root / "video-manifests" / product_id
@@ -1436,6 +1629,7 @@ def prune_shared_video_orphans(
     now: dt.datetime | None = None,
 ) -> int:
     """Prune shared media once, after every parallel product worker commits."""
+    output_root = output_root.resolve()
     current = (now or dt.datetime.now(UTC)).timestamp()
     grace_seconds = LOCAL_ORPHAN_GRACE_HOURS * 3600
     all_manifest_dependencies = _manifest_dependencies(
@@ -1445,10 +1639,12 @@ def prune_shared_video_orphans(
     removed = 0
     videos_root = output_root / "videos"
     if videos_root.exists():
-        for shared_root in videos_root.glob("shared-*"):
-            if not shared_root.is_dir():
+        for media_root in videos_root.iterdir():
+            if not media_root.is_dir() or not media_root.name.startswith(
+                ("shared-", "composite-")
+            ):
                 continue
-            for path in shared_root.rglob("*"):
+            for path in media_root.rglob("*"):
                 if not path.is_file() or path in all_manifest_dependencies:
                     continue
                 if current - path.stat().st_mtime <= grace_seconds:
@@ -1574,12 +1770,144 @@ def build_profile(
         for frame_selections in proxy_selections
     ]
 
+    default_composite: dict[str, Any] | None = None
+    composite_media_bytes = 0
+    composite_layer_ids = _default_composite_layer_ids(spec)
+    if composite_layer_ids:
+        selected_layer_ids = set(composite_layer_ids)
+        opacities = _recipe_opacities(spec.product_id)
+        proxy_hashes: dict[str, str] = {}
+        composite_inputs: list[Mapping[str, Any]] = []
+        filtered_proxy_layers: dict[
+            dt.datetime, Sequence[Mapping[str, Any]]
+        ] = {}
+        for frame, satellite_input, layers in zip(
+            selected, media_inputs, proxy_layer_entries, strict=True
+        ):
+            active_layers = [
+                layer for layer in layers
+                if str(layer.get("id", "")) in selected_layer_ids
+            ]
+            filtered_proxy_layers[frame.valid_time] = active_layers
+            layer_inputs: list[Mapping[str, Any]] = []
+            for layer in active_layers:
+                source_key = str(layer.get("sourceKey", ""))
+                proxy = proxy_entries.get(source_key)
+                if not isinstance(proxy, Mapping) or not proxy.get("path"):
+                    continue
+                proxy_path = str(proxy["path"])
+                if proxy_path not in proxy_hashes:
+                    proxy_hashes[proxy_path] = _sha256_file(
+                        _safe_path(output_root, proxy_path)
+                    )
+                recipe_id = str(layer.get("id", ""))
+                layer_inputs.append(
+                    {
+                        "id": recipe_id,
+                        "renderId": str(layer.get("renderId", "")),
+                        "sourceKey": source_key,
+                        "sourceValidTime": layer.get("sourceValidTime"),
+                        "proxyPath": proxy_path,
+                        "proxyByteLength": int(proxy.get("byteLength", 0)),
+                        "proxySha256": proxy_hashes[proxy_path],
+                        "opacity": opacities.get(recipe_id, 1.0),
+                    }
+                )
+            composite_inputs.append(
+                {
+                    "satellite": satellite_input,
+                    "layers": layer_inputs,
+                }
+            )
+        base_path = _safe_path(
+            source_root, f"static/{spec.domain_id}/base-dark.png"
+        )
+        base_stat = base_path.stat()
+        composite_variant = {
+            "id": DEFAULT_COMPOSITE_ID,
+            "compositeRenderVersion": COMPOSITE_RENDER_VERSION,
+            "proxyRenderVersion": PROXY_RENDER_VERSION,
+            "layerIds": list(composite_layer_ids),
+            "opacities": {
+                layer_id: opacities.get(layer_id, 1.0)
+                for layer_id in composite_layer_ids
+            },
+            "satelliteFilter": "saturate(0.52) brightness(0.78) contrast(1.06)",
+            "base": {
+                "path": f"static/{spec.domain_id}/base-dark.png",
+                "size": base_stat.st_size,
+                "sha256": _sha256_file(base_path),
+            },
+        }
+        composite_spec = replace(
+            spec,
+            media_group="stage-composite",
+            media_viewport=dict(spec.viewport),
+            media_width=spec.width,
+            media_height=spec.height,
+            crf=16 if spec.track == "live" else 18,
+        )
+
+        def prepare_composite(
+            group_frames: Sequence[SelectedFrame], temporary: Path
+        ) -> list[Path]:
+            return _prepare_composite_images(
+                source_root,
+                output_root,
+                composite_spec,
+                group_frames,
+                temporary,
+                composite_layer_ids,
+                filtered_proxy_layers,
+                proxy_entries,
+            )
+
+        (
+            composite_media_path,
+            composite_fingerprint,
+            composite_segments,
+            _,
+        ) = _build_hls_media(
+            source_root,
+            output_root,
+            composite_spec,
+            selected,
+            composite_inputs,
+            durations,
+            ffmpeg=ffmpeg,
+            owner=f"composite-{spec.product_id}",
+            variant=composite_variant,
+            prepare_images=prepare_composite,
+        )
+        composite_media_bytes = composite_media_path.stat().st_size + sum(
+            int(entry["byteLength"]) for entry in composite_segments
+        )
+        default_composite = {
+            "id": DEFAULT_COMPOSITE_ID,
+            "layerIds": list(composite_layer_ids),
+            "mediaViewport": dict(spec.viewport),
+            "media": {
+                "path": composite_media_path.relative_to(output_root).as_posix(),
+                "mimeType": "application/vnd.apple.mpegurl",
+                "codec": "avc1",
+                "width": spec.width,
+                "height": spec.height + VIDEO_CLOCK_STRIP_HEIGHT,
+                "contentHeight": spec.height,
+                "frameRate": VIDEO_FRAME_RATE,
+                "byteLength": composite_media_path.stat().st_size,
+                "sha256": _sha256_file(composite_media_path),
+                "fingerprint": composite_fingerprint,
+                "segments": composite_segments,
+            },
+        }
+
     generation_fingerprint = _hash_payload(
         {
             "mediaFingerprint": media_fingerprint,
             "proxies": proxy_entries,
             "proxyLayers": proxy_layer_entries,
             "proxyRenderVersion": PROXY_RENDER_VERSION,
+            "defaultComposite": default_composite,
         }
     )
     generation = f"{end_stamp}-{generation_fingerprint}"
@@ -1666,6 +1994,8 @@ def build_profile(
     }
     if proxy_warnings:
         manifest["proxyWarnings"] = proxy_warnings
+    if default_composite is not None:
+        manifest["defaultComposite"] = default_composite
     if not manifest_path.is_file():
         _atomic_json(manifest_path, manifest)
 
@@ -1691,7 +2021,9 @@ def build_profile(
         "manifestPath": manifest_path.relative_to(output_root).as_posix(),
         "mediaPath": media_path.relative_to(output_root).as_posix(),
         "mediaBytes": media_path.stat().st_size
-        + sum(int(entry["byteLength"]) for entry in segment_entries),
+        + sum(int(entry["byteLength"]) for entry in segment_entries)
+        + composite_media_bytes,
+        "compositeMediaBytes": composite_media_bytes,
         "segments": len(segment_entries),
         "frames": len(selected),
         "proxies": len(proxy_entries),
