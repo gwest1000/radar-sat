@@ -36,6 +36,10 @@ MPEGTS_TIMESTAMP_WRAP_SECONDS = (1 << 33) / 90_000
 LOCAL_GENERATIONS_TO_KEEP = 3
 LOCAL_ORPHAN_GRACE_HOURS = 1
 
+
+class ProxySourceUnreadableError(OSError):
+    """An optional source image could not be decoded for a video proxy."""
+
 SATELLITE_LAYER_IDS = frozenset(
     {
         "raw-visir",
@@ -721,14 +725,19 @@ def _render_proxy(
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
 
-    with Image.open(source) as image:
-        rendered = _crop_resize(
-            image,
-            spec.viewport,
-            spec.width,
-            spec.height,
-            stage_aligned=stage_aligned,
-        )
+    try:
+        with Image.open(source) as image:
+            rendered = _crop_resize(
+                image,
+                spec.viewport,
+                spec.width,
+                spec.height,
+                stage_aligned=stage_aligned,
+            )
+    except FileNotFoundError:
+        raise
+    except OSError as error:
+        raise ProxySourceUnreadableError(str(source)) from error
     content_hash = hashlib.sha256(
         b"radarsat-lossless-webp-v1\0"
         + spec.width.to_bytes(4, "big")
@@ -1772,6 +1781,20 @@ def build_profile(
                     "sourcePath": selection.source_path,
                     "renderedLayerId": selection.rendered_layer_id,
                     "reason": "source-disappeared-during-build",
+                }
+            )
+        except ProxySourceUnreadableError:
+            # A producer may still be replacing an optional image when this
+            # snapshot is rendered.  Pillow reports truncated/unidentified
+            # images as OSError subclasses.  Treat that the same way as a
+            # missing optional proxy: omit it from this immutable generation
+            # and let the next video build pick up the repaired source.
+            proxy_warnings.append(
+                {
+                    "sourceKey": source_key,
+                    "sourcePath": selection.source_path,
+                    "renderedLayerId": selection.rendered_layer_id,
+                    "reason": "source-unreadable-during-build",
                 }
             )
 

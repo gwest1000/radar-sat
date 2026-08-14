@@ -869,6 +869,46 @@ class VideoBuildTests(unittest.TestCase):
                 )
             )
 
+    def test_unreadable_optional_proxy_does_not_abort_satellite_build(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, spec = self.make_source(root)
+            base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
+            relative = "frames/bc/radar-rain/truncated.png"
+            source = root / "source" / relative
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"not an image")
+            catalog["domains"]["bc"]["layers"]["radar-rain"] = {
+                "maxAgeMinutes": 20,
+                "frames": [frame(relative, base)],
+            }
+
+            result = build_profile(
+                root / "source",
+                root / "output",
+                catalog,
+                spec,
+                ffmpeg=str(shutil.which("ffmpeg")),
+                hours=1,
+            )
+
+            self.assertEqual(result["status"], "built")
+            self.assertEqual(result["proxyWarnings"], 1)
+            manifest = json.loads(
+                (root / "output" / str(result["manifestPath"])).read_text()
+            )
+            self.assertEqual(
+                manifest["proxyWarnings"][0]["reason"],
+                "source-unreadable-during-build",
+            )
+            self.assertTrue(
+                all(
+                    layer["id"] != "radar-rain"
+                    for video_frame in manifest["frames"]
+                    for layer in video_frame["proxyLayers"]
+                )
+            )
+
     def test_source_pruned_after_catalog_snapshot_is_omitted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
