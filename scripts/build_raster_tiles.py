@@ -9,11 +9,12 @@ import json
 from pathlib import Path
 
 from radarsat.raster_tiles import PROFILES, RASTER_PROFILES, build_profiles
+from radarsat.paths import output_root as default_output_root
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument("--hours", type=float, default=3)
     parser.add_argument("--max-frames", type=int, default=3)
     parser.add_argument(

@@ -27,6 +27,7 @@ from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 from .config import DOMAINS, LAYERS, VIEWPORTS, Domain, Layer, regional_layer_id
 from .geomet import projected_bbox
 from .pipeline import frame_path, metadata_path, write_metadata
+from .paths import sibling_project_path
 
 
 UTC = dt.timezone.utc
@@ -34,11 +35,11 @@ RUN_RE = re.compile(r"^\d{8}T(?:00|06|12|18)Z$")
 BASE_URL = "https://dd.weather.gc.ca/today/model_hrdps/continental/2.5km"
 GRID_TAG = "RLatLon0.0225"
 RENDER_VERSION = 4
-DEFAULT_DATA_ROOT = (
-    Path(__file__).resolve().parents[2]
-    / "fcstGraphics"
-    / "data"
-    / "hrdps_continental"
+DEFAULT_DATA_ROOT = Path(
+    os.environ.get(
+        "RADARSAT_HRDPS_DATA_ROOT",
+        sibling_project_path("fcstGraphics", "data", "hrdps_continental"),
+    )
 )
 
 

@@ -41,6 +41,7 @@ from .images import (
     save_overlay,
     save_satellite,
 )
+from .paths import output_root as default_output_root
 from .retention import keep_frame, keep_layer_frame
 from .point_frames import (
     glm_point_rows,
@@ -74,6 +75,7 @@ GLM_LIGHTNING_TRAIL_RENDER_VERSION = 9
 GLM_LIGHTNING_HOUR_RENDER_VERSION = 2
 GLM_LIGHTNING_FLASH_RENDER_VERSION = 10
 GLM_LIGHTNING_POINT_RENDER_VERSION = 2
+GLM_LIGHTNING_LIVE_RENDER_VERSION = 1
 COVERAGE_RENDER_VERSION = 3
 PRECIP_OVERLAY_RENDER_VERSION = 1
 REGIONAL_HAZARD_WIDTH = 3840
@@ -1878,6 +1880,158 @@ def ingest_goes_hazards(
     }
 
 
+def ingest_glm_live(
+    root: Path,
+    domain_ids: Iterable[str],
+    now: dt.datetime | None = None,
+    *,
+    client: object | None = None,
+) -> dict[str, object]:
+    """Render a rolling one-minute GLM layer for the live edge only.
+
+    This intentionally does not touch smoke or the ten-minute historical GLM
+    archive.  It downloads only the newest three consecutive 20-second files,
+    renders every requested domain from that shared decode, and lets the small
+    live-edge publisher expose the result immediately.
+    """
+    from .goes_hazards import (
+        GoesHazardClient,
+        combine_glm_flashes,
+        read_glm_flashes,
+        render_glm_bins,
+    )
+    from .raw_satellite import clear_downloads
+
+    selected = [DOMAINS[value] for value in domain_ids if value in DOMAINS]
+    if not selected:
+        return {"status": "disabled", "domains": []}
+    current = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    max_bytes = int(os.environ.get("RADARSAT_GLM_LIVE_MAX_BYTES", "12000000"))
+    owned_client = client is None
+    hazard_client = client or GoesHazardClient()
+    rendered: list[str] = []
+    downloaded_bytes = 0
+    try:
+        batch = hazard_client.latest_glm_batch(current, file_count=3)  # type: ignore[attr-defined]
+        valid_time = batch.end_time.replace(second=0, microsecond=0)
+        with tempfile.TemporaryDirectory(prefix="radarsat-glm-live-") as temporary:
+            cache_root = Path(temporary)
+            decoded = []
+            source_path: Path | None = None
+            try:
+                for item in batch.objects:
+                    source_path = hazard_client.download(item, cache_root, max_bytes)  # type: ignore[attr-defined]
+                    downloaded_bytes += item.size
+                    decoded.append(
+                        read_glm_flashes(
+                            source_path,
+                            item.valid_time + dt.timedelta(seconds=10),
+                        )
+                    )
+                    source_path.unlink(missing_ok=True)
+                    source_path = None
+                flashes = combine_glm_flashes(decoded)
+                for domain in selected:
+                    layer = LAYERS["glm-lightning-live"]
+                    destination = frame_path(root, domain, layer, valid_time)
+                    ready = _rendered_frame_ready(
+                        root,
+                        domain,
+                        layer,
+                        valid_time,
+                        GLM_LIGHTNING_LIVE_RENDER_VERSION,
+                    )
+                    if domain.id == "bc":
+                        ready = ready and all(
+                            _rendered_frame_ready(
+                                root,
+                                domain,
+                                LAYERS[regional_layer_id("glm-lightning-live", region_id)],
+                                valid_time,
+                                GLM_LIGHTNING_LIVE_RENDER_VERSION,
+                            )
+                            for region_id in VIEWPORTS
+                        )
+                    if ready:
+                        rendered.append(domain.id)
+                        continue
+                    raw_markers = cache_root / f"{domain.id}-markers.png"
+                    summary = render_glm_bins(flashes, domain, raw_markers)
+                    lightning_trail(
+                        [raw_markers],
+                        destination,
+                        output_width=(domain.width * BROAD_HAZARD_SCALE if domain.tier == "broad" else domain.width),
+                        symbol_reference_width=(BROAD_FIRE_SYMBOL_REFERENCE_WIDTH if domain.tier == "broad" else 1440),
+                        blur_glow=True,
+                    )
+                    write_metadata(
+                        root,
+                        domain,
+                        layer,
+                        valid_time,
+                        destination,
+                        {"GOES-18 GLM": batch.end_time},
+                        source="NOAA GOES-18",
+                        source_layer="GLM-L2-LCFA rolling one-minute batch",
+                        extra={
+                            **summary,
+                            "windowStart": format_utc(batch.start_time),
+                            "windowEnd": format_utc(batch.end_time),
+                            "sourceFileCount": len(batch.objects),
+                            "renderVersion": GLM_LIGHTNING_LIVE_RENDER_VERSION,
+                        },
+                    )
+                    if domain.id == "bc":
+                        for region_id, viewport in VIEWPORTS.items():
+                            regional_layer = LAYERS[
+                                regional_layer_id("glm-lightning-live", region_id)
+                            ]
+                            regional_destination = frame_path(
+                                root, domain, regional_layer, valid_time
+                            )
+                            lightning_trail(
+                                [raw_markers],
+                                regional_destination,
+                                viewport=viewport,
+                                output_width=1920,
+                                symbol_reference_width=DETAILED_REGIONAL_SYMBOL_REFERENCE_WIDTH,
+                                blur_glow=True,
+                            )
+                            write_metadata(
+                                root,
+                                domain,
+                                regional_layer,
+                                valid_time,
+                                regional_destination,
+                                {"GOES-18 GLM": batch.end_time},
+                                source="NOAA GOES-18",
+                                source_layer="GLM-L2-LCFA rolling one-minute batch",
+                                extra={
+                                    **summary,
+                                    "windowStart": format_utc(batch.start_time),
+                                    "windowEnd": format_utc(batch.end_time),
+                                    "sourceFileCount": len(batch.objects),
+                                    "renderVersion": GLM_LIGHTNING_LIVE_RENDER_VERSION,
+                                    "regionalViewport": viewport,
+                                    "outputWidth": 1920,
+                                },
+                            )
+                    rendered.append(domain.id)
+            finally:
+                if source_path is not None:
+                    source_path.unlink(missing_ok=True)
+                clear_downloads(cache_root)
+    finally:
+        if owned_client:
+            hazard_client.close()  # type: ignore[attr-defined]
+    return {
+        "status": "rendered" if rendered else "unchanged",
+        "domains": rendered,
+        "validTime": format_utc(valid_time),
+        "downloadBytes": downloaded_bytes,
+    }
+
+
 def _raw_products_ready(root: Path, domain: Domain, valid_time: dt.datetime) -> bool:
     for layer_id in ("raw-ir",):
         layer = LAYERS[layer_id]
@@ -2613,7 +2767,7 @@ def write_status(path: Path, payload: dict[str, object]) -> None:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ingest and render Radar-Sat observational layers.")
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument("--domain", action="append", choices=sorted(DOMAINS), default=[])
     parser.add_argument("--hours", type=float, default=3.0)
     parser.add_argument("--latest-only", action="store_true")

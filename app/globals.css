@@ -291,6 +291,10 @@ input:focus-visible {
   user-select: none;
 }
 
+.live-edge-layer {
+  z-index: 5;
+}
+
 .video-composite-canvas {
   position: absolute;
   inset: 0;

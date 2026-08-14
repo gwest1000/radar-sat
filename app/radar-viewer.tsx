@@ -67,6 +67,7 @@ type ViewerPreferences = {
   speedIndex: number;
   rangeHours: number;
   optionalLayers: Record<string, boolean>;
+  playing: boolean;
 };
 
 type DynamicLayer = {
@@ -142,6 +143,12 @@ type Catalog = {
   }>>;
 };
 
+type LiveEdgeIndex = {
+  schemaVersion: 1;
+  generatedAt: string;
+  domains: Record<string, { layers: Record<string, DynamicLayer> }>;
+};
+
 type SiteConfig = {
   catalogUrl: string;
   catalogIndexUrl?: string;
@@ -151,8 +158,9 @@ type SiteConfig = {
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 const VIDEO_HUD_UPDATE_INTERVAL_MS = 180;
-const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
-const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
+const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v6";
+const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
+const OLDER_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
 const FULL_LAYER_STYLE: CSSProperties = {
@@ -168,7 +176,9 @@ const REGIONAL_PRODUCT_KEYS: Record<string, string> = {
   "bc-southwest-overlay": "southwest",
   "bc-southeast-overlay": "southeast",
   "bc-northeast-overlay": "northeast",
+  "bc-south-coast-overlay": "south-coast",
 };
+const SAME_SLOT_TOLERANCE_MS = 2 * 60_000;
 const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
 const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
   left: `${BC_ON_NORTH_AMERICA.left * 100}%`,
@@ -177,6 +187,11 @@ const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
   height: `${BC_ON_NORTH_AMERICA.height * 100}%`,
 };
 const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]);
+const SATELLITE_LAYERS = new Set([
+  "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir",
+  "westwx-visir", "westwx-ir", "eccc-geocolor", "daynight", "ir",
+  "convective", "snowfog",
+]);
 // The derived lightning trails are compact transparent PNGs. Prefer them to
 // downloading point JSON and repainting hundreds of symbols in the browser on
 // every animation frame, but still decode them before advancing the clock.
@@ -277,7 +292,10 @@ function playbackFrames(
   if (!parsed.length) return [];
   const newest = Math.floor(parsed[parsed.length - 1].time / frameIntervalMs) * frameIntervalMs;
   const requestedStart = newest - rangeHours * 60 * 60_000;
-  const availableStart = Math.ceil(parsed[0].time / frameIntervalMs) * frameIntervalMs;
+  const firstSlot = Math.floor(parsed[0].time / frameIntervalMs) * frameIntervalMs;
+  const availableStart = parsed[0].time - firstSlot <= SAME_SLOT_TOLERANCE_MS
+    ? firstSlot
+    : Math.ceil(parsed[0].time / frameIntervalMs) * frameIntervalMs;
   const start = Math.max(requestedStart, availableStart);
   const times: number[] = [];
   let current = Math.ceil(start / frameIntervalMs) * frameIntervalMs;
@@ -289,12 +307,12 @@ function playbackFrames(
   return times.flatMap((time): Frame[] => {
     while (
       sourceIndex + 1 < parsed.length
-      && parsed[sourceIndex + 1].time <= time
+      && parsed[sourceIndex + 1].time <= time + SAME_SLOT_TOLERANCE_MS
     ) {
       sourceIndex += 1;
     }
     const source = parsed[sourceIndex];
-    if (source.time > time) return [];
+    if (source.time > time + SAME_SLOT_TOLERANCE_MS) return [];
     return [{
       ...source.frame,
       validTime: new Date(time).toISOString(),
@@ -900,6 +918,7 @@ function composeLayers(
   catalogBase: string,
   optionalLayers: Record<string, boolean>,
   hourlyLightning = false,
+  liveEdge = false,
 ): ComposedLayer[] {
   return product.layers.flatMap((recipe) => {
     if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
@@ -925,7 +944,13 @@ function composeLayers(
         opacity: recipe.opacity,
       }];
     }
-    const renderedLayerId = rasterLayerId(recipe.id, product, domain, hourlyLightning);
+    let renderedLayerId = rasterLayerId(recipe.id, product, domain, hourlyLightning);
+    if (liveEdge && recipe.id === "glm-lightning-trail") {
+      const liveId = product.domain === "bc" && REGIONAL_PRODUCT_KEYS[product.id]
+        ? `glm-lightning-live-region-${REGIONAL_PRODUCT_KEYS[product.id]}`
+        : "glm-lightning-live";
+      if (domain.layers[liveId]?.frames?.length) renderedLayerId = liveId;
+    }
     let dynamicLayer = domain.layers[renderedLayerId];
     let frames = dynamicLayer?.frames ?? [];
     if (product.domain === "bc" && recipe.id === "raw-visir-5min") {
@@ -946,12 +971,21 @@ function composeLayers(
         ?? atOrBefore(nativeLayer?.frames ?? [], anchor.validTime, nativeLayer?.maxAgeMinutes);
       const standardFrame = nearestFrame(standardLayer?.frames ?? [], anchor.validTime, 2)
         ?? atOrBefore(standardLayer?.frames ?? [], anchor.validTime, standardLayer?.maxAgeMinutes);
-      if (nativeFrame) {
-        dynamicLayer = nativeLayer;
-        frames = [nativeFrame];
-      } else if (standardFrame) {
-        dynamicLayer = standardLayer;
-        frames = [standardFrame];
+      const candidates = [
+        nativeFrame ? { frame: nativeFrame, layer: nativeLayer, native: true } : undefined,
+        standardFrame ? { frame: standardFrame, layer: standardLayer, native: false } : undefined,
+      ].filter((candidate): candidate is {
+        frame: Frame;
+        layer: DynamicLayer;
+        native: boolean;
+      } => Boolean(candidate?.layer)).sort((left, right) => (
+        Date.parse(actualSourceTime(right.native ? "raw-visir-native" : "raw-visir", right.frame))
+        - Date.parse(actualSourceTime(left.native ? "raw-visir-native" : "raw-visir", left.frame))
+        || Number(right.native) - Number(left.native)
+      ));
+      if (candidates[0]?.layer) {
+        dynamicLayer = candidates[0].layer;
+        frames = [candidates[0].frame];
       }
     }
     // Trail rasters are regenerated on the radar clock, but their actual
@@ -961,7 +995,7 @@ function composeLayers(
       ? atOrBeforeSourceTime(renderedLayerId, frames, anchor.validTime, dynamicLayer?.maxAgeMinutes)
       : atOrBefore(frames, anchor.validTime, dynamicLayer?.maxAgeMinutes);
     if (!frame) return [];
-    return [{
+    const result: ComposedLayer[] = [{
       id: recipe.id,
       renderId: renderedLayerId,
       url: frameUrl(frame, catalogBase),
@@ -970,6 +1004,31 @@ function composeLayers(
       frame,
       stageAligned: renderedLayerId.includes("-region-"),
     }];
+    if (liveEdge && recipe.id === "lightning-trail") {
+      const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
+      const supplementId = regionKey
+        ? `glm-lightning-live-region-${regionKey}`
+        : "glm-lightning-live";
+      const supplementLayer = domain.layers[supplementId];
+      const supplementFrame = atOrBeforeSourceTime(
+        supplementId,
+        supplementLayer?.frames ?? [],
+        anchor.validTime,
+        supplementLayer?.maxAgeMinutes,
+      );
+      if (supplementFrame) {
+        result.push({
+          id: supplementId,
+          renderId: supplementId,
+          url: frameUrl(supplementFrame, catalogBase),
+          sourceCacheKey: sourceCacheKey(supplementFrame.path, supplementFrame.fetchedAt),
+          opacity: 1,
+          frame: supplementFrame,
+          stageAligned: supplementId.includes("-region-"),
+        });
+      }
+    }
+    return result;
   });
 }
 
@@ -980,7 +1039,7 @@ function actualSourceTime(layerId: string, frame: Frame): string {
       .sort((left, right) => Date.parse(right) - Date.parse(left));
     if (values[0]) return values[0];
   }
-  if (["raw-ir", "raw-visir", "raw-visir-5min", "eccc-geocolor"].includes(layerId) && frame.sourceTimes) {
+  if (["raw-ir", "raw-visir", "raw-visir-5min", "raw-visir-native", "eccc-geocolor"].includes(layerId) && frame.sourceTimes) {
     const values = Object.values(frame.sourceTimes)
       .filter((value) => Number.isFinite(Date.parse(value)))
       .sort((left, right) => Date.parse(right) - Date.parse(left));
@@ -1534,6 +1593,7 @@ function InfraredLegend() {
 export function RadarViewer() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [catalogBase, setCatalogBase] = useState("");
+  const [liveEdgeIndex, setLiveEdgeIndex] = useState<LiveEdgeIndex | null>(null);
   const [error, setError] = useState("");
   const [productId, setProductId] = useState("bc-large-overlay");
   const [frameIndex, setFrameIndex] = useState(NEWEST_FRAME);
@@ -1571,7 +1631,9 @@ export function RadarViewer() {
     speedIndex: 3,
     rangeHours: 3,
     optionalLayers: {},
+    playing: true,
   });
+  const preferencesLoadedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1622,10 +1684,13 @@ export function RadarViewer() {
               let stored: Partial<ViewerPreferences> = {};
               if (!initialized) {
                 try {
-                  const currentPreferences = window.sessionStorage.getItem(VIEWER_PREFERENCES_KEY);
+                  const currentPreferences = window.localStorage.getItem(VIEWER_PREFERENCES_KEY)
+                    ?? window.sessionStorage.getItem(VIEWER_PREFERENCES_KEY);
                   stored = JSON.parse(
                     currentPreferences
+                      ?? window.localStorage.getItem(LEGACY_VIEWER_PREFERENCES_KEY)
                       ?? window.sessionStorage.getItem(LEGACY_VIEWER_PREFERENCES_KEY)
+                      ?? window.sessionStorage.getItem(OLDER_VIEWER_PREFERENCES_KEY)
                       ?? "{}",
                   ) as Partial<ViewerPreferences>;
                   // The new 1× equals the former 2×. Preserve the other legacy
@@ -1661,7 +1726,12 @@ export function RadarViewer() {
                   ));
                 }
                 setFrameIndex(NEWEST_FRAME);
-                setPlaying(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+                setPlaying(
+                  typeof stored.playing === "boolean"
+                    ? stored.playing
+                    : !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+                );
+                preferencesLoadedRef.current = true;
                 initialized = true;
               } else {
                 setProductId((current) => (
@@ -1692,8 +1762,41 @@ export function RadarViewer() {
   }, []);
 
   useEffect(() => {
-    preferencesRef.current = { productId, speedIndex, rangeHours, optionalLayers };
-  }, [optionalLayers, productId, rangeHours, speedIndex]);
+    if (!catalogBase) return;
+    let cancelled = false;
+    const liveEdgeUrl = absoluteUrl("live-edge.json", catalogBase);
+    const load = () => {
+      void fetch(liveEdgeUrl, { cache: "no-store", mode: "cors" }).then(async (response) => {
+        if (!response.ok) throw new Error(`Live edge returned ${response.status}.`);
+        const payload = await response.json() as LiveEdgeIndex;
+        if (payload.schemaVersion !== 1 || !payload.domains || !payload.generatedAt) {
+          throw new Error("Live edge index is incomplete.");
+        }
+        if (!cancelled) setLiveEdgeIndex(payload);
+      }).catch(() => {
+        // The historical/video viewer is the complete fallback while a hot
+        // publisher is starting, unavailable, or temporarily rate limited.
+      });
+    };
+    load();
+    const interval = window.setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [catalogBase]);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    const preferences = { productId, speedIndex, rangeHours, optionalLayers, playing };
+    preferencesRef.current = preferences;
+    try {
+      window.localStorage.setItem(VIEWER_PREFERENCES_KEY, JSON.stringify(preferences));
+    } catch {
+      // Private browsing or a disabled storage quota should not impair the
+      // operational display.
+    }
+  }, [optionalLayers, playing, productId, rangeHours, speedIndex]);
 
   useEffect(() => {
     loadedVideoManifestRef.current = loadedVideoManifest;
@@ -1720,6 +1823,13 @@ export function RadarViewer() {
     [availableProducts, productId],
   );
   const domain = product ? catalog?.domains[product.domain] : undefined;
+  const liveEdgeDomain = useMemo<Domain | undefined>(() => {
+    if (!domain) return undefined;
+    const edge = liveEdgeIndex?.domains[domain.id];
+    return edge
+      ? { ...domain, layers: { ...domain.layers, ...edge.layers } }
+      : domain;
+  }, [domain, liveEdgeIndex]);
   const activeAnchorId = useMemo(
     () => product ? activeAnchorLayer(product, optionalLayers) : "",
     [optionalLayers, product],
@@ -1795,20 +1905,25 @@ export function RadarViewer() {
   const videoFreshEnough = useMemo(() => {
     if (!loadedVideoManifest || !fallbackAnchorFrames.length || !product) return true;
     const videoNewest = Date.parse(
-      loadedVideoManifest.frames[loadedVideoManifest.frames.length - 1]?.validTime ?? "",
+      loadedVideoManifest.frames[loadedVideoManifest.frames.length - 1]?.sourceValidTime ?? "",
     );
-    const imageNewest = Date.parse(
-      fallbackAnchorFrames[fallbackAnchorFrames.length - 1]?.validTime ?? "",
-    );
+    const newestFallback = fallbackAnchorFrames[fallbackAnchorFrames.length - 1];
+    const imageNewest = newestFallback
+      ? Date.parse(actualSourceTime(activeAnchorId, newestFallback))
+      : NaN;
     if (!Number.isFinite(videoNewest) || !Number.isFinite(imageNewest)) return false;
-    const expectedMinutes = loadedVideoManifest.track === "archive"
-      ? (product.archiveFrameIntervalMinutes ?? 60)
-      : (product.frameIntervalMinutes ?? 10);
-    // A slow/failed encoder must never make current imagery look stale. Keep
-    // video only while it is within one nominal frame (plus scan tolerance) of
-    // the image fallback that the rapid ingest has already published.
-    return imageNewest - videoNewest <= (expectedMinutes * 60_000 + 120_000);
-  }, [fallbackAnchorFrames, loadedVideoManifest, product]);
+    // Compare observation clocks, not rounded presentation slots.  A current
+    // hot-edge index can completely replace the last video image with fresh
+    // satellite/radar/lightning rasters, so retain the efficient historical
+    // video while it trails by at most the latest one or two BC frames (or one
+    // broad-domain frame).  Without that atomic edge replacement, require the
+    // same observation slot.
+    const hasHotEdge = Boolean(liveEdgeIndex?.domains[product.domain]);
+    const hotEdgeAllowance = hasHotEdge
+      ? Math.min((product.frameIntervalMinutes ?? 10) * 2, 20) * 60_000
+      : 0;
+    return imageNewest - videoNewest <= hotEdgeAllowance + SAME_SLOT_TOLERANCE_MS;
+  }, [activeAnchorId, fallbackAnchorFrames, liveEdgeIndex, loadedVideoManifest, product]);
 
   const candidateVideoManifest = useMemo(() => (
     loadedVideoManifest
@@ -2007,6 +2122,84 @@ export function RadarViewer() {
   ]);
   const anchorFrames = videoModeReady ? videoAnchorFrames : fallbackAnchorFrames;
 
+  const liveEdgeState = useMemo(() => {
+    if (!videoModeReady || !product || !liveEdgeDomain || !videoPlans.length) {
+      return { active: false, anchor: undefined, layers: [] as ComposedLayer[] };
+    }
+    const lastPlan = videoPlans[videoPlans.length - 1];
+    const videoSourceTimes = new Map(lastPlan.frame.proxyLayers.map((selection) => [
+      selection.id,
+      Date.parse(selection.sourceValidTime ?? ""),
+    ]));
+    videoSourceTimes.set("satellite", Date.parse(lastPlan.frame.sourceValidTime));
+    const enabledRecipes = product.layers.filter((recipe) => (
+      isProductLayerEnabled(recipe, optionalLayers, product.layers)
+    ));
+    const candidateIds = new Set<string>();
+    for (const recipe of enabledRecipes) {
+      candidateIds.add(rasterLayerId(recipe.id, product, liveEdgeDomain, false));
+      if (recipe.id === "glm-lightning-trail" || recipe.id === "lightning-trail") {
+        const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
+        candidateIds.add(regionKey
+          ? `glm-lightning-live-region-${regionKey}`
+          : "glm-lightning-live");
+      }
+    }
+    let targetTime = Date.parse(lastPlan.frame.validTime);
+    let fresher = false;
+    for (const layerId of candidateIds) {
+      const layer = liveEdgeDomain.layers[layerId];
+      const frames = layer?.frames ?? [];
+      const frame = frames[frames.length - 1];
+      if (!frame) continue;
+      const sourceTime = Date.parse(actualSourceTime(layerId, frame));
+      if (!Number.isFinite(sourceTime)) continue;
+      targetTime = Math.max(targetTime, Date.parse(frame.validTime), sourceTime);
+      const comparisonId = layerId.startsWith("glm-lightning-live")
+        ? "glm-lightning-trail"
+        : SATELLITE_LAYERS.has(layerId)
+          ? "satellite"
+        : layerId.includes("lightning-trail-region-")
+          ? "lightning-trail"
+          : layerId;
+      const previous = videoSourceTimes.get(comparisonId) ?? -Infinity;
+      if (sourceTime > previous + 1_000) fresher = true;
+    }
+    if (!fresher || !Number.isFinite(targetTime)) {
+      return { active: false, anchor: undefined, layers: [] as ComposedLayer[] };
+    }
+    const edgeAnchor: Frame = {
+      ...videoAnchorFrames[videoAnchorFrames.length - 1],
+      validTime: new Date(targetTime).toISOString(),
+    };
+    return {
+      active: true,
+      anchor: edgeAnchor,
+      layers: composeLayers(
+        product,
+        liveEdgeDomain,
+        edgeAnchor,
+        catalogBase,
+        optionalLayers,
+        false,
+        true,
+      ),
+    };
+  }, [catalogBase, liveEdgeDomain, optionalLayers, product, videoAnchorFrames, videoModeReady, videoPlans]);
+
+  const liveEdgeSourceTimes = useMemo(() => liveEdgeState.layers
+    .filter((item): item is typeof item & { frame: Frame } => "frame" in item && Boolean(item.frame))
+    .map((item) => ({
+      label: sourceLabel(item.id),
+      validTime: actualSourceTime(item.id, item.frame),
+    }))
+    .filter((item): item is { label: string; validTime: string } => Boolean(item.label))
+    .filter((item, index, all) => all.findIndex((candidate) => (
+      candidate.label === item.label && candidate.validTime === item.validTime
+    )) === index)
+    .map((item) => `${item.label} ${shortClock(item.validTime)}`)
+    .join(" · "), [liveEdgeState.layers]);
+
   const availableRangeOptions = useMemo(
     () => RANGE_OPTIONS.filter((hours) => hours <= (product?.maxHours ?? 168)),
     [product?.maxHours],
@@ -2014,9 +2207,11 @@ export function RadarViewer() {
 
   const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
   const currentFrameIndex = Math.min(frameIndex, Math.max(0, anchorFrames.length - 1));
+  const showLiveEdge = liveEdgeState.active && currentFrameIndex === anchorFrames.length - 1;
   const stepFactor = playbackStepFactor(anchorFrames, currentFrameIndex);
   const isAnimating = playing && pageVisible && anchorFrames.length > 1;
   const anchor = anchorFrames[currentFrameIndex];
+  const displayAnchor = showLiveEdge && liveEdgeState.anchor ? liveEdgeState.anchor : anchor;
   const lightningController = product?.layers.find((recipe) => LIGHTNING_CONTROLLERS.has(recipe.id));
   const lightningPointsId = lightningController ? pointLayerId(lightningController.id) : undefined;
   // GOES-18 GLM has the same physical coverage in both broad views. Reuse the
@@ -2134,22 +2329,26 @@ export function RadarViewer() {
     const frame = videoAnchorFrames[index];
     const plan = videoPlans[index];
     if (!frame || !plan || !product) return;
-    const times = videoHudSourceTimes[index] ?? "";
+    const isHotEdge = index === anchorFrames.length - 1 && liveEdgeState.active;
+    const displayedFrame = isHotEdge && liveEdgeState.anchor ? liveEdgeState.anchor : frame;
+    const times = isHotEdge && liveEdgeSourceTimes
+      ? liveEdgeSourceTimes
+      : videoHudSourceTimes[index] ?? "";
     if (frameCountRef.current) {
       frameCountRef.current.textContent = `${index + 1} / ${anchorFrames.length}`;
     }
     if (timelineRangeRef.current) timelineRangeRef.current.value = String(index);
     if (validLineRef.current) {
-      validLineRef.current.textContent = `VALID ${utcClock(frame.validTime)} UTC · ${localClock(frame.validTime)}`;
+      validLineRef.current.textContent = `VALID ${utcClock(displayedFrame.validTime)} UTC · ${localClock(displayedFrame.validTime)}`;
     }
     if (sourceTimesRef.current) sourceTimesRef.current.textContent = times;
     if (mapStageRef.current) {
       mapStageRef.current.setAttribute(
         "aria-label",
-        `${product.title}, valid ${utcClock(frame.validTime)} UTC. ${times}`,
+        `${product.title}, valid ${utcClock(displayedFrame.validTime)} UTC. ${times}`,
       );
     }
-  }, [anchorFrames.length, product, videoAnchorFrames, videoHudSourceTimes, videoPlans]);
+  }, [anchorFrames.length, liveEdgeSourceTimes, liveEdgeState, product, videoAnchorFrames, videoHudSourceTimes, videoPlans]);
 
   const togglePlayback = useCallback(() => {
     if (isAnimating && videoModeReady) {
@@ -2493,7 +2692,7 @@ export function RadarViewer() {
         }
       : undefined,
   ]).filter((item): item is { label: string; validTime: string } => Boolean(item));
-  const sourceTimes = (videoModeReady
+  const sourceTimes = showLiveEdge && liveEdgeSourceTimes ? liveEdgeSourceTimes : (videoModeReady
     ? activeVideoProxyLayers.flatMap((selection): { label: string; validTime: string }[] => {
         const label = sourceLabel(selection.id);
         return label && selection.sourceValidTime
@@ -2714,7 +2913,7 @@ export function RadarViewer() {
                 : undefined
             }
             role="img"
-            aria-label={`${product.title}${anchor ? `, valid ${utcClock(anchor.validTime)} UTC. ${sourceTimes}` : ", no frames available"}`}
+            aria-label={`${product.title}${displayAnchor ? `, valid ${utcClock(displayAnchor.validTime)} UTC. ${sourceTimes}` : ", no frames available"}`}
           >
             {!anchor && <div className="map-loading">No frames are available for this product yet.</div>}
             {videoModeReady && playbackVideoManifest ? (
@@ -2731,7 +2930,7 @@ export function RadarViewer() {
                 onFramePresented={handleVideoFramePresented}
                 onFailure={handleActiveVideoFailure}
                 onLoopBoundary={handleVideoLoopBoundary}
-                key={`${product.id}-${playbackVideoManifest.layerId}-${playbackVideoManifest.track}-${playbackVideoManifest.width}x${playbackVideoManifest.height}-${activeDefaultComposite ? `composite:${activeDefaultComposite.id}:${activeDefaultComposite.media.path}` : "dynamic"}`}
+                key={`${product.id}-${playbackVideoManifest.layerId}-${playbackVideoManifest.track}-${effectiveRangeHours}h-${playbackVideoManifest.width}x${playbackVideoManifest.height}-${activeDefaultComposite ? `composite:${activeDefaultComposite.id}:${activeDefaultComposite.media.path}` : "dynamic"}`}
               />
             ) : composedLayers.map((layer) => (
               <StableMapImage
@@ -2746,6 +2945,23 @@ export function RadarViewer() {
                     && ["ir", "daynight", "convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
                     ? satelliteFilter
                     : undefined,
+                }}
+              />
+            ))}
+            {videoModeReady && liveEdgeState.active && liveEdgeState.layers.map((layer) => (
+              <StableMapImage
+                className="map-layer live-edge-layer"
+                src={layer.url}
+                layerId={layer.renderId ?? layer.id}
+                key={`live-edge-${product.id}-${layer.id}`}
+                style={{
+                  ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
+                  opacity: layer.opacity,
+                  visibility: showLiveEdge ? "visible" : "hidden",
+                  filter: [
+                    "ir", "daynight", "convective", "snowfog", "eccc-geocolor",
+                    "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir",
+                  ].includes(layer.id) ? satelliteFilter : undefined,
                 }}
               />
             ))}
@@ -2767,10 +2983,10 @@ export function RadarViewer() {
             {!videoModeReady && fireMarkers.length > 0 && (
               <FireCanvas markers={fireMarkers} style={cropStyle} />
             )}
-            {anchor && (
+            {displayAnchor && (
               <div className="map-status">
-                <p ref={validLineRef} className="valid-line">VALID {utcClock(anchor.validTime)} UTC · {localClock(anchor.validTime)}</p>
-                <p ref={sourceTimesRef} className="source-times">{sourceTimes || `SOURCE ${shortClock(anchor.validTime)}`}</p>
+                <p ref={validLineRef} className="valid-line">VALID {utcClock(displayAnchor.validTime)} UTC · {localClock(displayAnchor.validTime)}</p>
+                <p ref={sourceTimesRef} className="source-times">{sourceTimes || `SOURCE ${shortClock(displayAnchor.validTime)}`}</p>
                 {missingLayers.length > 0 && (
                   <p className="source-warning">Unavailable: {missingLayers.join(", ")}</p>
                 )}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.greg.radar-sat.video-archive</string>
+  <key>WorkingDirectory</key><string>__PROJECT_ROOT__</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/nice</string><string>-n</string><string>15</string>
+    <string>/bin/zsh</string><string>__PROJECT_ROOT__/scripts/ops/run_video_archive_cycle.zsh</string>
+  </array>
+  <key>RunAtLoad</key><false/>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+  <key>ThrottleInterval</key><integer>300</integer>
+  <key>StandardOutPath</key><string>__PROJECT_ROOT__/logs/launchd-video-archive.log</string>
+  <key>StandardErrorPath</key><string>__PROJECT_ROOT__/logs/launchd-video-archive-error.log</string>
+</dict></plist>

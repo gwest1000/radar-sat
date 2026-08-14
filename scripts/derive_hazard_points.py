@@ -10,6 +10,7 @@ from pathlib import Path
 from radarsat.catalog import write_catalog
 from radarsat.config import DOMAINS
 from radarsat.point_migration import derive_hazard_point_archive
+from radarsat.paths import output_root as default_output_root
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,7 +21,7 @@ def parse_args() -> argparse.Namespace:
             "preserved unless --overwrite is explicit."
         )
     )
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument("--domain", action="append", choices=sorted(DOMAINS), default=[])
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")

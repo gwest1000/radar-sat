@@ -12,11 +12,12 @@ from radarsat.ecmwf_contours import DEFAULT_DATA_ROOT as DEFAULT_ECMWF_ROOT
 from radarsat.ecmwf_contours import update_recent as update_ecmwf
 from radarsat.hrdps_contours import DEFAULT_DATA_ROOT as DEFAULT_HRDPS_ROOT
 from radarsat.hrdps_contours import UTC, update_recent as update_hrdps
+from radarsat.paths import output_root as default_output_root
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument("--hrdps-root", type=Path, default=DEFAULT_HRDPS_ROOT)
     parser.add_argument("--ecmwf-root", type=Path, default=DEFAULT_ECMWF_ROOT)
     parser.add_argument("--hours", type=int, default=12)

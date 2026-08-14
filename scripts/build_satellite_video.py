@@ -5,6 +5,8 @@ import argparse
 import json
 from pathlib import Path
 
+from radarsat.paths import output_root as default_output_root
+
 from radarsat.video import (
     VIDEO_PROFILES,
     build_satellite_videos,
@@ -19,7 +21,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--source-root",
         type=Path,
-        default=Path("data/output"),
+        default=default_output_root(),
         help="Existing Radar-Sat processed archive containing catalog inputs.",
     )
     parser.add_argument(

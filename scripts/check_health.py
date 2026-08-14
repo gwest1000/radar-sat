@@ -7,11 +7,12 @@ from pathlib import Path
 
 from radarsat.health import inspect_health
 from radarsat.pipeline import write_status
+from radarsat.paths import output_root as default_output_root
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check Radar-Sat ingest and R2 health.")
-    parser.add_argument("--root", type=Path, default=Path("data/output"))
+    parser.add_argument("--root", type=Path, default=default_output_root())
     parser.add_argument(
         "--publish-status", type=Path, default=Path("var/status/publish.json")
     )

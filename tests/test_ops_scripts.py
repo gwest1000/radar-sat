@@ -207,10 +207,19 @@ class OpsScriptTests(unittest.TestCase):
         video_plist = (
             PROJECT / "ops" / "com.greg.radar-sat.video.plist.template"
         ).read_text()
+        video_archive = (
+            PROJECT / "scripts" / "ops" / "run_video_archive_cycle.zsh"
+        ).read_text()
+        lightning_edge = (
+            PROJECT / "scripts" / "ops" / "run_lightning_edge_cycle.zsh"
+        ).read_text()
+        radar_edge = (
+            PROJECT / "scripts" / "ops" / "run_radar_edge_cycle.zsh"
+        ).read_text()
         self.assertNotIn("build_satellite_video.py", satellite)
         self.assertIn("build_satellite_video.py", video)
-        self.assertIn("run_video_phase live", video)
-        self.assertIn("run_video_phase archive", video)
+        self.assertIn('run_video_phase "${VIDEO_TRACK}"', video)
+        self.assertIn("RADARSAT_VIDEO_TRACK=archive", video_archive)
         self.assertIn("--defer-shared-prune", video)
         self.assertIn("--prune-shared-only", video)
         self.assertIn("north-america-overlay &", video)
@@ -219,10 +228,11 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn('--track "${track}"', video)
         self.assertIn('args+=(--layer "${layer}")', video)
         self.assertIn('"raw-visir,raw-visir-5min" "westwx-visir" "raw-visir"', video)
-        self.assertIn("lossless-image fallback", video)
-        self.assertIn("video-archive-completed-epoch", video)
-        self.assertIn("current_epoch - previous_archive_epoch >= 3600", video)
-        self.assertIn("Always finish archive maintenance", video)
+        self.assertIn('video-${VIDEO_TRACK}-cycle.lock', video)
+        self.assertIn("refresh_lightning_edge.py", lightning_edge)
+        self.assertIn("refresh_radar_edge.py", radar_edge)
+        self.assertIn("live_edge_publish.zsh", lightning_edge)
+        self.assertIn("live_edge_publish.zsh", radar_edge)
         self.assertIn("--archive-hours", video)
         self.assertIn("last-good profiles", video)
         self.assertIn("<integer>600</integer>", video_plist)
@@ -232,7 +242,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertNotIn("scripts/run_ingest.py", satellite)
         self.assertIn("publish_locked.zsh", satellite)
         self.assertIn(
-            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 6",
+            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 24",
             satellite,
         )
         self.assertNotIn("build_raster_tiles.py", satellite)
@@ -243,7 +253,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("--sector pacus", five_minute)
         self.assertIn("RADARSAT_NOAA_STAR_PACUS_MAX_FRAMES:-4", five_minute)
         self.assertIn(
-            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 6",
+            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 24",
             five_minute,
         )
         self.assertNotIn("build_raster_tiles.py", five_minute)
@@ -254,7 +264,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("--spool-mode only", observations)
         self.assertIn("publish_locked.zsh", observations)
         self.assertIn(
-            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 6",
+            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 24",
             observations,
         )
         self.assertIn("<string>10</string>", observation_plist)
@@ -270,7 +280,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("build_raster_tiles.py", archive)
         self.assertIn('RADARSAT_WEB_TILES_ENABLED:-0', archive)
         self.assertIn(
-            'publish_locked.zsh" --whole-frame-only --recovery-hours 6',
+            'publish_locked.zsh" --whole-frame-only --recovery-hours 24',
             archive,
         )
         self.assertLess(
@@ -278,7 +288,7 @@ class OpsScriptTests(unittest.TestCase):
             archive.index("build_raster_tiles.py"),
         )
         self.assertIn("heavy-satellite.lock", heavy_lock)
-        self.assertIn("for name in ingest five-minute observations video archive health", install)
+        self.assertIn("lightning-edge radar-edge video video-archive", install)
 
     def test_setup_installs_renderer_and_feed_requirements(self) -> None:
         setup = (PROJECT / "scripts" / "ops" / "setup_local.zsh").read_text()
@@ -290,6 +300,7 @@ class OpsScriptTests(unittest.TestCase):
         sr3_entry = (PROJECT / "scripts" / "sr3_entry.py").read_text()
         self.assertIn("socket.getfqdn = _stable_getfqdn", sr3_entry)
         self.assertIn("_filter_sr_proc_case_insensitive_python", sr3_entry)
+        self.assertIn('command.insert(start_index, "sanity")', sr3_entry)
 
     def test_sr3_child_runtime_removes_forwarded_sanity_action(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

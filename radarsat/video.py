@@ -65,6 +65,7 @@ REGIONAL_PRODUCT_KEYS = {
     "bc-southwest-overlay": "southwest",
     "bc-southeast-overlay": "southeast",
     "bc-northeast-overlay": "northeast",
+    "bc-south-coast-overlay": "south-coast",
 }
 FULL_VIEWPORT = {"left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0}
 BC_REGIONAL_MEDIA_VIEWPORT = {
@@ -479,10 +480,23 @@ def _selected_satellite_frames(
             standard = _nearest(standard_frames, valid_time, 2) or _at_or_before(
                 standard_frames, valid_time, 90
             )
-            candidates = (
-                (native, "raw-visir-native", 25),
-                (standard, "raw-visir", 90),
-            )
+            # At the live edge, recency wins.  Native STAR/CIRA imagery is
+            # preferred only when it represents the same scan as the standard
+            # NOAA frame; later rebuilds naturally replace that historical
+            # slot with native resolution once it arrives.
+            candidates = tuple(sorted(
+                (
+                    (native, "raw-visir-native", 25),
+                    (standard, "raw-visir", 90),
+                ),
+                key=lambda candidate: (
+                    _frame_source_time(candidate[0]) or dt.datetime.min.replace(tzinfo=UTC)
+                    if candidate[0] is not None
+                    else dt.datetime.min.replace(tzinfo=UTC),
+                    candidate[1] == "raw-visir-native",
+                ),
+                reverse=True,
+            ))
         else:
             candidates = (
                 (

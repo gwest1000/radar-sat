@@ -39,6 +39,7 @@ IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 MUTABLE_CACHE_CONTROL = "public, max-age=60, must-revalidate"
 STATIC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400"
 CATALOG_CACHE_CONTROL = "no-cache, max-age=0, must-revalidate"
+LIVE_EDGE_KEY = "live-edge.json"
 DEFAULT_WARN_BYTES = 6_500_000_000
 DEFAULT_MAX_BYTES = 8_000_000_000
 # R2 begins leaving requests pending when a single Mac opens two dozen PUTs at
@@ -941,6 +942,12 @@ def discover_objects(
         if legend.get("path"):
             relative_paths.add(str(legend["path"]))
     relative_paths.update(video_paths)
+    # The latency-sensitive radar/lightning publisher maintains this small
+    # pointer independently of the large catalog.  Include the local copy in
+    # ordinary reconciliation so a later full sync preserves it instead of
+    # treating it as an unreferenced remote object.
+    if (root / LIVE_EDGE_KEY).is_file():
+        relative_paths.add(LIVE_EDGE_KEY)
 
     if frame_count == 0:
         raise PublicationSafetyError("Refusing to publish a catalog containing zero frames")
@@ -1150,6 +1157,8 @@ def content_type(path: Path) -> str:
 
 
 def cache_control(key: str) -> str:
+    if key == LIVE_EDGE_KEY:
+        return CATALOG_CACHE_CONTROL
     if key.startswith(VIDEO_IMMUTABLE_PREFIXES):
         return IMMUTABLE_CACHE_CONTROL
     if key.startswith(("frames/", "metadata/")):

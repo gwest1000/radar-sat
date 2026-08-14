@@ -4,9 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${PROJECT_ROOT}/scripts/ops/runtime_paths.zsh"
 STATE_ROOT="${RADARSAT_STATE_ROOT:-${PROJECT_ROOT}/var}"
-OUTPUT_ROOT="${RADARSAT_OUTPUT_ROOT:-${PROJECT_ROOT}/data/output}"
-PYTHON_BIN="${RADARSAT_PYTHON:-${PROJECT_ROOT}/.venv/bin/python}"
 LOCK_DIR="${STATE_ROOT}/run/archive-cycle.lock"
 LOCK_OWNER="${LOCK_DIR}/pid"
 
@@ -59,13 +58,6 @@ trap release_all_locks EXIT
 trap 'release_all_locks; exit 130' INT
 trap 'release_all_locks; exit 143' TERM
 
-ENV_FILE="${RADARSAT_ENV_FILE:-${PROJECT_ROOT}/.env}"
-if [[ -f "${ENV_FILE}" ]]; then
-  set -a
-  source "${ENV_FILE}"
-  set +a
-fi
-
 export PYTHONPATH="${PROJECT_ROOT}"
 export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
 export RADARSAT_RAW_SAT_ENABLED=1
@@ -116,7 +108,7 @@ fi
 if [[ "${RADARSAT_MODEL_CONTOURS_ENABLED:-${RADARSAT_HRDPS_CONTOURS_ENABLED:-1}}" == "1" ]]; then
   "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/backfill_model_contours.py" \
     --output-root "${OUTPUT_ROOT}" \
-    --hrdps-root "${RADARSAT_HRDPS_DATA_ROOT:-${HOME}/projects/fcstGraphics/data/hrdps_continental}" \
+    --hrdps-root "${RADARSAT_HRDPS_DATA_ROOT:-${FCSTGRAPHICS_DATA_ROOT}/hrdps_continental}" \
     --ecmwf-root "${RADARSAT_ECMWF_DATA_ROOT:-/Volumes/Greg1_2tb/concrete_fcst_data/raw/ecmwf/realtime}" \
     --hours "${RADARSAT_MODEL_CONTOUR_RECOVERY_HOURS:-${RADARSAT_HRDPS_CONTOUR_RECOVERY_HOURS:-12}}" \
     || print -u2 "Warning: model contour refresh failed; retaining existing overlays."
@@ -126,4 +118,4 @@ fi
 # Long loops are delivered by immutable video manifests. Keep only a recent
 # whole-frame image fallback in R2 while retaining the full source archive on
 # local disk for rebuilding those loops.
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --whole-frame-only --recovery-hours 6
+"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --whole-frame-only --recovery-hours 24

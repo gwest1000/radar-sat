@@ -48,7 +48,7 @@ def write_rgba(path: Path, colour: tuple[int, int, int, int], size: tuple[int, i
 
 
 class VideoSelectionTests(unittest.TestCase):
-    def test_ne_bc_native_preference_and_fallback_match_viewer(self) -> None:
+    def test_ne_bc_prefers_recency_and_upgrades_same_slot_to_native(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
         standard = [
             frame(f"frames/bc/raw-visir/{minute}.webp", base + dt.timedelta(minutes=minute))
@@ -84,14 +84,14 @@ class VideoSelectionTests(unittest.TestCase):
             [
                 "raw-visir",
                 "raw-visir-native",
-                "raw-visir-native",
-                "raw-visir-native",
+                "raw-visir",
+                "raw-visir",
                 "raw-visir",
                 "raw-visir",
             ],
         )
         self.assertEqual([item.valid_time.minute for item in selected], [0, 10, 20, 30, 40, 50])
-        self.assertEqual(selected[3].source_valid_time, base + dt.timedelta(minutes=10))
+        self.assertEqual(selected[3].source_valid_time, base + dt.timedelta(minutes=30))
 
     def test_broad_selection_honours_max_age_and_never_regresses(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)

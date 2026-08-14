@@ -4,9 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${PROJECT_ROOT}/scripts/ops/runtime_paths.zsh"
 STATE_ROOT="${RADARSAT_STATE_ROOT:-${PROJECT_ROOT}/var}"
-OUTPUT_ROOT="${RADARSAT_OUTPUT_ROOT:-${PROJECT_ROOT}/data/output}"
-PYTHON_BIN="${RADARSAT_PYTHON:-${PROJECT_ROOT}/.venv/bin/python}"
 LOCK_DIR="${STATE_ROOT}/run/observation-cycle.lock"
 LOCK_OWNER="${LOCK_DIR}/pid"
 
@@ -53,13 +52,6 @@ trap release_lock EXIT
 trap 'release_lock; exit 130' INT
 trap 'release_lock; exit 143' TERM
 
-ENV_FILE="${RADARSAT_ENV_FILE:-${PROJECT_ROOT}/.env}"
-if [[ -f "${ENV_FILE}" ]]; then
-  set -a
-  source "${ENV_FILE}"
-  set +a
-fi
-
 export PYTHONPATH="${PROJECT_ROOT}"
 export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
 export RADARSAT_RAW_SAT_ENABLED=0
@@ -86,5 +78,5 @@ else
   print -u2 "Warning: observation ingest failed with status ${ingest_status}; raw spool retained."
 fi
 
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast --existing-video-only --whole-frame-only --recovery-hours 6
+"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast --existing-video-only --whole-frame-only --recovery-hours 24
 exit "${ingest_status}"

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from radarsat.catalog import write_catalog
 from radarsat.pipeline import ingest_goes_smoke_archive
+from radarsat.paths import output_root as default_output_root
 
 
 def parse_args() -> argparse.Namespace:
@@ -18,7 +19,7 @@ def parse_args() -> argparse.Namespace:
             "north-america domain, then atomically refresh catalog.json."
         )
     )
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     return parser.parse_args()
 
 

@@ -4,6 +4,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+export RADARSAT_CREATE_DATA_ROOT=1
+source "${PROJECT_ROOT}/scripts/ops/runtime_paths.zsh"
+unset RADARSAT_CREATE_DATA_ROOT
 
 if [[ ! -x "${PROJECT_ROOT}/.venv/bin/python" ]]; then
   typeset -a python_candidates
@@ -46,7 +49,7 @@ fi
 "${PROJECT_ROOT}/.venv/bin/python" -m pip install \
   -r "${PROJECT_ROOT}/requirements.txt" \
   -r "${PROJECT_ROOT}/requirements-feeds.txt"
-mkdir -p "${PROJECT_ROOT}/data/output" "${PROJECT_ROOT}/logs" \
+mkdir -p "${OUTPUT_ROOT}" "${PROJECT_ROOT}/logs" \
   "${PROJECT_ROOT}/var/state" "${PROJECT_ROOT}/var/status" \
   "${PROJECT_ROOT}/.cache/matplotlib"
 

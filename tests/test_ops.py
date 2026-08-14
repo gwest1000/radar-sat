@@ -469,6 +469,7 @@ class ConfigurationTests(unittest.TestCase):
             "public, max-age=60, must-revalidate",
         )
         self.assertNotIn("immutable", cache_control("metadata/bc/daynight/frame.json"))
+        self.assertEqual(cache_control("live-edge.json"), "no-cache, max-age=0, must-revalidate")
 
     def test_versioned_video_assets_are_immutable_with_video_mime(self) -> None:
         for key in (
@@ -590,6 +591,21 @@ class PublisherTests(unittest.TestCase):
             self.assertTrue(expected.issubset(keys))
             published = json.loads(payload)
             self.assertIn("videoProfiles", published)
+
+    def test_live_edge_pointer_is_preserved_by_full_reconciliation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            (root / "live-edge.json").write_text(json.dumps({
+                "schemaVersion": 1,
+                "generatedAt": "2026-07-20T23:42:00Z",
+                "domains": {},
+            }))
+
+            objects, _payload = discover_objects(root)
+
+            self.assertIn("live-edge.json", {item.key for item in objects})
 
     def test_hls_manifest_playlist_and_segments_are_discovered(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from radarsat.geomet import format_utc
 from radarsat.raw_satellite import PublicSatelliteClient
+from radarsat.paths import output_root as default_output_root
 from radarsat.westwx_satellite import (
     DEFAULT_MAX_SOURCE_BYTES,
     BackfillResult,
@@ -31,7 +32,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "bounded North America and BC rapid archive. The default is a dry run."
         )
     )
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument(
         "--cache-root",
         type=Path,

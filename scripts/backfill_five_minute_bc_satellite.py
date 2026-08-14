@@ -17,6 +17,7 @@ from radarsat.five_minute_bc_satellite import (
 )
 from radarsat.geomet import format_utc
 from radarsat.raw_satellite import PublicSatelliteClient
+from radarsat.paths import output_root as default_output_root
 
 
 UTC = dt.timezone.utc
@@ -24,7 +25,7 @@ UTC = dt.timezone.utc
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument("--cache-root", type=Path, default=Path("var/cache/five-minute-bc-satellite"))
     parser.add_argument("--hours", type=float, default=3.0)
     parser.add_argument("--max-frames", type=int, default=2)

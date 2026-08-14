@@ -10,6 +10,7 @@ from pathlib import Path
 from radarsat.catalog import write_catalog
 from radarsat.config import DOMAINS
 from radarsat.pipeline import derive_raw_visir_archive
+from radarsat.paths import output_root as default_output_root
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,7 +20,7 @@ def parse_args() -> argparse.Namespace:
             "without downloading NOAA source files."
         )
     )
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument("--domain", action="append", choices=sorted(DOMAINS), default=[])
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()

@@ -16,6 +16,7 @@ from radarsat.catalog import write_catalog
 from radarsat.config import DOMAINS
 from radarsat.pipeline import LIGHTNING_ARCHIVE_HOURS, derive_lightning_trails
 from radarsat.spool import ingest_spool
+from radarsat.paths import output_root as default_output_root
 
 
 UTC = dt.timezone.utc
@@ -29,7 +30,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Backfill dated ECCC/CLDN GeoTIFFs and rebuild broad-domain lightning."
     )
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument(
         "--spool-root",
         type=Path,

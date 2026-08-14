@@ -9,11 +9,12 @@ import json
 from pathlib import Path
 
 from radarsat.hrdps_contours import DEFAULT_DATA_ROOT, UTC, update_recent
+from radarsat.paths import output_root as default_output_root
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--hours", type=int, default=12)
     parser.add_argument("--domain", action="append", dest="domains")

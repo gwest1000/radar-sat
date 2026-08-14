@@ -31,6 +31,8 @@ def keep_layer_frame(
     if not keep_frame(valid_time, now, tier):
         return False
     age = now - valid_time
+    if layer_id.startswith("glm-lightning-live"):
+        return age <= dt.timedelta(minutes=30)
     if (
         layer_id in ECMWF_CONTOUR_LAYERS
         and age > dt.timedelta(hours=ECMWF_HOURLY_RETENTION_HOURS)

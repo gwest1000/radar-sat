@@ -21,6 +21,7 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /actualSourceTime\(item\.id, item\.frame\)/);
   assert.match(viewer, /RANGE_OPTIONS = \[3, 6, 12, 24, 168\]/);
   assert.match(viewer, /function playbackFrames/);
+  assert.match(viewer, /SAME_SLOT_TOLERANCE_MS/);
   assert.match(viewer, /product\.frameIntervalMinutes/);
   assert.match(viewer, /product\.archiveFrameIntervalMinutes/);
   assert.match(viewer, /return playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
@@ -160,6 +161,10 @@ test("exposes stable layer-control targets for deterministic toggles", async () 
   assert.match(viewer, /data-layer-id=\{layer\.id\}/);
   assert.match(viewer, /id=\{`layer-\$\{product\.id\}-\$\{layer\.id\}`\}/);
   assert.match(viewer, /data-layer-id="radar-rain"|data-layer-id=\{layer\.id\}/);
+  assert.match(viewer, /window\.localStorage\.setItem\(VIEWER_PREFERENCES_KEY/);
+  assert.match(viewer, /effectiveRangeHours\}h-/);
+  assert.match(viewer, /live-edge\.json/);
+  assert.match(viewer, /live-edge-layer/);
 });
 
 test("renders weather-app lightning bolts and wildfire flames from point frames", async () => {

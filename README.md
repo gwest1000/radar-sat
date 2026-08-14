@@ -9,7 +9,8 @@ Public site: <https://gwest1000.github.io/radar-sat/>
 
 ## Launch products
 
-- **Overlay:** BC XL, tightly cropped BC, southwest, southeast and northeast
+- **Overlay:** BC XL, tightly cropped BC, southwest, southeast, northeast, and
+  Southern Vancouver Island / Fraser Valley
   views. Each provides mutually exclusive NOAA VIS/IR and IR plus ECCC VIS/IR,
   IR and convective-sandwich satellite backgrounds; mutually exclusive
   radar/precipitation-type overlays; and independent lightning and wildfire
@@ -50,6 +51,20 @@ by fcstGraphics and downloads only the two intermediate hourly GRIBs. High/low
 centres use smoothed neighborhood extrema, broad-background prominence and
 physical-distance suppression so weak gridscale extrema are not labelled.
 
+## Runtime storage
+
+Machine-level storage is configured once in `~/.config/project-data.env`:
+
+```text
+PROJECT_DATA_ROOT=/Volumes/Greg1_2tb/project-data
+```
+
+Radar-Sat uses `${PROJECT_DATA_ROOT}/radar-sat/data/output`. The
+project-specific `RADARSAT_DATA_ROOT` and `RADARSAT_OUTPUT_ROOT` variables take
+precedence. Without a configured root, development commands fall back to
+`data/output`; a configured but unavailable root fails immediately so a missing
+SSD cannot redirect production output to internal storage.
+
 The browser checks a compact catalog index every minute with an ETag and only
 parses a new index when its generation changes. The index keeps the newest
 ordinary frame per layer plus the current video pointers; the complete image
@@ -57,6 +72,12 @@ catalog is fetched only if video is unavailable or fails. The page does not
 hard-reload, so warmed media and overlay caches survive. A visible window keeps
 looping when another window or application has focus; only a genuinely hidden
 tab pauses playback.
+
+Radar and lightning also have a separate `live-edge.json` path. It is updated
+independently of catalog pruning and video encoding, and replaces the complete
+newest display frame atomically when those observations are newer than the
+historical H.264 loop. GOES-18 GLM uses a rolling one-minute batch south of
+52°N; the ECCC density product supplements it across the rest of Canada.
 
 ## Architecture
 

@@ -267,6 +267,13 @@ LAYERS: dict[str, Layer] = {
         source="NOAA GOES-18",
         max_age_minutes=10,
     ),
+    "glm-lightning-live": Layer(
+        id="glm-lightning-live",
+        title="GOES-18 GLM rolling one-minute total-lightning overlay",
+        source_layer=None,
+        source="NOAA GOES-18",
+        max_age_minutes=3,
+    ),
     "glm-lightning-points": Layer(
         id="glm-lightning-points",
         title="GOES-18 GLM 10-minute total-lightning display points",
@@ -428,6 +435,11 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     "southwest": {"left": 0.3381, "top": 0.5300, "width": 0.4048, "height": 0.3438},
     "southeast": {"left": 0.5268, "top": 0.4854, "width": 0.4050, "height": 0.3473},
     "northeast": {"left": 0.3946, "top": 0.1525, "width": 0.5020, "height": 0.4422},
+    # Southern Vancouver Island through Greater Vancouver and the Fraser
+    # Valley.  The modest margins retain the Olympic Peninsula and adjacent
+    # Coast Mountains while keeping the useful source pixels concentrated on
+    # the operational corridor.
+    "south-coast": {"left": 0.5080, "top": 0.6870, "width": 0.1620, "height": 0.1480},
 }
 
 # BC XL already uses the complete east/west source raster. A modest vertical
@@ -445,6 +457,7 @@ for _region_id in VIEWPORTS:
         ("lightning-trail", "CLDN 30-minute age trail", 30),
         ("lightning-hour", "CLDN hourly lightning aggregate", 70),
         ("lightning-flash", "CLDN newest-lightning arrival flash", 6),
+        ("glm-lightning-live", "GLM rolling one-minute lightning", 3),
         ("hotspots", "Active-wildfire and thermal-hotspot overlay", 30),
     ):
         _layer_id = regional_layer_id(_base_layer_id, _region_id)
@@ -452,7 +465,13 @@ for _region_id in VIEWPORTS:
             id=_layer_id,
             title=f"{_title} · {_region_id} crop",
             source_layer=None,
-            source="NRCan CWFIS" if _base_layer_id == "hotspots" else "ECCC GeoMet",
+            source=(
+                "NRCan CWFIS"
+                if _base_layer_id == "hotspots"
+                else "NOAA GOES-18"
+                if _base_layer_id == "glm-lightning-live"
+                else "ECCC GeoMet"
+            ),
             max_age_minutes=_max_age,
         )
     for _base_layer_id, _title in (
@@ -625,6 +644,14 @@ PRODUCTS: list[dict[str, object]] = [
     _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"], five_minute=True, max_hours=168),
     _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"], five_minute=True, max_hours=168),
     _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"], max_hours=168),
+    _overlay_product(
+        "bc-south-coast-overlay",
+        "Southern Vancouver Island / Fraser Valley",
+        "S VI/FV",
+        VIEWPORTS["south-coast"],
+        five_minute=True,
+        max_hours=168,
+    ),
     _broad_product(
         "pacific-wna-overlay",
         "Eastern Pacific / Western North America",

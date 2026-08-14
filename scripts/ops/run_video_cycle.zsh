@@ -4,10 +4,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${PROJECT_ROOT}/scripts/ops/runtime_paths.zsh"
 STATE_ROOT="${RADARSAT_STATE_ROOT:-${PROJECT_ROOT}/var}"
-OUTPUT_ROOT="${RADARSAT_OUTPUT_ROOT:-${PROJECT_ROOT}/data/output}"
-PYTHON_BIN="${RADARSAT_PYTHON:-${PROJECT_ROOT}/.venv/bin/python}"
-LOCK_DIR="${STATE_ROOT}/run/video-cycle.lock"
+VIDEO_TRACK="${RADARSAT_VIDEO_TRACK:-live}"
+if [[ "${VIDEO_TRACK}" != "live" && "${VIDEO_TRACK}" != "archive" ]]; then
+  print -u2 "RADARSAT_VIDEO_TRACK must be live or archive."
+  exit 2
+fi
+LOCK_DIR="${STATE_ROOT}/run/video-${VIDEO_TRACK}-cycle.lock"
 LOCK_OWNER="${LOCK_DIR}/pid"
 
 mkdir -p "${STATE_ROOT}/run" "${STATE_ROOT}/status" "${PROJECT_ROOT}/logs"
@@ -37,12 +41,6 @@ trap release_lock EXIT
 trap 'release_lock; exit 130' INT
 trap 'release_lock; exit 143' TERM
 
-ENV_FILE="${RADARSAT_ENV_FILE:-${PROJECT_ROOT}/.env}"
-if [[ -f "${ENV_FILE}" ]]; then
-  set -a
-  source "${ENV_FILE}"
-  set +a
-fi
 export PYTHONPATH="${PROJECT_ROOT}"
 
 if [[ "${RADARSAT_VIDEO_ENABLED:-${RADARSAT_H264_PILOT_ENABLED:-0}}" != "1" ]]; then
@@ -82,7 +80,7 @@ run_parallel_video_groups() {
   local bc_pid=0 north_america_pid=0 pacific_pid=0 build_status=0
   run_video_group "${track}" "${bc_layers}" \
     bc-large-overlay bc-small-overlay bc-southwest-overlay \
-    bc-southeast-overlay bc-northeast-overlay &
+    bc-southeast-overlay bc-northeast-overlay bc-south-coast-overlay &
   bc_pid=$!
   run_video_group "${track}" "${north_america_layers}" north-america-overlay &
   north_america_pid=$!
@@ -92,17 +90,19 @@ run_parallel_video_groups() {
   wait "${bc_pid}" || build_status=1
   wait "${north_america_pid}" || build_status=1
   wait "${pacific_pid}" || build_status=1
-  "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_satellite_video.py" \
-    --source-root "${OUTPUT_ROOT}" \
-    --output-root "${OUTPUT_ROOT}" \
-    --prune-shared-only || build_status=1
+  if [[ "${track}" == "live" ]]; then
+    "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/build_satellite_video.py" \
+      --source-root "${OUTPUT_ROOT}" \
+      --output-root "${OUTPUT_ROOT}" \
+      --prune-shared-only || build_status=1
+  fi
   return "${build_status}"
 }
 
 publish_video_catalog() {
   "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
   "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" \
-    --fast --whole-frame-only --recovery-hours 6
+    --fast --whole-frame-only --recovery-hours 24
 }
 
 run_video_phase() {
@@ -115,39 +115,10 @@ run_video_phase() {
   return "${phase_status}"
 }
 
-# Publish the operational defaults first. The former all-layer live pass held
-# this lock for hours, leaving the default H.264 loop stale and forcing clients
-# onto the substantially heavier lossless-image fallback.
-if ! run_video_phase live \
+# Live and archive are deliberately separate launchd jobs and locks. Archive
+# maintenance can therefore never delay a newly ingested operational frame.
+if ! run_video_phase "${VIDEO_TRACK}" \
   "raw-visir,raw-visir-5min" "westwx-visir" "raw-visir"; then
-  print -u2 "Default live H.264 refresh failed; retaining last-good profiles."
+  print -u2 "Default ${VIDEO_TRACK} H.264 refresh failed; retaining last-good profiles."
   exit 1
-fi
-
-# Archive video changes only on the hourly timeline. Refresh it at most once
-# per hour. The next due time is measured from archive completion.
-archive_stamp="${STATE_ROOT}/state/video-archive-completed-epoch"
-current_epoch="$(date '+%s')"
-previous_archive_epoch=0
-[[ -r "${archive_stamp}" ]] && IFS= read -r previous_archive_epoch < "${archive_stamp}"
-[[ "${previous_archive_epoch}" == <-> ]] || previous_archive_epoch=0
-if (( current_epoch - previous_archive_epoch >= 3600 )); then
-  if ! run_video_phase archive \
-    "raw-visir,raw-visir-5min" "westwx-visir" "raw-visir"; then
-    print -u2 "Warning: default archive H.264 refresh was partial; retaining last-good profiles."
-  fi
-
-  # Gate the next archive from completion, not start. An archive crossing an
-  # UTC hour boundary must not immediately trigger another archive pass.
-  archive_stamp_tmp="${archive_stamp}.tmp.$$"
-  mkdir -p "${archive_stamp:h}"
-  print -r -- "$(date '+%s')" > "${archive_stamp_tmp}"
-  mv -f "${archive_stamp_tmp}" "${archive_stamp}"
-
-  # Always finish archive maintenance with a current live snapshot. This is a
-  # cheap no-op when source fingerprints did not advance, and essential when
-  # archive encoding held the sole cycle lock across one or more ingests.
-  run_video_phase live \
-    "raw-visir,raw-visir-5min" "westwx-visir" "raw-visir" \
-    || print -u2 "Warning: final default-live catch-up was partial."
 fi

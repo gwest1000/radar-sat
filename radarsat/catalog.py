@@ -22,6 +22,7 @@ PUBLIC_VIDEO_LAYERS = {
     "bc-southwest-overlay": "raw-visir-5min",
     "bc-southeast-overlay": "raw-visir-5min",
     "bc-northeast-overlay": "raw-visir",
+    "bc-south-coast-overlay": "raw-visir-5min",
     "north-america-overlay": "westwx-visir",
     "pacific-wna-overlay": "raw-visir",
     "north-pacific-overlay": "raw-visir",

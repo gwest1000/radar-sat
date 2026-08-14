@@ -6,13 +6,14 @@ import json
 from pathlib import Path
 
 from radarsat.r2 import R2Config, publish, write_publish_error
+from radarsat.paths import output_root as default_output_root
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Publish a validated Radar-Sat archive to Cloudflare R2."
     )
-    parser.add_argument("--root", type=Path, default=Path("data/output"))
+    parser.add_argument("--root", type=Path, default=default_output_root())
     parser.add_argument(
         "--state-path", type=Path, default=Path("var/state/r2-publish.sqlite3")
     )

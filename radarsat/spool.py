@@ -501,6 +501,7 @@ def ingest_spool(
     *,
     now: dt.datetime | None = None,
     include_layers: Iterable[str] | None = None,
+    discovered: tuple[Iterable[NativeFile], Iterable[str]] | None = None,
 ) -> SpoolIngestResult:
     """Render selected native observations without moving or deleting raw files."""
     # Import archive helpers lazily so ``pipeline`` can call this module without
@@ -513,7 +514,15 @@ def ingest_spool(
     )
 
     result = SpoolIngestResult()
-    files, result.rejected = discover_spool(spool_root, now=now)
+    if discovered is None:
+        files, rejected = discover_spool(spool_root, now=now)
+    else:
+        files, rejected = discovered
+    # Each concurrent domain render owns its result containers, while the
+    # immutable discovery result can be shared.  This avoids rescanning nearly
+    # two thousand spool files once per domain on every lightning hot cycle.
+    files = list(files)
+    result.rejected = list(rejected)
     result.preserve_files.update(
         reason.split(":", 1)[0].strip() for reason in result.rejected if reason.strip()
     )

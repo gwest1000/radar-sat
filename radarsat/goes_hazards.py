@@ -43,6 +43,19 @@ class GLMWindow:
 
 
 @dataclass(frozen=True)
+class GLMBatch:
+    objects: tuple[PublicObject, ...]
+
+    @property
+    def start_time(self) -> dt.datetime:
+        return self.objects[0].valid_time
+
+    @property
+    def end_time(self) -> dt.datetime:
+        return self.objects[-1].valid_time + dt.timedelta(seconds=20)
+
+
+@dataclass(frozen=True)
 class SmokeProduct:
     # 255 means unavailable, 0 means no smoke detection, 1 means medium,
     # 2 means high and 3 means low confidence.
@@ -179,6 +192,31 @@ class GoesHazardClient(PublicSatelliteClient):
             if all(value in by_time for value in expected):
                 return GLMWindow(start_time, tuple(by_time[value] for value in expected))
         raise RuntimeError("No complete 30-file GOES-18 GLM ten-minute window was found")
+
+    def latest_glm_batch(
+        self,
+        now: dt.datetime | None = None,
+        *,
+        file_count: int = 3,
+    ) -> GLMBatch:
+        """Return the newest consecutive 20-second GLM files.
+
+        Three files form the rolling one-minute hot layer.  Historical loop
+        products continue to use complete ten-minute windows, so a partial
+        public feed cannot introduce gaps into the archive.
+        """
+        if not 1 <= file_count <= EXPECTED_GLM_FILES_PER_WINDOW:
+            raise ValueError("GLM batch file_count must be between 1 and 30")
+        current = (now or dt.datetime.now(UTC)).astimezone(UTC)
+        by_time = {item.valid_time: item for item in self._objects(GLM_PRODUCT, current)}
+        for end_start in sorted(by_time, reverse=True):
+            expected = tuple(
+                end_start - dt.timedelta(seconds=20 * offset)
+                for offset in reversed(range(file_count))
+            )
+            if all(value in by_time for value in expected):
+                return GLMBatch(tuple(by_time[value] for value in expected))
+        raise RuntimeError(f"No complete {file_count}-file GOES-18 GLM batch was found")
 
 
 def classify_smoke(

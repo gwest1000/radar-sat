@@ -47,6 +47,20 @@ def _filter_sr_proc_case_insensitive_python(self, process: dict) -> None:
         # Excluding every concurrent invocation keeps a supervisor sanity pass
         # from appearing as a sixth process (or as a transient stray) in status.
         return
+    if len(command) > 1 and os.path.basename(command[1]) == "instance.py":
+        try:
+            start_index = command.index("start", 2)
+        except ValueError:
+            pass
+        else:
+            if "sanity" not in command[2:start_index]:
+                # Process discovery recognizes workers spawned by ``sanity``
+                # but can misclassify the equivalent workers from ``start``.
+                # Normalize the inspected copy only; the worker's real argv is
+                # unchanged and still contains the parser-valid action.
+                command = command.copy()
+                command.insert(start_index, "sanity")
+                process["cmdline"] = command
     name = process.get("name", "")
     if "python" in name.lower():
         process["name"] = name.lower()

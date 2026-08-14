@@ -8,7 +8,20 @@ AGENT_DIR="${HOME}/Library/LaunchAgents"
 
 mkdir -p "${AGENT_DIR}" "${PROJECT_ROOT}/logs" "${PROJECT_ROOT}/var/status"
 
-for name in ingest five-minute observations video archive health; do
+available=(ingest five-minute observations lightning-edge radar-edge video video-archive archive health)
+selected=("${available[@]}")
+if (( $# )); then
+  selected=()
+  for requested in "$@"; do
+    if (( ! ${available[(Ie)${requested}]} )); then
+      print -u2 "Unknown Radar-Sat launch agent: ${requested}"
+      exit 2
+    fi
+    selected+=("${requested}")
+  done
+fi
+
+for name in "${selected[@]}"; do
   label="com.greg.radar-sat.${name}"
   template="${PROJECT_ROOT}/ops/${label}.plist.template"
   target="${AGENT_DIR}/${label}.plist"
@@ -28,5 +41,5 @@ for name in ingest five-minute observations video archive health; do
   launchctl enable "gui/${UID}/${label}"
 done
 
-print "Installed Radar-Sat full-disk (3 min), five-minute BC (3 min), observations (5 min), video (10 min), archive (30 min), and health (15 min) launch agents."
-launchctl print "gui/${UID}/com.greg.radar-sat.ingest" | head -30
+print "Installed Radar-Sat launch agents: ${selected[*]}"
+launchctl print "gui/${UID}/com.greg.radar-sat.${selected[1]}" | head -30

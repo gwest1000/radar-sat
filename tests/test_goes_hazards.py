@@ -106,6 +106,23 @@ class HazardDiscoveryTests(unittest.TestCase):
         self.assertEqual(window.start_time, VALID)
         self.assertEqual(len(window.objects), 30)
 
+    def test_glm_live_batch_uses_newest_three_consecutive_files(self) -> None:
+        prefix = f"{GLM_PRODUCT}/2026/202/06/"
+        objects: list[tuple[str, int]] = []
+        for index in range(6):
+            source_time = VALID + dt.timedelta(seconds=20 * index)
+            stamp = source_time.strftime("%Y%j%H%M%S") + "0"
+            objects.append((prefix + f"OR_GLM-L2-LCFA_G18_s{stamp}_e.nc", 100))
+        client = DiscoveryClient({prefix: objects})
+
+        batch = client.latest_glm_batch(
+            dt.datetime(2026, 7, 21, 6, 42, tzinfo=UTC), file_count=3
+        )
+
+        self.assertEqual(len(batch.objects), 3)
+        self.assertEqual(batch.start_time, VALID + dt.timedelta(seconds=60))
+        self.assertEqual(batch.end_time, VALID + dt.timedelta(seconds=120))
+
 
 class HazardDecodeTests(unittest.TestCase):
     def test_smoke_classification_keeps_low_medium_and_high_daylight_clear_pixels(self) -> None:

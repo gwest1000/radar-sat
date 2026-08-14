@@ -13,6 +13,22 @@ objects are deleted only after the catalog commit and only when their timestamps
 independently violate the local retention policy. A 9-day R2 lifecycle rule is
 the final backstop.
 
+## Low-latency edge
+
+Lightning and radar do not wait for the monolithic observation catalog. The
+`lightning-edge` agent runs each minute, discovers the ECCC spool once for all
+three domains, and renders a rolling three-file (about one-minute) GOES-18 GLM
+batch. The `radar-edge` agent checks the ECCC GeoMet composite every two
+minutes. Both publish only changed transparent rasters followed by the tiny
+`live-edge.json` commit pointer. The browser polls that pointer every 30
+seconds and uses it only for the newest frame; historical playback remains
+time-matched to the immutable video manifest.
+
+Live and archive video are also separate jobs and locks. The ten-minute live
+job cannot be blocked by the low-priority hourly archive encoder. Ordinary
+fast publications expose a 24-hour recovery catalog, so all 6-, 12-, and
+24-hour choices remain available even if video decoding is unsupported.
+
 ## Display-resolution H.264 loops
 
 The optional video path accelerates the default satellite background in every loop domain. It does not encode
@@ -98,10 +114,16 @@ scripts/ops/store_r2_credentials.zsh
 ```bash
 scripts/ops/setup_local.zsh
 scripts/ops/store_r2_credentials.zsh
-PYTHONPATH=. .venv/bin/python scripts/run_ingest.py --output-root data/output --domain bc --hours 168
-PYTHONPATH=. .venv/bin/python scripts/publish_r2.py --root data/output --dry-run
-PYTHONPATH=. .venv/bin/python scripts/publish_r2.py --root data/output
+PYTHONPATH=. .venv/bin/python scripts/run_ingest.py --domain bc --hours 168
+PYTHONPATH=. .venv/bin/python scripts/publish_r2.py --dry-run
+PYTHONPATH=. .venv/bin/python scripts/publish_r2.py
 scripts/ops/install_launchd.zsh
+```
+
+Pass one or more agent names to update only those jobs, for example:
+
+```bash
+scripts/ops/install_launchd.zsh lightning-edge radar-edge video-archive
 ```
 
 The production bucket already has site CORS and a nine-day `frames/` lifecycle
@@ -117,11 +139,13 @@ the dedicated bucket before every commit so the guard includes orphaned and
 out-of-band objects, not just the local archive.
 
 Health state is written to `var/status/health.json`; ingest and publication state
-are in `data/output/status/ingest.json` and `var/status/publish.json`. Run the
+are in `${PROJECT_DATA_ROOT}/radar-sat/data/output/status/ingest.json` and
+`var/status/publish.json`. Without a shared root, the output path falls back to
+`data/output`. Run the
 checker directly with:
 
 ```bash
-PYTHONPATH=. .venv/bin/python scripts/check_health.py --root data/output
+PYTHONPATH=. .venv/bin/python scripts/check_health.py
 ```
 
 `RADARSAT_SPOOL_ROOT` defaults to

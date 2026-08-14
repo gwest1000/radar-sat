@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from radarsat.geomet import format_utc
+from radarsat.paths import output_root as default_output_root
 from radarsat.noaa_star_geocolor import (
     DEFAULT_MAX_SOURCE_BYTES,
     SECTORS,
@@ -27,7 +28,7 @@ UTC = dt.timezone.utc
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sector", choices=sorted(SECTORS), required=True)
-    parser.add_argument("--output-root", type=Path, default=Path("data/output"))
+    parser.add_argument("--output-root", type=Path, default=default_output_root())
     parser.add_argument("--cache-root", type=Path, default=Path("var/cache/noaa-star-geocolor"))
     parser.add_argument("--hours", type=float, default=3.0)
     parser.add_argument("--max-frames", type=int, default=2)
