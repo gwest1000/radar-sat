@@ -2214,6 +2214,19 @@ export function RadarViewer() {
   const isAnimating = playing && pageVisible && anchorFrames.length > 1;
   const anchor = anchorFrames[currentFrameIndex];
   const displayAnchor = showLiveEdge && liveEdgeState.anchor ? liveEdgeState.anchor : anchor;
+  useEffect(() => {
+    if (!showLiveEdge || !displayAnchor || !product) return;
+    if (validLineRef.current) {
+      validLineRef.current.textContent = `VALID ${utcClock(displayAnchor.validTime)} UTC · ${localClock(displayAnchor.validTime)}`;
+    }
+    if (sourceTimesRef.current) sourceTimesRef.current.textContent = liveEdgeSourceTimes;
+    if (mapStageRef.current) {
+      mapStageRef.current.setAttribute(
+        "aria-label",
+        `${product.title}, valid ${utcClock(displayAnchor.validTime)} UTC. ${liveEdgeSourceTimes}`,
+      );
+    }
+  }, [displayAnchor, liveEdgeSourceTimes, product, showLiveEdge]);
   const lightningController = product?.layers.find((recipe) => LIGHTNING_CONTROLLERS.has(recipe.id));
   const lightningPointsId = lightningController ? pointLayerId(lightningController.id) : undefined;
   // GOES-18 GLM has the same physical coverage in both broad views. Reuse the
