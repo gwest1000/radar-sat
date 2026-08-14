@@ -22,6 +22,7 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /RANGE_OPTIONS = \[3, 6, 12, 24, 168\]/);
   assert.match(viewer, /function playbackFrames/);
   assert.match(viewer, /SAME_SLOT_TOLERANCE_MS/);
+  assert.match(viewer, /const frame = selectedFrame \?\?/);
   assert.match(viewer, /product\.frameIntervalMinutes/);
   assert.match(viewer, /product\.archiveFrameIntervalMinutes/);
   assert.match(viewer, /return playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);

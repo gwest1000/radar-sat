@@ -953,6 +953,7 @@ function composeLayers(
     }
     let dynamicLayer = domain.layers[renderedLayerId];
     let frames = dynamicLayer?.frames ?? [];
+    let selectedFrame: Frame | undefined;
     if (product.domain === "bc" && recipe.id === "raw-visir-5min") {
       const rapidLayer = domain.layers["raw-visir-5min"];
       const rapidFrame = atOrBefore(
@@ -985,15 +986,16 @@ function composeLayers(
       ));
       if (candidates[0]?.layer) {
         dynamicLayer = candidates[0].layer;
-        frames = [candidates[0].frame];
+        selectedFrame = candidates[0].frame;
+        frames = [selectedFrame];
       }
     }
     // Trail rasters are regenerated on the radar clock, but their actual
     // observations are ten-minute lightning intervals. Select them by that
     // source interval so VALID and the 0–10/10–20/20–30 minute bins agree.
-    const frame = LIGHTNING_CONTROLLERS.has(recipe.id)
+    const frame = selectedFrame ?? (LIGHTNING_CONTROLLERS.has(recipe.id)
       ? atOrBeforeSourceTime(renderedLayerId, frames, anchor.validTime, dynamicLayer?.maxAgeMinutes)
-      : atOrBefore(frames, anchor.validTime, dynamicLayer?.maxAgeMinutes);
+      : atOrBefore(frames, anchor.validTime, dynamicLayer?.maxAgeMinutes));
     if (!frame) return [];
     const result: ComposedLayer[] = [{
       id: recipe.id,
