@@ -1662,6 +1662,7 @@ export function RadarViewer() {
           .filter((value, index, all) => all.indexOf(value) === index);
         let firstFailure: unknown;
         let lastFailure: unknown;
+        const failureDetails: string[] = [];
         for (const resolved of candidates) {
           try {
             const previousEtag = catalogEtags.get(resolved);
@@ -1760,7 +1761,12 @@ export function RadarViewer() {
           } catch (reason) {
             firstFailure ??= reason;
             lastFailure = reason;
+            const detail = reason instanceof Error ? reason.message : String(reason);
+            failureDetails.push(`${new URL(resolved).host}: ${detail}`);
           }
+        }
+        if (failureDetails.length) {
+          throw new Error(`Catalog endpoints failed — ${failureDetails.join(" · ")}`);
         }
         throw firstFailure ?? lastFailure ?? new Error("No loop catalog is configured.");
       } catch (reason) {

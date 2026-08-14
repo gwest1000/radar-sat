@@ -266,6 +266,7 @@ test("keeps a compact desktop control rail and gives the map the remaining width
 
 test("ships a runtime data configuration", async () => {
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const config = JSON.parse(await readFile(new URL("../public/config.json", import.meta.url), "utf8"));
   assert.equal(typeof config.catalogIndexUrl, "string");
   assert.equal(typeof config.catalogUrl, "string");
@@ -273,6 +274,8 @@ test("ships a runtime data configuration", async () => {
   assert.match(viewer, /catalog\?\.catalogMode !== "index"/);
   assert.match(viewer, /Retrying automatically/);
   assert.match(viewer, /window\.setTimeout\(\(\) =>/);
+  assert.match(viewer, /Catalog endpoints failed/);
+  assert.match(styles, /@media \(max-width: 840px\)[\s\S]*\.product-switcher \.selector-options,[\s\S]*top: calc\(100% - 1px\)/);
   await access(new URL("../out/config.json", import.meta.url));
   await access(new URL("../out/demo/catalog.json", import.meta.url));
   const demo = JSON.parse(await readFile(new URL("../public/demo/catalog.json", import.meta.url), "utf8"));

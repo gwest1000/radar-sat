@@ -1222,6 +1222,13 @@ input:focus-visible {
     margin-bottom: 8px;
   }
 
+  .product-switcher .selector-options,
+  .range-selector .selector-options {
+    top: calc(100% - 1px);
+    bottom: auto;
+    transform-origin: top center;
+  }
+
   .legend-rail {
     display: flex;
     flex-wrap: wrap;
@@ -1272,12 +1279,6 @@ input:focus-visible {
     top: calc(100% - 1px);
     left: 0;
     max-width: calc(100vw - 18px);
-  }
-
-  .product-switcher .selector-options,
-  .range-selector .selector-options {
-    top: calc(100% - 1px);
-    bottom: auto;
   }
 
   .expanding-selector:hover .selector-options,
