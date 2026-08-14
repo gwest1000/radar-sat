@@ -131,6 +131,7 @@ type Legend = {
 type Catalog = {
   schemaVersion: number;
   generatedAt: string;
+  assetBaseUrl?: string;
   catalogMode?: "index" | "full";
   fullCatalogPath?: string;
   domains: Record<string, Domain>;
@@ -1651,7 +1652,11 @@ export function RadarViewer() {
         const configResponse = await fetch("config.json", { cache: "no-store" });
         if (!configResponse.ok) throw new Error("Site configuration is unavailable.");
         const config = (await configResponse.json()) as SiteConfig;
-        const candidates = [config.catalogIndexUrl, config.catalogUrl, config.fallbackCatalogUrl]
+        // If the small operational index is unavailable, use the same-origin
+        // last-good index before trying the multi-megabyte full R2 catalog.
+        // This avoids making startup depend on two consecutive requests to
+        // the rate-limited r2.dev endpoint.
+        const candidates = [config.catalogIndexUrl, config.fallbackCatalogUrl, config.catalogUrl]
           .filter((value): value is string => Boolean(value))
           .map((value) => absoluteUrl(value, configResponse.url))
           .filter((value, index, all) => all.indexOf(value) === index);
@@ -1688,7 +1693,11 @@ export function RadarViewer() {
                 retryTimer = undefined;
               }
               setCatalog(nextCatalog);
-              setCatalogBase(resolved);
+              setCatalogBase(
+                nextCatalog.assetBaseUrl
+                  ? absoluteUrl(nextCatalog.assetBaseUrl, resolved)
+                  : resolved,
+              );
               let stored: Partial<ViewerPreferences> = {};
               if (!initialized) {
                 try {
