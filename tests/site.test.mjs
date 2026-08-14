@@ -271,6 +271,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(typeof config.catalogUrl, "string");
   assert.match(viewer, /config\.catalogIndexUrl, config\.catalogUrl, config\.fallbackCatalogUrl/);
   assert.match(viewer, /catalog\?\.catalogMode !== "index"/);
+  assert.match(viewer, /Retrying automatically/);
+  assert.match(viewer, /window\.setTimeout\(\(\) =>/);
   await access(new URL("../out/config.json", import.meta.url));
   await access(new URL("../out/demo/catalog.json", import.meta.url));
   const demo = JSON.parse(await readFile(new URL("../public/demo/catalog.json", import.meta.url), "utf8"));

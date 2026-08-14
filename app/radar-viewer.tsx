@@ -1641,6 +1641,7 @@ export function RadarViewer() {
     let cancelled = false;
     let initialized = false;
     let loading = false;
+    let retryTimer: number | undefined;
     const catalogEtags = new Map<string, string>();
     const catalogGenerations = new Map<string, string>();
     async function load() {
@@ -1654,6 +1655,7 @@ export function RadarViewer() {
           .filter((value): value is string => Boolean(value))
           .map((value) => absoluteUrl(value, configResponse.url))
           .filter((value, index, all) => all.indexOf(value) === index);
+        let firstFailure: unknown;
         let lastFailure: unknown;
         for (const resolved of candidates) {
           try {
@@ -1681,6 +1683,10 @@ export function RadarViewer() {
             catalogGenerations.set(resolved, nextCatalog.generatedAt);
             if (initialized && previousGeneration === nextCatalog.generatedAt) return;
             if (!cancelled) {
+              if (retryTimer !== undefined) {
+                window.clearTimeout(retryTimer);
+                retryTimer = undefined;
+              }
               setCatalog(nextCatalog);
               setCatalogBase(resolved);
               let stored: Partial<ViewerPreferences> = {};
@@ -1743,13 +1749,21 @@ export function RadarViewer() {
             }
             return;
           } catch (reason) {
+            firstFailure ??= reason;
             lastFailure = reason;
           }
         }
-        throw lastFailure ?? new Error("No loop catalog is configured.");
+        throw firstFailure ?? lastFailure ?? new Error("No loop catalog is configured.");
       } catch (reason) {
         if (!cancelled && !initialized) {
-          setError(reason instanceof Error ? reason.message : "Unable to load Radar-Sat.");
+          const detail = reason instanceof Error ? reason.message : "Unable to load Radar-Sat.";
+          setError(`${detail} Retrying automatically…`);
+          if (retryTimer === undefined) {
+            retryTimer = window.setTimeout(() => {
+              retryTimer = undefined;
+              void load();
+            }, 3_000);
+          }
         }
       } finally {
         loading = false;
@@ -1760,6 +1774,7 @@ export function RadarViewer() {
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, []);
 
