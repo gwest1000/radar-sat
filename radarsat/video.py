@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlencode
@@ -181,13 +182,13 @@ def _media_geometry(
     if track == "archive" and domain_id == "bc" and source_width > 1600:
         source_height = _even(source_height * 1600 / source_width)
         source_width = 1600
-    elif track == "live" and layer_id == "eccc-geocolor" and source_width > 2400:
+    elif track in {"live", "day"} and layer_id == "eccc-geocolor" and source_width > 2400:
         source_height = _even(source_height * 2400 / source_width)
         source_width = 2400
     if (
         domain_id == "bc"
         and layer_id == "raw-visir"
-        and track == "live"
+        and track in {"live", "day"}
         and product_id in REGIONAL_PRODUCT_KEYS
     ):
         viewport = dict(
@@ -200,7 +201,7 @@ def _media_geometry(
     if (
         domain_id == "bc"
         and layer_id == "raw-visir-5min"
-        and track == "live"
+        and track in {"live", "day"}
         and product_id in REGIONAL_PRODUCT_KEYS
     ):
         viewport = BC_REGIONAL_MEDIA_VIEWPORT
@@ -213,7 +214,7 @@ def _media_geometry(
     if (
         domain_id == "bc"
         and layer_id == "raw-visir"
-        and track == "live"
+        and track in {"live", "day"}
         and product_id == "bc-large-overlay"
     ):
         viewport = dict(
@@ -248,6 +249,7 @@ def _all_profiles() -> tuple[ProfileSpec, ...]:
         for layer_id in satellite_layers:
             for track, cadence in (
                 ("live", int(product.get("frameIntervalMinutes", 10))),
+                ("day", int(product.get("dayFrameIntervalMinutes", 30))),
                 ("archive", int(product.get("archiveFrameIntervalMinutes", 60))),
             ):
                 media_group, media_viewport, media_width, media_height = _media_geometry(
@@ -477,7 +479,11 @@ def _selected_satellite_frames(
     )
     selected: list[SelectedFrame] = []
     for valid_time in _timeline(anchor_frames, spec.cadence_minutes, hours):
-        if spec.domain_id == "bc" and spec.layer_id == "raw-visir" and spec.track == "live":
+        if (
+            spec.domain_id == "bc"
+            and spec.layer_id == "raw-visir"
+            and spec.track in {"live", "day"}
+        ):
             native = _nearest(native_frames, valid_time, 2) or _at_or_before(
                 native_frames, valid_time, 25
             )
@@ -558,7 +564,9 @@ def _selected_satellite_frames(
                 else 25
                 if previous.encoded_source_layer == "raw-visir-native"
                 else 90
-                if spec.domain_id == "bc" and spec.layer_id == "raw-visir" and spec.track == "live"
+                if spec.domain_id == "bc"
+                and spec.layer_id == "raw-visir"
+                and spec.track in {"live", "day"}
                 else broad_max_age
             )
             if (
@@ -1557,6 +1565,49 @@ def _load_index(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _update_profile_index(
+    index_path: Path,
+    spec: ProfileSpec,
+    generated_at: str,
+    profile: Mapping[str, str],
+) -> None:
+    """Merge one track pointer without racing the other encoder jobs."""
+    lock_path = index_path.with_name(f".{index_path.name}.lock")
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            lock_path.mkdir(parents=True)
+            break
+        except FileExistsError:
+            try:
+                stale = time.time() - lock_path.stat().st_mtime > 300
+                if stale:
+                    lock_path.rmdir()
+                    continue
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"Timed out updating video index: {index_path}")
+            time.sleep(0.05)
+    try:
+        current = _load_index(index_path)
+        profiles = dict(current.get("profiles", {}))
+        profiles[spec.track] = dict(profile)
+        pointer = {
+            "schemaVersion": VIDEO_SCHEMA_VERSION,
+            "productId": spec.product_id,
+            "layerId": spec.layer_id,
+            "updatedAt": generated_at,
+            "profiles": profiles,
+        }
+        _atomic_json(index_path, pointer)
+    finally:
+        try:
+            lock_path.rmdir()
+        except OSError:
+            pass
+
+
 def _manifest_dependencies(output_root: Path, manifests: Iterable[Path]) -> set[Path]:
     dependencies: set[Path] = set()
     for manifest_path in manifests:
@@ -2036,19 +2087,15 @@ def build_profile(
     if not manifest_path.is_file():
         _atomic_json(manifest_path, manifest)
 
-    profiles = dict(current_index.get("profiles", {}))
-    profiles[spec.track] = {
-        "generation": generation,
-        "manifestPath": manifest_path.relative_to(output_root).as_posix(),
-    }
-    pointer = {
-        "schemaVersion": VIDEO_SCHEMA_VERSION,
-        "productId": spec.product_id,
-        "layerId": spec.layer_id,
-        "updatedAt": generated_at,
-        "profiles": profiles,
-    }
-    _atomic_json(index_path, pointer)
+    _update_profile_index(
+        index_path,
+        spec,
+        generated_at,
+        {
+            "generation": generation,
+            "manifestPath": manifest_path.relative_to(output_root).as_posix(),
+        },
+    )
     return {
         "status": "built",
         "productId": spec.product_id,
@@ -2096,8 +2143,8 @@ def build_satellite_videos(
     unknown_layers = requested_layers.difference(spec.layer_id for spec in VIDEO_PROFILES)
     if unknown_layers:
         raise ValueError(f"Unsupported video layers: {sorted(unknown_layers)}")
-    requested_tracks = set(track_names or ("live", "archive"))
-    unknown_tracks = requested_tracks.difference({"live", "archive"})
+    requested_tracks = set(track_names or ("live", "day", "archive"))
+    unknown_tracks = requested_tracks.difference({"live", "day", "archive"})
     if unknown_tracks:
         raise ValueError(f"Unsupported video tracks: {sorted(unknown_tracks)}")
     catalog = build_catalog(source_root)
@@ -2124,7 +2171,11 @@ def build_satellite_videos(
                     catalog,
                     spec,
                     ffmpeg=executable,
-                    hours=min(hours, 24.0) if spec.track == "live" else min(archive_hours, 168.0),
+                    hours=(
+                        min(hours, 24.0)
+                        if spec.track in {"live", "day"}
+                        else min(archive_hours, 168.0)
+                    ),
                     now=now,
                     proxy_selection_cache=proxy_selection_cache,
                     proxy_render_cache=proxy_render_cache,

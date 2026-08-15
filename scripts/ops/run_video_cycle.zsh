@@ -7,8 +7,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${PROJECT_ROOT}/scripts/ops/runtime_paths.zsh"
 STATE_ROOT="${RADARSAT_STATE_ROOT:-${PROJECT_ROOT}/var}"
 VIDEO_TRACK="${RADARSAT_VIDEO_TRACK:-live}"
-if [[ "${VIDEO_TRACK}" != "live" && "${VIDEO_TRACK}" != "archive" ]]; then
-  print -u2 "RADARSAT_VIDEO_TRACK must be live or archive."
+if [[ "${VIDEO_TRACK}" != "live" && "${VIDEO_TRACK}" != "day" && "${VIDEO_TRACK}" != "archive" ]]; then
+  print -u2 "RADARSAT_VIDEO_TRACK must be live, day, or archive."
   exit 2
 fi
 LOCK_DIR="${STATE_ROOT}/run/video-${VIDEO_TRACK}-cycle.lock"

@@ -17,8 +17,10 @@ from PIL import Image, ImageDraw
 from radarsat.video import (
     ProfileSpec,
     VIDEO_FRAME_RATE,
+    VIDEO_PROFILES,
     _render_proxy,
     _selected_satellite_frames,
+    _update_profile_index,
     build_profile,
     build_satellite_videos,
     prune_local_video_orphans,
@@ -48,6 +50,55 @@ def write_rgba(path: Path, colour: tuple[int, int, int, int], size: tuple[int, i
 
 
 class VideoSelectionTests(unittest.TestCase):
+    def test_every_product_has_a_thirty_minute_day_track(self) -> None:
+        by_product_layer: dict[tuple[str, str], dict[str, int]] = {}
+        for spec in VIDEO_PROFILES:
+            by_product_layer.setdefault((spec.product_id, spec.layer_id), {})[
+                spec.track
+            ] = spec.cadence_minutes
+
+        self.assertTrue(by_product_layer)
+        for tracks in by_product_layer.values():
+            self.assertEqual(tracks["day"], 30)
+            self.assertIn("live", tracks)
+            self.assertEqual(tracks["archive"], 60)
+
+        specs = {
+            (spec.product_id, spec.layer_id, spec.track): spec
+            for spec in VIDEO_PROFILES
+        }
+        for product_id, layer_id in by_product_layer:
+            live = specs[(product_id, layer_id, "live")]
+            day = specs[(product_id, layer_id, "day")]
+            self.assertEqual(day.media_group, live.media_group)
+            self.assertEqual(day.resolved_media_viewport, live.resolved_media_viewport)
+            self.assertEqual(day.resolved_media_width, live.resolved_media_width)
+            self.assertEqual(day.resolved_media_height, live.resolved_media_height)
+
+    def test_track_index_updates_preserve_other_tracks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "video-index/product/layer.json"
+            base = next(spec for spec in VIDEO_PROFILES if spec.track == "live")
+            live = replace(base, product_id="product", layer_id="layer")
+            day = replace(live, cadence_minutes=30, track_name="day")
+            _update_profile_index(
+                path,
+                live,
+                "2026-08-15T18:00:00Z",
+                {"generation": "live", "manifestPath": "live.json"},
+            )
+            _update_profile_index(
+                path,
+                day,
+                "2026-08-15T18:30:00Z",
+                {"generation": "day", "manifestPath": "day.json"},
+            )
+
+            payload = json.loads(path.read_text())
+            self.assertEqual(set(payload["profiles"]), {"live", "day"})
+            self.assertEqual(payload["profiles"]["live"]["generation"], "live")
+            self.assertEqual(payload["profiles"]["day"]["generation"], "day")
+
     def test_ne_bc_prefers_recency_and_upgrades_same_slot_to_native(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
         standard = [

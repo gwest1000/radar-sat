@@ -47,7 +47,7 @@ DEFAULT_MAX_BYTES = 8_000_000_000
 UPLOAD_WORKERS = 12
 STAMP_RE = re.compile(r"^(\d{8}T\d{4}Z)$")
 VIDEO_GENERATION_RE = re.compile(r"^(\d{8}T\d{4}Z)-([0-9a-f]{12})$")
-VIDEO_TRACKS = frozenset({"live", "archive"})
+VIDEO_TRACKS = frozenset({"live", "day", "archive"})
 VIDEO_MIN_GENERATIONS = 3
 VIDEO_ORPHAN_GRACE = dt.timedelta(hours=1)
 DEFAULT_COMPOSITE_PRESET_ID = "operational-default-v1"

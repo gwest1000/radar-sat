@@ -24,8 +24,9 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /SAME_SLOT_TOLERANCE_MS/);
   assert.match(viewer, /const frame = selectedFrame \?\?/);
   assert.match(viewer, /product\.frameIntervalMinutes/);
+  assert.match(viewer, /product\.dayFrameIntervalMinutes/);
   assert.match(viewer, /product\.archiveFrameIntervalMinutes/);
-  assert.match(viewer, /return playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
+  assert.match(viewer, /return playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.dayFrameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
   assert.doesNotMatch(viewer, /Promise\.all\(loads\)/);
   assert.doesNotMatch(viewer, /lightningFlashLayerId|flashDisplayAge/);
   assert.match(viewer, /atOrBeforeSourceTime/);
@@ -70,7 +71,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   const compositor = await readFile(new URL("../app/video-composite-stage.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.doesNotMatch(viewer, /VIDEO_PILOT_LAYERS/);
-  assert.match(viewer, /effectiveRangeHours <= 24 \? "live" : "archive"/);
+  assert.match(viewer, /effectiveRangeHours === 24[\s\S]*?\? "day"[\s\S]*?: effectiveRangeHours > 24[\s\S]*?\? "archive"[\s\S]*?: "live"/);
   assert.match(viewer, /videoProfiles\?\.\[product\.id\]\?\.\[videoLayerId\]\?\.\[videoTrack\]/);
   assert.match(viewer, /videoPlans\.length === videoAnchorFrames\.length/);
   assert.match(viewer, /proxy\.width !== playbackVideoManifest\.width/);
@@ -83,7 +84,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /validLineRef\.current\.textContent/);
   assert.doesNotMatch(viewer, /setFrameIndex\(\(current\) => current === index \? current : index\)/);
   assert.match(videoLoop, /transport: "progressive-mp4"/);
-  assert.match(videoLoop, /track: "live" \| "archive"/);
+  assert.match(videoLoop, /track: "live" \| "day" \| "archive"/);
   assert.match(videoLoop, /mediaViewport/);
   assert.match(videoLoop, /proxies: Record<string, VideoProxy>/);
   assert.match(videoLoop, /proxyLayers: VideoProxyLayerSelection\[\]/);
@@ -288,6 +289,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(small.shortTitle, "BC");
   assert.equal(small.anchorLayer, "raw-visir-5min");
   assert.equal(small.frameIntervalMinutes, 10);
+  assert.equal(small.dayFrameIntervalMinutes, 30);
   assert.equal(small.archiveFrameIntervalMinutes, 60);
   assert.equal(small.maxHours, 168);
   assert.deepEqual(overlay.viewport, { left: 0, top: 0.05, width: 1, height: 0.9 });
@@ -334,6 +336,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.domains["north-pacific"].title, "Pacific");
   assert.equal(northAmerica.anchorLayer, "westwx-ir");
   assert.equal(northAmerica.frameIntervalMinutes, 20);
+  assert.equal(northAmerica.dayFrameIntervalMinutes, 30);
   assert.equal(northAmerica.archiveFrameIntervalMinutes, 60);
   assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.86, height: 0.78 });
   assert.deepEqual(

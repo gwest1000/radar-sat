@@ -15,7 +15,7 @@ UTC = dt.timezone.utc
 CANONICAL_FIVE_MINUTE_SOURCE = "NOAA/NESDIS/STAR"
 CANONICAL_FIVE_MINUTE_RENDER_VERSION = 4
 VIDEO_GENERATION_RE = re.compile(r"^\d{8}T\d{4}Z-[0-9a-f]{12}$")
-VIDEO_TRACKS = frozenset({"live", "archive"})
+VIDEO_TRACKS = frozenset({"live", "day", "archive"})
 PUBLIC_VIDEO_LAYERS = {
     "bc-large-overlay": "raw-visir",
     "bc-small-overlay": "raw-visir-5min",

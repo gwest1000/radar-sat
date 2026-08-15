@@ -62,7 +62,7 @@ export type VideoLoopManifest = {
   generatedAt: string;
   productId: string;
   layerId: string;
-  track: "live" | "archive";
+  track: "live" | "day" | "archive";
   transport: "progressive-mp4" | "hls-ts";
   cadenceMinutes: number;
   width: number;
@@ -217,7 +217,7 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
     || typeof manifest.generatedAt !== "string"
     || typeof manifest.productId !== "string"
     || typeof manifest.layerId !== "string"
-    || !["live", "archive"].includes(String(manifest.track))
+    || !["live", "day", "archive"].includes(String(manifest.track))
     || !["progressive-mp4", "hls-ts"].includes(String(manifest.transport))
     || !finitePositive(manifest.cadenceMinutes)
     || !finitePositive(manifest.width)

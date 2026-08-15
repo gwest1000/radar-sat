@@ -38,7 +38,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--track",
         action="append",
-        choices=("live", "archive"),
+        choices=("live", "day", "archive"),
         help="Track to build; repeat to select both (default: both tracks).",
     )
     parser.add_argument(

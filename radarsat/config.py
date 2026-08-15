@@ -520,6 +520,7 @@ def _overlay_product(
         "domain": "bc",
         "anchorLayer": visir_layer,
         "frameIntervalMinutes": 10,
+        "dayFrameIntervalMinutes": 30,
         "archiveFrameIntervalMinutes": 60,
         "defaultHours": 3,
         "description": (
@@ -591,6 +592,7 @@ def _broad_product(
         "domain": domain,
         "anchorLayer": anchor_layer,
         "frameIntervalMinutes": 20,
+        "dayFrameIntervalMinutes": 30,
         "archiveFrameIntervalMinutes": 60,
         "defaultHours": 24,
         "description": description,

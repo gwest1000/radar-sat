@@ -112,6 +112,7 @@ type Product = {
   domain: string;
   anchorLayer: string;
   frameIntervalMinutes?: number;
+  dayFrameIntervalMinutes?: number;
   archiveFrameIntervalMinutes?: number;
   defaultHours: number;
   maxHours?: number;
@@ -140,6 +141,7 @@ type Catalog = {
   sources?: Record<string, string>;
   videoProfiles?: Record<string, Record<string, {
     live?: VideoProfilePointer;
+    day?: VideoProfilePointer;
     archive?: VideoProfilePointer;
   }>>;
 };
@@ -279,12 +281,15 @@ function playbackFrames(
   sourceFrames: Frame[],
   rangeHours: number,
   frameIntervalMinutes = 5,
+  dayFrameIntervalMinutes = 30,
   archiveFrameIntervalMinutes = 30,
 ): Frame[] {
   if (!sourceFrames.length) return [];
-  const selectedIntervalMinutes = rangeHours > 24
-    ? Math.max(frameIntervalMinutes, archiveFrameIntervalMinutes)
-    : Math.max(5, frameIntervalMinutes);
+  const selectedIntervalMinutes = rangeHours === 24
+    ? Math.max(frameIntervalMinutes, dayFrameIntervalMinutes)
+    : rangeHours > 24
+      ? Math.max(frameIntervalMinutes, archiveFrameIntervalMinutes)
+      : Math.max(5, frameIntervalMinutes);
   const frameIntervalMs = selectedIntervalMinutes * 60_000;
   const parsed = sourceFrames
     .map((frame) => ({ frame, time: Date.parse(frame.validTime) }))
@@ -1867,7 +1872,11 @@ export function RadarViewer() {
     [optionalLayers, product],
   );
   const effectiveRangeHours = Math.min(rangeHours, product?.maxHours ?? 168);
-  const videoTrack = effectiveRangeHours <= 24 ? "live" : "archive";
+  const videoTrack = effectiveRangeHours === 24
+    ? "day"
+    : effectiveRangeHours > 24
+      ? "archive"
+      : "live";
   const videoLayerId = activeAnchorId;
   const videoPointer = product && videoLayerId
     ? catalog?.videoProfiles?.[product.id]?.[videoLayerId]?.[videoTrack]
@@ -1930,6 +1939,7 @@ export function RadarViewer() {
       frames,
       effectiveRangeHours,
       product.frameIntervalMinutes,
+      product.dayFrameIntervalMinutes,
       product.archiveFrameIntervalMinutes,
     );
   }, [activeAnchorId, domain, effectiveRangeHours, product]);

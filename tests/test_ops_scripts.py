@@ -210,6 +210,9 @@ class OpsScriptTests(unittest.TestCase):
         video_archive = (
             PROJECT / "scripts" / "ops" / "run_video_archive_cycle.zsh"
         ).read_text()
+        video_day = (
+            PROJECT / "scripts" / "ops" / "run_video_day_cycle.zsh"
+        ).read_text()
         lightning_edge = (
             PROJECT / "scripts" / "ops" / "run_lightning_edge_cycle.zsh"
         ).read_text()
@@ -220,6 +223,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("build_satellite_video.py", video)
         self.assertIn('run_video_phase "${VIDEO_TRACK}"', video)
         self.assertIn("RADARSAT_VIDEO_TRACK=archive", video_archive)
+        self.assertIn("RADARSAT_VIDEO_TRACK=day", video_day)
         self.assertIn("--defer-shared-prune", video)
         self.assertIn("--prune-shared-only", video)
         self.assertIn("north-america-overlay &", video)
@@ -236,6 +240,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("--archive-hours", video)
         self.assertIn("last-good profiles", video)
         self.assertIn("<integer>600</integer>", video_plist)
+        self.assertIn("video-day", install)
         self.assertIn("--sector full-disk", satellite)
         self.assertNotIn("backfill_five_minute_bc_satellite.py", satellite)
         self.assertNotIn("backfill_native_bc_satellite.py", satellite)
@@ -288,7 +293,7 @@ class OpsScriptTests(unittest.TestCase):
             archive.index("build_raster_tiles.py"),
         )
         self.assertIn("heavy-satellite.lock", heavy_lock)
-        self.assertIn("lightning-edge radar-edge video video-archive", install)
+        self.assertIn("lightning-edge radar-edge video video-day video-archive", install)
 
     def test_setup_installs_renderer_and_feed_requirements(self) -> None:
         setup = (PROJECT / "scripts" / "ops" / "setup_local.zsh").read_text()

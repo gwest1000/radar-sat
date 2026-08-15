@@ -123,8 +123,13 @@ scripts/ops/install_launchd.zsh
 Pass one or more agent names to update only those jobs, for example:
 
 ```bash
-scripts/ops/install_launchd.zsh lightning-edge radar-edge video-archive
+scripts/ops/install_launchd.zsh lightning-edge radar-edge video-day video-archive
 ```
+
+The live video job retains the native 10/20-minute cadence for 3-, 6-, and
+12-hour loops. The independent `video-day` job builds the 24-hour loop every
+30 minutes, while `video-archive` retains the hourly seven-day loop. Separate
+jobs keep the longer products from delaying the operational live refresh.
 
 The production bucket already has site CORS and a nine-day `frames/` lifecycle
 backstop. Bucket configuration is a one-time control-plane operation. If the
