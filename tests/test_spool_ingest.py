@@ -916,9 +916,10 @@ class NativeRenderTests(unittest.TestCase):
 
 
 class PipelineIntegrationTests(unittest.TestCase):
-    def test_fire_refresh_precedes_unrelated_geomet_failure(self) -> None:
+    def test_geomet_failure_does_not_discard_other_observations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "output"
+            catalog = output / "catalog.json"
             with (
                 mock.patch("radarsat.pipeline.GeoMetClient") as client_class,
                 mock.patch("radarsat.pipeline.ensure_static_assets"),
@@ -926,17 +927,39 @@ class PipelineIntegrationTests(unittest.TestCase):
                     "radarsat.pipeline.ingest_geomet",
                     side_effect=RuntimeError("radar unavailable"),
                 ),
-                mock.patch("radarsat.pipeline.ingest_hotspot_snapshot") as hotspots,
-                mock.patch("radarsat.pipeline.ingest_active_fire_snapshot") as active,
-                mock.patch("radarsat.pipeline.derive_fire_overlays") as derive,
+                mock.patch(
+                    "radarsat.pipeline.ingest_hotspot_snapshot", return_value={}
+                ) as hotspots,
+                mock.patch(
+                    "radarsat.pipeline.ingest_active_fire_snapshot", return_value={}
+                ) as active,
+                mock.patch(
+                    "radarsat.pipeline.derive_fire_overlays", return_value={}
+                ) as derive,
+                mock.patch("radarsat.pipeline.derive_lightning_trails"),
+                mock.patch(
+                    "radarsat.pipeline.ingest_raw_satellite",
+                    return_value={"status": "unchanged"},
+                ),
+                mock.patch(
+                    "radarsat.pipeline.ingest_goes_hazards",
+                    return_value={"status": "unchanged"},
+                ),
+                mock.patch("radarsat.pipeline.prune"),
+                mock.patch("radarsat.pipeline.write_catalog", return_value=catalog),
             ):
                 client_class.return_value.__enter__.return_value = object()
-                with self.assertRaisesRegex(RuntimeError, "radar unavailable"):
-                    run(output, ["bc"], 3, False, spool_mode="off")
+                self.assertEqual(
+                    run(output, ["bc"], 3, False, spool_mode="off"),
+                    catalog,
+                )
 
             hotspots.assert_called_once()
             active.assert_called_once()
             derive.assert_called_once()
+            status = json.loads((output / "status" / "ingest.json").read_text())
+            self.assertEqual(status["status"], "warning")
+            self.assertTrue(any("radar unavailable" in item for item in status["warnings"]))
 
     def test_broad_native_lightning_renders_live_window_not_entire_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

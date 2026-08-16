@@ -237,6 +237,15 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("refresh_radar_edge.py", radar_edge)
         self.assertIn("live_edge_publish.zsh", lightning_edge)
         self.assertIn("live_edge_publish.zsh", radar_edge)
+        self.assertIn("refresh_status=0", radar_edge)
+        self.assertLess(
+            radar_edge.index("refresh_radar_edge.py"),
+            radar_edge.index("live_edge_publish.zsh"),
+        )
+        self.assertLess(
+            radar_edge.index("live_edge_publish.zsh"),
+            radar_edge.index('exit "${refresh_status}"'),
+        )
         self.assertIn("--archive-hours", video)
         self.assertIn("last-good profiles", video)
         self.assertIn("<integer>600</integer>", video_plist)

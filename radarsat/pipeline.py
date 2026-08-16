@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from PIL import Image
 
@@ -23,7 +23,7 @@ from .active_fires import (
 )
 from .catalog import write_catalog
 from .config import DOMAINS, LAYERS, VIEWPORTS, Domain, Layer, regional_layer_id
-from .geomet import GeoMetClient, at_or_before, format_utc, frame_stamp
+from .geomet import GeoMetClient, LayerTimeline, at_or_before, format_utc, frame_stamp
 from .hotspots import (
     CWFIS_HOTSPOT_LAYER,
     fetch_hotspots,
@@ -634,15 +634,32 @@ def ingest_geomet(
     latest_only: bool,
     exclude_layers: set[str] | frozenset[str] | None = None,
     include_layers: Iterable[str] | None = None,
+    *,
+    preloaded_timelines: Mapping[str, LayerTimeline] | None = None,
+    continue_on_error: bool = False,
+    errors: list[str] | None = None,
 ) -> dict[str, list[dt.datetime]]:
     timelines: dict[str, list[dt.datetime]] = {}
-    for layer_id in include_layers or DEFAULT_SOURCE_LAYERS:
+    selected_layers = DEFAULT_SOURCE_LAYERS if include_layers is None else include_layers
+    for layer_id in selected_layers:
         if exclude_layers and layer_id in exclude_layers:
             continue
         layer = LAYERS[layer_id]
         if layer.source_layer is None:
             continue
-        timeline = client.timeline(layer.source_layer)
+        try:
+            if preloaded_timelines is None:
+                timeline = client.timeline(layer.source_layer)
+            else:
+                timeline = preloaded_timelines[layer.source_layer]
+        except Exception as error:
+            if not continue_on_error and not layer.daylight_only and layer.role != "background":
+                raise
+            if errors is not None and layer.role != "background":
+                errors.append(
+                    f"{domain.id}/{layer_id} timeline: {type(error).__name__}: {error}"
+                )
+            continue
         # Radar, ptype, and lightning are usually newer than the slower
         # satellite anchor.  Fetch an extra hour of those layers so the oldest
         # satellite frame in a requested loop still has an honest at-or-before
@@ -707,11 +724,16 @@ def ingest_geomet(
                         render_domain,
                         outside_no_coverage=layer_id.endswith("coverage"),
                     )
-            except Exception:
+            except Exception as error:
                 # A blank or temporarily unavailable qualitative satellite
                 # frame must not abort radar, fire, and hazard ingest for every
                 # later domain in the operational cycle.
-                if layer.daylight_only or layer.role == "background":
+                if layer.daylight_only or layer.role == "background" or continue_on_error:
+                    if errors is not None and layer.role != "background":
+                        errors.append(
+                            f"{domain.id}/{layer_id} {format_utc(valid_time)}: "
+                            f"{type(error).__name__}: {error}"
+                        )
                     continue
                 raise
             if layer.role == "background":
@@ -2644,7 +2666,14 @@ def run(
     with GeoMetClient() as client:
         for domain_id in domain_ids:
             domain = DOMAINS[domain_id]
-            ensure_static_assets(client, output_root, domain)
+            try:
+                ensure_static_assets(client, output_root, domain)
+            except Exception as error:
+                # Legends and base maps are immutable after first install; a
+                # transient GeoMet failure must not block dynamic observations.
+                auxiliary_warnings.append(
+                    f"{domain.id} static assets unavailable: {type(error).__name__}: {error}"
+                )
             native_result = SpoolIngestResult()
             # Native products are currently consumed only on the operational BC
             # grid. Broad domains retain the lower-rate GeoMet bootstrap path.
@@ -2672,22 +2701,33 @@ def run(
                 if domain.id == "bc" and spool_mode == "only"
                 else set()
             )
-            timelines = ingest_geomet(
-                client,
-                output_root,
-                domain,
-                hours,
-                latest_only,
-                exclude_layers=excluded,
-                include_layers=None
-                if domain.id == "bc"
-                else (
-                    "radar-rain",
-                    "radar-coverage",
-                    "ptype",
-                    "ptype-coverage",
-                ),
-            )
+            try:
+                timelines = ingest_geomet(
+                    client,
+                    output_root,
+                    domain,
+                    hours,
+                    latest_only,
+                    exclude_layers=excluded,
+                    include_layers=None
+                    if domain.id == "bc"
+                    else (
+                        "radar-rain",
+                        "radar-coverage",
+                        "ptype",
+                        "ptype-coverage",
+                    ),
+                    continue_on_error=True,
+                    errors=auxiliary_warnings,
+                )
+            except Exception as error:
+                # Keep unrelated domains and locally staged observations
+                # moving even if an unexpected GeoMet decoder error escapes
+                # the normal per-layer isolation above.
+                timelines = {}
+                auxiliary_warnings.append(
+                    f"{domain.id} GeoMet ingest unavailable: {type(error).__name__}: {error}"
+                )
             if (
                 domain.id == "bc"
                 and os.environ.get("RADARSAT_NEXRAD_HYBRID_ENABLED", "1").lower()
@@ -2718,6 +2758,8 @@ def run(
                         hours,
                         latest_only,
                         include_layers=("lightning",),
+                        continue_on_error=True,
+                        errors=auxiliary_warnings,
                     ))
                 except Exception as error:
                     # CLDN supplements GLM over Canada, but must not prevent

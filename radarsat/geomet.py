@@ -108,14 +108,16 @@ class LayerTimeline:
 
 
 class GeoMetClient:
-    def __init__(self, timeout: float = 45.0) -> None:
+    def __init__(self, timeout: float | tuple[float, float] = (8.0, 45.0)) -> None:
         self.timeout = timeout
         self.session = requests.Session()
+        self._timeline_cache: dict[str, LayerTimeline] = {}
         retry = Retry(
             total=4,
             connect=4,
             read=4,
             backoff_factor=1.0,
+            backoff_jitter=0.5,
             status_forcelist=(429, 500, 502, 503, 504),
             allowed_methods=frozenset({"GET"}),
             respect_retry_after_header=True,
@@ -133,6 +135,9 @@ class GeoMetClient:
         self.close()
 
     def timeline(self, source_layer: str) -> LayerTimeline:
+        cached = self._timeline_cache.get(source_layer)
+        if cached is not None:
+            return cached
         response = self.session.get(
             GEOMET_URL,
             params={
@@ -155,7 +160,9 @@ class GeoMetClient:
                 times = tuple(parse_time_dimension(dimension.text))
                 default_text = dimension.attrib.get("default")
                 default = parse_utc(default_text) if default_text else times[-1]
-                return LayerTimeline(source_layer, times, default)
+                timeline = LayerTimeline(source_layer, times, default)
+                self._timeline_cache[source_layer] = timeline
+                return timeline
         raise RuntimeError(f"No time dimension found for GeoMet layer {source_layer}")
 
     def get_map(self, layer: Layer, domain: Domain, valid_time: dt.datetime) -> bytes:

@@ -47,5 +47,12 @@ trap 'release_lock; exit 130' INT
 trap 'release_lock; exit 143' TERM
 export PYTHONPATH="${PROJECT_ROOT}"
 export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
-"${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/refresh_radar_edge.py" --output-root "${OUTPUT_ROOT}"
-"${PROJECT_ROOT}/scripts/ops/live_edge_publish.zsh"
+refresh_status=0
+"${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/refresh_radar_edge.py" \
+  --output-root "${OUTPUT_ROOT}" || refresh_status=$?
+publish_status=0
+"${PROJECT_ROOT}/scripts/ops/live_edge_publish.zsh" || publish_status=$?
+if (( publish_status != 0 )); then
+  exit "${publish_status}"
+fi
+exit "${refresh_status}"

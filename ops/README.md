@@ -24,6 +24,17 @@ minutes. Both publish only changed transparent rasters followed by the tiny
 seconds and uses it only for the newest frame; historical playback remains
 time-matched to the immutable video manifest.
 
+The radar worker retrieves each domain-independent GeoMet timeline once per
+cycle, then renders the three domains in parallel. Connection retries use a
+short connect timeout and jitter, while map failures are isolated by layer and
+domain. A successful BC frame is therefore still published if a simultaneous
+North America coverage request fails. Total GeoMet failure keeps the last-good
+radar and still runs the South Coast NEXRAD derivation/publication before the
+worker reports a non-zero status for monitoring. This is resilience around the
+free WMS service, not a second Canadian-composite source: the public Datamart
+radar feed contains station GIF imagery, while the downloadable 1-km composite
+is a cost-recovered product.
+
 Live and archive video are also separate jobs and locks. The ten-minute live
 job cannot be blocked by the low-priority hourly archive encoder. Ordinary
 fast publications expose a 24-hour recovery catalog, so all 6-, 12-, and
