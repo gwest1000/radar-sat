@@ -578,6 +578,8 @@ def render_valid_time(
                                 and existing.get("forecastHour") == fhour
                                 and existing.get("renderVersion") == RENDER_VERSION
                                 and existing.get("regionalViewportId") == region_id
+                                and existing.get("regionalViewport")
+                                == (VIEWPORTS[region_id] if region_id is not None else None)
                             )
                         except (OSError, json.JSONDecodeError):
                             pass

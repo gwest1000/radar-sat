@@ -10,13 +10,14 @@ from unittest import mock
 import numpy as np
 from PIL import Image
 
-from radarsat.config import LAYERS, VIEWPORTS
+from radarsat.config import DOMAINS, LAYERS, VIEWPORTS
 from radarsat.nexrad_hybrid import (
     DPR_GATE_COUNT,
     DPR_RADIAL_COUNT,
     NexradObject,
     SOUTH_COAST_LAYER_ID,
     _anchor_times,
+    _south_coast_height,
     derive_south_coast_hybrid_radar,
     parse_nexrad_object,
 )
@@ -99,7 +100,7 @@ class NexradHybridTests(unittest.TestCase):
             item = NexradObject("ATX", "ATX_DPR_2026_08_15_22_55_00", valid - dt.timedelta(minutes=1))
             rate = np.zeros((DPR_RADIAL_COUNT, DPR_GATE_COUNT), dtype=np.float32)
             rate[0, 0] = 10.0
-            height = 1346
+            height = _south_coast_height(DOMAINS["bc"])
             radial = np.zeros((height, 1920), dtype=np.uint16)
             gate = np.zeros((height, 1920), dtype=np.uint16)
             coverage = np.zeros((height, 1920), dtype=bool)

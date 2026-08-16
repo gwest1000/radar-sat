@@ -436,10 +436,10 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     "southeast": {"left": 0.5268, "top": 0.4854, "width": 0.4050, "height": 0.3473},
     "northeast": {"left": 0.3946, "top": 0.1525, "width": 0.5020, "height": 0.4422},
     # Southern Vancouver Island through Greater Vancouver and the Fraser
-    # Valley.  This tighter, west-shifted crop keeps more of southern Vancouver
-    # Island and the adjacent Pacific approaches in the operational view while
-    # preserving the established display aspect ratio.
-    "south-coast": {"left": 0.5045, "top": 0.6929, "width": 0.1490, "height": 0.1362},
+    # Valley. The 1.48:1 projected aspect fills the map column on a typical
+    # 16:10 desktop after its fixed control rail is removed. Only the western
+    # edge was expanded; the Fraser Valley and north/south bounds are retained.
+    "south-coast": {"left": 0.4985, "top": 0.6929, "width": 0.1550, "height": 0.1362},
 }
 
 # BC XL already uses the complete east/west source raster. A modest vertical

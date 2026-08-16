@@ -291,10 +291,10 @@
               "sourceFileCount": 3,
               "renderVersion": 1,
               "regionalViewport": {
-                "left": 0.508,
-                "top": 0.687,
-                "width": 0.162,
-                "height": 0.148
+                "left": 0.4985,
+                "top": 0.6929,
+                "width": 0.155,
+                "height": 0.1362
               },
               "outputWidth": 1920
             }
@@ -622,10 +622,10 @@
               "usFeatureCount": 432,
               "sourceErrors": [],
               "regionalViewport": {
-                "left": 0.508,
-                "top": 0.687,
-                "width": 0.162,
-                "height": 0.148
+                "left": 0.4985,
+                "top": 0.6929,
+                "width": 0.155,
+                "height": 0.1362
               },
               "outputWidth": 3840,
               "symbolReferenceWidth": 1440,
@@ -853,10 +853,10 @@
               "forecastHour": 3,
               "regionalViewportId": "south-coast",
               "regionalViewport": {
-                "left": 0.508,
-                "top": 0.687,
-                "width": 0.162,
-                "height": 0.148
+                "left": 0.4985,
+                "top": 0.6929,
+                "width": 0.155,
+                "height": 0.1362
               }
             }
           ],
@@ -1070,10 +1070,10 @@
               "forecastHour": 3,
               "regionalViewportId": "south-coast",
               "regionalViewport": {
-                "left": 0.508,
-                "top": 0.687,
-                "width": 0.162,
-                "height": 0.148
+                "left": 0.4985,
+                "top": 0.6929,
+                "width": 0.155,
+                "height": 0.1362
               }
             }
           ],
@@ -1320,10 +1320,10 @@
               "arrivalOnly": false,
               "newStrikeHalo": false,
               "regionalViewport": {
-                "left": 0.508,
-                "top": 0.687,
-                "width": 0.162,
-                "height": 0.148
+                "left": 0.4985,
+                "top": 0.6929,
+                "width": 0.155,
+                "height": 0.1362
               },
               "outputWidth": 2560,
               "symbolReferenceWidth": 1440,
@@ -1563,10 +1563,10 @@
               "arrivalOnly": false,
               "newStrikeHalo": true,
               "regionalViewport": {
-                "left": 0.508,
-                "top": 0.687,
-                "width": 0.162,
-                "height": 0.148
+                "left": 0.4985,
+                "top": 0.6929,
+                "width": 0.155,
+                "height": 0.1362
               },
               "outputWidth": 2560,
               "symbolReferenceWidth": 1440,
@@ -4798,10 +4798,10 @@
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.508,
-        "top": 0.687,
-        "width": 0.162,
-        "height": 0.148
+        "left": 0.4985,
+        "top": 0.6929,
+        "width": 0.155,
+        "height": 0.1362
       },
       "maxHours": 168
     },

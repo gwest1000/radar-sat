@@ -284,6 +284,7 @@ test("ships a runtime data configuration", async () => {
   const southCoast = demo.products.find((product) => product.id === "bc-south-coast-overlay");
   assert.equal(southCoast.title, "South Coast");
   assert.equal(southCoast.shortTitle, "South Coast");
+  assert.deepEqual(southCoast.viewport, { left: 0.4985, top: 0.6929, width: 0.155, height: 0.1362 });
   assert.ok(demo.domains.bc.layers["raw-visir"].frames.length > 0);
   const overlay = demo.products.find((product) => product.id === "bc-large-overlay");
   const small = demo.products.find((product) => product.id === "bc-small-overlay");
