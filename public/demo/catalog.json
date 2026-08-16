@@ -291,9 +291,9 @@
               "sourceFileCount": 3,
               "renderVersion": 1,
               "regionalViewport": {
-                "left": 0.4985,
+                "left": 0.4923,
                 "top": 0.6929,
-                "width": 0.155,
+                "width": 0.1612,
                 "height": 0.1362
               },
               "outputWidth": 1920
@@ -478,7 +478,7 @@
         },
         "hotspots": {
           "title": "Satellite-detected wildfire hotspots",
-          "maxAgeMinutes": 30,
+          "maxAgeMinutes": 360,
           "frames": [
             {
               "validTime": "2026-08-14T21:50:00Z",
@@ -517,7 +517,7 @@
         },
         "hotspots-region-northeast": {
           "title": "Active-wildfire and thermal-hotspot overlay \u00b7 northeast crop",
-          "maxAgeMinutes": 30,
+          "maxAgeMinutes": 360,
           "frames": [
             {
               "validTime": "2026-08-14T21:50:00Z",
@@ -558,7 +558,7 @@
         },
         "hotspots-region-small": {
           "title": "Active-wildfire and thermal-hotspot overlay \u00b7 small crop",
-          "maxAgeMinutes": 30,
+          "maxAgeMinutes": 360,
           "frames": [
             {
               "validTime": "2026-08-14T21:50:00Z",
@@ -599,7 +599,7 @@
         },
         "hotspots-region-south-coast": {
           "title": "Active-wildfire and thermal-hotspot overlay \u00b7 south-coast crop",
-          "maxAgeMinutes": 30,
+          "maxAgeMinutes": 360,
           "frames": [
             {
               "validTime": "2026-08-14T21:50:00Z",
@@ -622,9 +622,9 @@
               "usFeatureCount": 432,
               "sourceErrors": [],
               "regionalViewport": {
-                "left": 0.4985,
+                "left": 0.4923,
                 "top": 0.6929,
-                "width": 0.155,
+                "width": 0.1612,
                 "height": 0.1362
               },
               "outputWidth": 3840,
@@ -640,7 +640,7 @@
         },
         "hotspots-region-southeast": {
           "title": "Active-wildfire and thermal-hotspot overlay \u00b7 southeast crop",
-          "maxAgeMinutes": 30,
+          "maxAgeMinutes": 360,
           "frames": [
             {
               "validTime": "2026-08-14T21:50:00Z",
@@ -681,7 +681,7 @@
         },
         "hotspots-region-southwest": {
           "title": "Active-wildfire and thermal-hotspot overlay \u00b7 southwest crop",
-          "maxAgeMinutes": 30,
+          "maxAgeMinutes": 360,
           "frames": [
             {
               "validTime": "2026-08-14T21:50:00Z",
@@ -853,9 +853,9 @@
               "forecastHour": 3,
               "regionalViewportId": "south-coast",
               "regionalViewport": {
-                "left": 0.4985,
+                "left": 0.4923,
                 "top": 0.6929,
-                "width": 0.155,
+                "width": 0.1612,
                 "height": 0.1362
               }
             }
@@ -1070,9 +1070,9 @@
               "forecastHour": 3,
               "regionalViewportId": "south-coast",
               "regionalViewport": {
-                "left": 0.4985,
+                "left": 0.4923,
                 "top": 0.6929,
-                "width": 0.155,
+                "width": 0.1612,
                 "height": 0.1362
               }
             }
@@ -1320,9 +1320,9 @@
               "arrivalOnly": false,
               "newStrikeHalo": false,
               "regionalViewport": {
-                "left": 0.4985,
+                "left": 0.4923,
                 "top": 0.6929,
-                "width": 0.155,
+                "width": 0.1612,
                 "height": 0.1362
               },
               "outputWidth": 2560,
@@ -1563,9 +1563,9 @@
               "arrivalOnly": false,
               "newStrikeHalo": true,
               "regionalViewport": {
-                "left": 0.4985,
+                "left": 0.4923,
                 "top": 0.6929,
-                "width": 0.155,
+                "width": 0.1612,
                 "height": 0.1362
               },
               "outputWidth": 2560,
@@ -2420,7 +2420,7 @@
         },
         "hotspots": {
           "title": "Satellite-detected wildfire hotspots",
-          "maxAgeMinutes": 30,
+          "maxAgeMinutes": 360,
           "frames": [
             {
               "validTime": "2026-08-14T21:50:00Z",
@@ -3359,7 +3359,7 @@
         },
         "hotspots": {
           "title": "Satellite-detected wildfire hotspots",
-          "maxAgeMinutes": 30,
+          "maxAgeMinutes": 360,
           "frames": [
             {
               "validTime": "2026-08-14T21:50:00Z",
@@ -4798,9 +4798,9 @@
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
       ],
       "viewport": {
-        "left": 0.4985,
+        "left": 0.4923,
         "top": 0.6929,
-        "width": 0.155,
+        "width": 0.1612,
         "height": 0.1362
       },
       "maxHours": 168

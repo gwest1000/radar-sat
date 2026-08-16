@@ -88,6 +88,7 @@ BROAD_HAZARD_SCALE = 2
 BROAD_FIRE_SYMBOL_REFERENCE_WIDTH = 1920
 LIGHTNING_TRAIL_HOURS = 24.0
 LIGHTNING_ARCHIVE_HOURS = 168.0
+FIRE_ARCHIVE_HOURS = 168.0
 STATIC_BOUNDARY_RENDER_VERSION = 4
 STATIC_TRANSMISSION_RENDER_VERSION = 2
 DEFAULT_SOURCE_LAYERS = (
@@ -1077,7 +1078,11 @@ def _archived_layer_times(root: Path, domain: Domain, layer: Layer) -> list[dt.d
     return sorted(set(values))
 
 
-def derive_fire_overlays(root: Path, domain: Domain, hours: float = 24.0) -> dict[str, object]:
+def derive_fire_overlays(
+    root: Path,
+    domain: Domain,
+    hours: float = FIRE_ARCHIVE_HOURS,
+) -> dict[str, object]:
     """Combine agency fires and thermal hotspots into lightweight transparent PNGs."""
     hotspot_layer = LAYERS["hotspot-points"]
     active_layer = LAYERS["active-fire-points"]
@@ -2604,6 +2609,38 @@ def run(
     hybrid_radar_status: dict[str, object] = {}
     raw_satellite_status: dict[str, object] = {}
     goes_hazard_status: dict[str, object] = {}
+
+    # Fires are operationally useful even when an unrelated GeoMet radar
+    # request fails. Refresh all requested fire domains before entering that
+    # failure-prone network path, and let each source fail independently.
+    for domain_id in domain_ids:
+        if domain_id not in {"bc", "north-america", "north-pacific"}:
+            continue
+        domain = DOMAINS[domain_id]
+        try:
+            hotspot_status[domain.id] = ingest_hotspot_snapshot(output_root, domain)
+        except Exception as error:
+            auxiliary_warnings.append(
+                f"CWFIS wildfire hotspots unavailable: {type(error).__name__}: {error}"
+            )
+        try:
+            active_fire_status[domain.id] = ingest_active_fire_snapshot(output_root, domain)
+            warnings = active_fire_status[domain.id].get("warnings", [])
+            if isinstance(warnings, list):
+                auxiliary_warnings.extend(str(value) for value in warnings)
+        except Exception as error:
+            auxiliary_warnings.append(
+                "Agency-reported active fires unavailable: "
+                f"{type(error).__name__}: {error}"
+            )
+        try:
+            fire_overlay_status[domain.id] = derive_fire_overlays(output_root, domain)
+        except Exception as error:
+            auxiliary_warnings.append(
+                "Wildfire display overlay unavailable: "
+                f"{type(error).__name__}: {error}"
+            )
+
     with GeoMetClient() as client:
         for domain_id in domain_ids:
             domain = DOMAINS[domain_id]
@@ -2695,31 +2732,6 @@ def run(
                 timelines,
                 LIGHTNING_ARCHIVE_HOURS,
             )
-            if domain.id in {"bc", "north-america", "north-pacific"}:
-                try:
-                    hotspot_status[domain.id] = ingest_hotspot_snapshot(output_root, domain)
-                except Exception as error:
-                    auxiliary_warnings.append(
-                        f"CWFIS wildfire hotspots unavailable: {type(error).__name__}: {error}"
-                    )
-            if domain.id in {"bc", "north-america", "north-pacific"}:
-                try:
-                    active_fire_status[domain.id] = ingest_active_fire_snapshot(output_root, domain)
-                    warnings = active_fire_status[domain.id].get("warnings", [])
-                    if isinstance(warnings, list):
-                        auxiliary_warnings.extend(str(value) for value in warnings)
-                except Exception as error:
-                    auxiliary_warnings.append(
-                        "Agency-reported active fires unavailable: "
-                        f"{type(error).__name__}: {error}"
-                    )
-                try:
-                    fire_overlay_status[domain.id] = derive_fire_overlays(output_root, domain)
-                except Exception as error:
-                    auxiliary_warnings.append(
-                        "Wildfire display overlay unavailable: "
-                        f"{type(error).__name__}: {error}"
-                    )
         if os.environ.get("RADARSAT_RAW_SAT_ENABLED", "1").lower() not in {"0", "false", "no"}:
             try:
                 raw_satellite_status = ingest_raw_satellite(output_root, domain_ids)

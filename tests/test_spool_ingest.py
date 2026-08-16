@@ -916,6 +916,28 @@ class NativeRenderTests(unittest.TestCase):
 
 
 class PipelineIntegrationTests(unittest.TestCase):
+    def test_fire_refresh_precedes_unrelated_geomet_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            with (
+                mock.patch("radarsat.pipeline.GeoMetClient") as client_class,
+                mock.patch("radarsat.pipeline.ensure_static_assets"),
+                mock.patch(
+                    "radarsat.pipeline.ingest_geomet",
+                    side_effect=RuntimeError("radar unavailable"),
+                ),
+                mock.patch("radarsat.pipeline.ingest_hotspot_snapshot") as hotspots,
+                mock.patch("radarsat.pipeline.ingest_active_fire_snapshot") as active,
+                mock.patch("radarsat.pipeline.derive_fire_overlays") as derive,
+            ):
+                client_class.return_value.__enter__.return_value = object()
+                with self.assertRaisesRegex(RuntimeError, "radar unavailable"):
+                    run(output, ["bc"], 3, False, spool_mode="off")
+
+            hotspots.assert_called_once()
+            active.assert_called_once()
+            derive.assert_called_once()
+
     def test_broad_native_lightning_renders_live_window_not_entire_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "output"

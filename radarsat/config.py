@@ -298,7 +298,10 @@ LAYERS: dict[str, Layer] = {
         title="Satellite-detected wildfire hotspots",
         source_layer=None,
         source="NRCan CWFIS",
-        max_age_minutes=30,
+        # This raster also contains agency-reported active fires, which must
+        # not blink off when the slower observation cycle misses a CWFIS
+        # refresh. Its source timestamp remains visible in the map status.
+        max_age_minutes=360,
     ),
     "hotspot-points": Layer(
         id="hotspot-points",
@@ -436,10 +439,11 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     "southeast": {"left": 0.5268, "top": 0.4854, "width": 0.4050, "height": 0.3473},
     "northeast": {"left": 0.3946, "top": 0.1525, "width": 0.5020, "height": 0.4422},
     # Southern Vancouver Island through Greater Vancouver and the Fraser
-    # Valley. The 1.48:1 projected aspect fills the map column on a typical
-    # 16:10 desktop after its fixed control rail is removed. Only the western
-    # edge was expanded; the Fraser Valley and north/south bounds are retained.
-    "south-coast": {"left": 0.4985, "top": 0.6929, "width": 0.1550, "height": 0.1362},
+    # Valley. The projected aspect fills the map column on a typical 16:10
+    # desktop after its fixed control rail is removed. The most recent two
+    # expansions add only western context; the Fraser Valley and north/south
+    # bounds remain fixed.
+    "south-coast": {"left": 0.4923, "top": 0.6929, "width": 0.1612, "height": 0.1362},
 }
 
 # BC XL already uses the complete east/west source raster. A modest vertical
@@ -458,7 +462,11 @@ for _region_id in VIEWPORTS:
         ("lightning-hour", "CLDN hourly lightning aggregate", 70),
         ("lightning-flash", "CLDN newest-lightning arrival flash", 6),
         ("glm-lightning-live", "GLM rolling one-minute lightning", 3),
-        ("hotspots", "Active-wildfire and thermal-hotspot overlay", 30),
+        (
+            "hotspots",
+            "Active-wildfire and thermal-hotspot overlay",
+            LAYERS["hotspots"].max_age_minutes,
+        ),
     ):
         _layer_id = regional_layer_id(_base_layer_id, _region_id)
         LAYERS[_layer_id] = Layer(

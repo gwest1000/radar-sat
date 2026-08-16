@@ -47,6 +47,13 @@ class JsonResponse:
 
 
 class ActiveFireTests(unittest.TestCase):
+    def test_combined_fire_overlays_hold_last_good_snapshot_for_six_hours(self) -> None:
+        self.assertEqual(LAYERS["hotspots"].max_age_minutes, 360)
+        self.assertEqual(
+            LAYERS[regional_layer_id("hotspots", "south-coast")].max_age_minutes,
+            360,
+        )
+
     def test_canadian_query_selects_current_temporal_records(self) -> None:
         request = mock.Mock(
             return_value=JsonResponse({"type": "FeatureCollection", "features": []})
