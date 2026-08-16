@@ -58,6 +58,7 @@ SATELLITE_LAYER_IDS = frozenset(
 )
 REGIONAL_LAYER_BASES = frozenset(
     {
+        "radar-rain",
         "lightning-trail",
         "lightning-hour",
         "hotspots",

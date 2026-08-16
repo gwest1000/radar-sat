@@ -10,7 +10,7 @@ Public site: <https://gwest1000.github.io/radar-sat/>
 ## Launch products
 
 - **Overlay:** BC XL, tightly cropped BC, southwest, southeast, northeast, and
-  Southern Vancouver Island / Fraser Valley
+  South Coast
   views. Each provides mutually exclusive NOAA VIS/IR and IR plus ECCC VIS/IR,
   IR and convective-sandwich satellite backgrounds; mutually exclusive
   radar/precipitation-type overlays; and independent lightning and wildfire
@@ -37,6 +37,11 @@ the same 54-polygon BC Hydro boundary source as the forecast-model plots.
 
 Every map shows the real source timestamps. Old data is never silently relabelled
 as current, and hatched grey means no current radar coverage rather than no echo.
+The South Coast radar keeps that one-kilometre ECCC field as its complete base
+and overlays NOAA's public KATX and KLGX dual-polarization instantaneous
+precipitation rates. The U.S. insert has 250-m range bins and one-degree
+radials, uses the same mm/h colour scale, and never erases the ECCC field when
+a U.S. beam is blocked or a Level III object is briefly unavailable.
 Lightning density cells are rendered as white-ringed flash markers that fade
 with age rather than opaque grid squares.
 Filled coral flames are agency-reported active fires, with larger symbols only
@@ -84,7 +89,7 @@ historical H.264 loop. GOES-18 GLM uses a rolling one-minute batch south of
 ```text
 ECCC Datamart AMQPS ── GOES / lightning / site radar ┐
 ECCC GeoMet WMS ────── composite / ptype / coverage ├─ local render + retention
-NOAA public S3 ──────── GOES/AHI + GLM/ADP hazards ─┤
+NOAA public S3 ──────── GOES/AHI + GLM/ADP + NEXRAD ┤
                                                      └─ R2 layers + catalog index/full fallback
                                                                   │
 GitHub Pages static viewer ◀──────────────────────────────────────┘

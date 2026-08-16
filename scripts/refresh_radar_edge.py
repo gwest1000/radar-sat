@@ -8,6 +8,7 @@ from pathlib import Path
 
 from radarsat.config import DOMAINS
 from radarsat.geomet import GeoMetClient
+from radarsat.nexrad_hybrid import derive_south_coast_hybrid_radar
 from radarsat.paths import output_root as default_output_root
 from radarsat.pipeline import ingest_geomet
 
@@ -30,10 +31,17 @@ def main() -> int:
                 True,
                 include_layers=("radar-rain", "radar-coverage"),
             )
-        return domain_id, {
+        status: dict[str, object] = {
             layer_id: [value.isoformat().replace("+00:00", "Z") for value in values]
             for layer_id, values in timelines.items()
         }
+        if domain_id == "bc":
+            status["southCoastHybrid"] = derive_south_coast_hybrid_radar(
+                args.output_root,
+                hours=args.hours,
+                latest_only=True,
+            )
+        return domain_id, status
 
     with ThreadPoolExecutor(max_workers=len(domain_ids)) as executor:
         futures = [executor.submit(render, domain_id) for domain_id in domain_ids]

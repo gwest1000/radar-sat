@@ -436,10 +436,10 @@ VIEWPORTS: dict[str, dict[str, float]] = {
     "southeast": {"left": 0.5268, "top": 0.4854, "width": 0.4050, "height": 0.3473},
     "northeast": {"left": 0.3946, "top": 0.1525, "width": 0.5020, "height": 0.4422},
     # Southern Vancouver Island through Greater Vancouver and the Fraser
-    # Valley.  The modest margins retain the Olympic Peninsula and adjacent
-    # Coast Mountains while keeping the useful source pixels concentrated on
-    # the operational corridor.
-    "south-coast": {"left": 0.5080, "top": 0.6870, "width": 0.1620, "height": 0.1480},
+    # Valley.  This tighter, west-shifted crop keeps more of southern Vancouver
+    # Island and the adjacent Pacific approaches in the operational view while
+    # preserving the established display aspect ratio.
+    "south-coast": {"left": 0.5045, "top": 0.6929, "width": 0.1490, "height": 0.1362},
 }
 
 # BC XL already uses the complete east/west source raster. A modest vertical
@@ -486,6 +486,19 @@ for _region_id in VIEWPORTS:
             source="ECCC HRDPS Continental 2.5 km",
             max_age_minutes=90,
         )
+
+# The South Coast radar is rendered directly on its display grid.  ECCC's
+# 1-km continental rain-rate mosaic supplies complete coverage, while the
+# public KATX/KLGX Level III DPR products replace it with higher-resolution
+# dual-polarization rain rates where those U.S. radars have useful coverage.
+_south_coast_radar_id = regional_layer_id("radar-rain", "south-coast")
+LAYERS[_south_coast_radar_id] = Layer(
+    id=_south_coast_radar_id,
+    title="South Coast hybrid radar rain rate",
+    source_layer=None,
+    source="ECCC GeoMet + NOAA NEXRAD Level III",
+    max_age_minutes=20,
+)
 
 
 BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
@@ -569,6 +582,11 @@ def _overlay_product(
         product["viewport"] = viewport
     if max_hours is not None:
         product["maxHours"] = max_hours
+    if product_id == "bc-south-coast-overlay":
+        product["notes"].insert(
+            1,
+            "South Coast radar keeps the ECCC one-kilometre continental rain-rate mosaic as its complete-coverage base and overlays public 250-m-range-bin dual-polarization precipitation rates from KATX and KLGX where those U.S. radars can see.",
+        )
     return product
 
 
@@ -648,8 +666,8 @@ PRODUCTS: list[dict[str, object]] = [
     _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"], max_hours=168),
     _overlay_product(
         "bc-south-coast-overlay",
-        "Southern Vancouver Island / Fraser Valley",
-        "S VI/FV",
+        "South Coast",
+        "South Coast",
         VIEWPORTS["south-coast"],
         five_minute=True,
         max_hours=168,

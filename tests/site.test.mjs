@@ -281,7 +281,9 @@ test("ships a runtime data configuration", async () => {
   await access(new URL("../out/demo/catalog.json", import.meta.url));
   const demo = JSON.parse(await readFile(new URL("../public/demo/catalog.json", import.meta.url), "utf8"));
   assert.match(demo.assetBaseUrl, /^https:\/\//);
-  assert.ok(demo.products.some((product) => product.id === "bc-south-coast-overlay"));
+  const southCoast = demo.products.find((product) => product.id === "bc-south-coast-overlay");
+  assert.equal(southCoast.title, "South Coast");
+  assert.equal(southCoast.shortTitle, "South Coast");
   assert.ok(demo.domains.bc.layers["raw-visir"].frames.length > 0);
   const overlay = demo.products.find((product) => product.id === "bc-large-overlay");
   const small = demo.products.find((product) => product.id === "bc-small-overlay");

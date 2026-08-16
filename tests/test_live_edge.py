@@ -28,6 +28,28 @@ class FakeR2:
 
 
 class LiveEdgeIndexTests(unittest.TestCase):
+    def test_regional_south_coast_radar_is_included(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frame = root / "frames/bc/radar-rain-region-south-coast/2026/08/14/20260814T1906Z.png"
+            frame.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGBA", (4, 3), (0, 0, 0, 0)).save(frame)
+            metadata = root / "metadata/bc/radar-rain-region-south-coast/2026/08/14/20260814T1906Z.json"
+            metadata.parent.mkdir(parents=True, exist_ok=True)
+            metadata.write_text(json.dumps({
+                "validTime": "2026-08-14T19:06:00Z",
+                "path": frame.relative_to(root).as_posix(),
+                "source": "ECCC GeoMet + NOAA NEXRAD Level III",
+                "sourceLayer": "radar",
+                "fetchedAt": "2026-08-14T19:07:00Z",
+            }))
+
+            payload, objects = build_live_edge_index(root)
+
+            layer = payload["domains"]["bc"]["layers"]["radar-rain-region-south-coast"]
+            self.assertEqual(layer["frames"][0]["validTime"], "2026-08-14T19:06:00Z")
+            self.assertEqual([item.key for item in objects], [frame.relative_to(root).as_posix()])
+
     def test_build_selects_latest_complete_frame_per_hot_layer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

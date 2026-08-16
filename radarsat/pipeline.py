@@ -2601,6 +2601,7 @@ def run(
     hotspot_status: dict[str, object] = {}
     active_fire_status: dict[str, object] = {}
     fire_overlay_status: dict[str, object] = {}
+    hybrid_radar_status: dict[str, object] = {}
     raw_satellite_status: dict[str, object] = {}
     goes_hazard_status: dict[str, object] = {}
     with GeoMetClient() as client:
@@ -2650,6 +2651,27 @@ def run(
                     "ptype-coverage",
                 ),
             )
+            if (
+                domain.id == "bc"
+                and os.environ.get("RADARSAT_NEXRAD_HYBRID_ENABLED", "1").lower()
+                not in {"0", "false", "no"}
+            ):
+                try:
+                    from .nexrad_hybrid import derive_south_coast_hybrid_radar
+
+                    hybrid_radar_status[domain.id] = derive_south_coast_hybrid_radar(
+                        output_root,
+                        hours=hours,
+                        latest_only=latest_only,
+                    )
+                    warnings = hybrid_radar_status[domain.id].get("warnings", [])
+                    if isinstance(warnings, list):
+                        auxiliary_warnings.extend(str(value) for value in warnings)
+                except Exception as error:
+                    auxiliary_warnings.append(
+                        "South Coast NOAA/ECCC hybrid radar unavailable: "
+                        f"{type(error).__name__}: {error}"
+                    )
             if domain.id != "bc":
                 try:
                     timelines.update(ingest_geomet(
@@ -2747,6 +2769,7 @@ def run(
             "hotspots": hotspot_status,
             "activeFires": active_fire_status,
             "fireOverlays": fire_overlay_status,
+            "hybridRadar": hybrid_radar_status,
             "rawSatellite": raw_satellite_status,
             "goesHazards": goes_hazard_status,
             "warnings": auxiliary_warnings,

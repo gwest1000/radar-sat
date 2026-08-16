@@ -8,6 +8,7 @@ STATE_ROOT="${RADARSAT_STATE_ROOT:-${PROJECT_ROOT}/var}"
 LOCK_DIR="${STATE_ROOT}/run/radar-edge-cycle.lock"
 LOCK_OWNER="${LOCK_DIR}/pid"
 mkdir -p "${STATE_ROOT}/run" "${PROJECT_ROOT}/logs"
+mkdir -p "${PROJECT_ROOT}/.cache/matplotlib"
 
 release_lock() {
   local owner_pid=""
@@ -45,5 +46,6 @@ trap release_lock EXIT
 trap 'release_lock; exit 130' INT
 trap 'release_lock; exit 143' TERM
 export PYTHONPATH="${PROJECT_ROOT}"
+export MPLCONFIGDIR="${PROJECT_ROOT}/.cache/matplotlib"
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/refresh_radar_edge.py" --output-root "${OUTPUT_ROOT}"
 "${PROJECT_ROOT}/scripts/ops/live_edge_publish.zsh"

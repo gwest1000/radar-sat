@@ -57,6 +57,7 @@ def live_edge_layer_ids() -> tuple[str, ...]:
         for layer_id in LAYERS
         if layer_id in LIVE_EDGE_BASE_LAYERS
         or any(layer_id.startswith(f"{base}-region-") for base in (
+            "radar-rain",
             "lightning-trail",
             "glm-lightning-live",
         ))

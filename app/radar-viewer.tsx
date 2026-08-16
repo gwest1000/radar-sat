@@ -818,6 +818,7 @@ function rasterLayerId(
     product.domain === "bc"
     && regionKey
     && [
+      "radar-rain",
       "lightning-trail",
       "lightning-hour",
       "hotspots",
