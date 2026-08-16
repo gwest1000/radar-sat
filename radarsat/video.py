@@ -905,12 +905,25 @@ def _proxy_selections(
         if not isinstance(layer, Mapping):
             continue
         max_age = layer.get("maxAgeMinutes")
+        frames = list(layer.get("frames", []))
+        if "-region-" in rendered_id:
+            # Region-aligned rasters cannot be reused after a viewport change:
+            # their pixels are already cropped to the old stage geometry.
+            # Legacy frames without this metadata remain eligible, but an
+            # explicit mismatched viewport is never baked into a new video.
+            frames = [
+                frame
+                for frame in frames
+                if not isinstance(frame, Mapping)
+                or "regionalViewport" not in frame
+                or frame.get("regionalViewport") == spec.viewport
+            ]
         prepared.append(
             (
                 None,
                 recipe_id,
                 rendered_id,
-                list(layer.get("frames", [])),
+                frames,
                 int(max_age) if isinstance(max_age, (int, float)) else None,
             )
         )

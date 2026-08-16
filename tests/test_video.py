@@ -996,7 +996,15 @@ class VideoBuildTests(unittest.TestCase):
             lightning_b_path = (
                 "frames/bc/lightning-trail-region-northeast/20.png"
             )
-            for relative in (radar_path, lightning_a_path, lightning_b_path):
+            stale_lightning_path = (
+                "frames/bc/lightning-trail-region-northeast/15-old-crop.png"
+            )
+            for relative in (
+                radar_path,
+                lightning_a_path,
+                lightning_b_path,
+                stale_lightning_path,
+            ):
                 write_rgba(source / relative, (255, 255, 255, 96), (64, 48))
             radar = frame(radar_path, base + dt.timedelta(minutes=5))
             lightning_a = frame(
@@ -1006,6 +1014,7 @@ class VideoBuildTests(unittest.TestCase):
             lightning_a["sourceTimes"] = {
                 "CLDN": stamp(base + dt.timedelta(minutes=4))
             }
+            lightning_a["regionalViewport"] = spec.viewport
             lightning_b = frame(
                 lightning_b_path,
                 base + dt.timedelta(minutes=20),
@@ -1014,6 +1023,18 @@ class VideoBuildTests(unittest.TestCase):
                 "CLDN": stamp(base + dt.timedelta(minutes=8)),
                 "GLM": stamp(base + dt.timedelta(minutes=7)),
             }
+            lightning_b["regionalViewport"] = spec.viewport
+            stale_lightning = frame(
+                stale_lightning_path,
+                base + dt.timedelta(minutes=15),
+            )
+            stale_lightning["sourceTimes"] = {
+                "CLDN": stamp(base + dt.timedelta(minutes=9))
+            }
+            stale_lightning["regionalViewport"] = {
+                **spec.viewport,
+                "left": float(spec.viewport["left"]) + 0.01,
+            }
             layers = catalog["domains"]["bc"]["layers"]
             layers["radar-rain"] = {
                 "maxAgeMinutes": 12,
@@ -1021,7 +1042,7 @@ class VideoBuildTests(unittest.TestCase):
             }
             layers["lightning-trail-region-northeast"] = {
                 "maxAgeMinutes": 30,
-                "frames": [lightning_a, lightning_b],
+                "frames": [lightning_a, stale_lightning, lightning_b],
             }
 
             result = build_profile(
