@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from radarsat.catalog import build_catalog, write_catalog
-from radarsat.config import DOMAINS, LAYERS
+from radarsat.config import DOMAINS, LAYERS, VIEWPORTS
 from radarsat.pipeline import frame_path, metadata_path, write_metadata
 
 
@@ -121,6 +121,34 @@ class CatalogTests(unittest.TestCase):
             rebuilt = build_catalog(root)
 
             self.assertNotIn("radar-rain", rebuilt["domains"]["bc"]["layers"])
+
+    def test_catalog_omits_explicitly_stale_regional_viewports(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = DOMAINS["bc"]
+            layer = LAYERS["lightning-trail-region-south-coast"]
+            base = dt.datetime(2026, 7, 22, 12, tzinfo=UTC)
+            for index, viewport in enumerate((
+                {**VIEWPORTS["south-coast"], "left": 0.51},
+                VIEWPORTS["south-coast"],
+            )):
+                valid_time = base + dt.timedelta(minutes=index * 10)
+                image = frame_path(root, domain, layer, valid_time)
+                image.parent.mkdir(parents=True, exist_ok=True)
+                image.write_bytes(b"frame")
+                write_metadata(
+                    root,
+                    domain,
+                    layer,
+                    valid_time,
+                    image,
+                    extra={"regionalViewport": viewport},
+                )
+
+            frames = build_catalog(root)["domains"]["bc"]["layers"][layer.id]["frames"]
+
+            self.assertEqual(len(frames), 1)
+            self.assertEqual(frames[0]["regionalViewport"], VIEWPORTS["south-coast"])
 
     def test_catalog_falls_back_to_whole_frame_when_tile_manifest_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

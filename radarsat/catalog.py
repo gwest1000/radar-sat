@@ -8,7 +8,7 @@ from concurrent.futures import Executor, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from .config import DOMAINS, LAYERS, LEGENDS, PRODUCTS
+from .config import DOMAINS, LAYERS, LEGENDS, PRODUCTS, VIEWPORTS
 
 
 UTC = dt.timezone.utc
@@ -60,6 +60,21 @@ def _frame_asset_exists(root: Path, frame: dict[str, Any]) -> bool:
         return (root / relative).is_file()
     except OSError:
         return False
+
+
+def _matches_current_regional_viewport(
+    layer_id: str,
+    frame: dict[str, Any],
+) -> bool:
+    """Exclude explicitly stale pre-cropped assets after a viewport change."""
+    for region_id, viewport in VIEWPORTS.items():
+        if not layer_id.endswith(f"-region-{region_id}"):
+            continue
+        return (
+            "regionalViewport" not in frame
+            or frame.get("regionalViewport") == viewport
+        )
+    return True
 
 
 def _without_broken_tiles(root: Path, frame: dict[str, Any]) -> dict[str, Any]:
@@ -359,6 +374,7 @@ def read_metadata(
         _without_broken_tiles(root, frame)
         for frame in frames_by_path.values()
         if _frame_asset_exists(root, frame)
+        and _matches_current_regional_viewport(layer_id, frame)
     ]
     frames.sort(key=lambda item: item["validTime"])
     return _canonical_five_minute_frames(domain_id, layer_id, frames)
