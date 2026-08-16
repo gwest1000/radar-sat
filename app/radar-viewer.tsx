@@ -159,6 +159,18 @@ type SiteConfig = {
 };
 
 const RANGE_OPTIONS = [3, 6, 12, 24, 168];
+const REGION_MENU_BOTTOM_TO_TOP = [
+  "bc-south-coast-overlay",
+  "bc-southwest-overlay",
+  "bc-southeast-overlay",
+  "bc-northeast-overlay",
+  "bc-small-overlay",
+  "bc-large-overlay",
+  "pacific-wna-overlay",
+  "north-america-overlay",
+  "north-pacific-overlay",
+] as const;
+const REGION_MENU_TOP_TO_BOTTOM = [...REGION_MENU_BOTTOM_TO_TOP].reverse();
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 const VIDEO_HUD_UPDATE_INTERVAL_MS = 180;
 const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v6";
@@ -1856,6 +1868,13 @@ export function RadarViewer() {
     () => catalog?.products.filter((item) => productHasFrames(catalog, item)) ?? [],
     [catalog],
   );
+  const regionMenuProducts = useMemo(() => {
+    const rank = new Map<string, number>(REGION_MENU_TOP_TO_BOTTOM.map((id, index) => [id, index]));
+    return [...availableProducts].sort((left, right) => (
+      (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER)
+      - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+    ));
+  }, [availableProducts]);
   const product = useMemo(
     () => availableProducts.find((item) => item.id === productId) ?? availableProducts[0],
     [availableProducts, productId],
@@ -2246,6 +2265,10 @@ export function RadarViewer() {
   const availableRangeOptions = useMemo(
     () => RANGE_OPTIONS.filter((hours) => hours <= (product?.maxHours ?? 168)),
     [product?.maxHours],
+  );
+  const rangeMenuOptions = useMemo(
+    () => [...availableRangeOptions].reverse(),
+    [availableRangeOptions],
   );
 
   const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
@@ -2890,7 +2913,7 @@ export function RadarViewer() {
                   <span className="selector-chevron" aria-hidden="true">⌃</span>
                 </button>
                 <div className="selector-options product-menu" role="group" aria-label="Loop products">
-                  {availableProducts.map((item) => (
+                  {regionMenuProducts.map((item) => (
                     <button
                       className="product-button"
                       type="button"
@@ -2929,7 +2952,7 @@ export function RadarViewer() {
                   <span className="selector-chevron" aria-hidden="true">⌃</span>
                 </button>
                 <div className="selector-options range-actions" role="group" aria-label="Archive range">
-                  {availableRangeOptions.map((hours) => (
+                  {rangeMenuOptions.map((hours) => (
                     <button className="range-button" type="button" aria-pressed={effectiveRangeHours === hours} key={hours} onClick={(event) => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); setRangeMenuOpen(false); event.currentTarget.blur(); }}>
                       {hours === 168 ? "7 d" : `${hours} h`}
                     </button>

@@ -20,6 +20,10 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /filter\(\(item\) => productHasFrames\(catalog, item\)\)/);
   assert.match(viewer, /actualSourceTime\(item\.id, item\.frame\)/);
   assert.match(viewer, /RANGE_OPTIONS = \[3, 6, 12, 24, 168\]/);
+  assert.match(viewer, /REGION_MENU_BOTTOM_TO_TOP = \[\s*"bc-south-coast-overlay",\s*"bc-southwest-overlay",\s*"bc-southeast-overlay",\s*"bc-northeast-overlay",\s*"bc-small-overlay",\s*"bc-large-overlay",\s*"pacific-wna-overlay",\s*"north-america-overlay",\s*"north-pacific-overlay",\s*\]/);
+  assert.match(viewer, /REGION_MENU_TOP_TO_BOTTOM = \[\.\.\.REGION_MENU_BOTTOM_TO_TOP\]\.reverse\(\)/);
+  assert.match(viewer, /regionMenuProducts\.map\(\(item\) =>/);
+  assert.match(viewer, /rangeMenuOptions\.map\(\(hours\) =>/);
   assert.match(viewer, /function playbackFrames/);
   assert.match(viewer, /SAME_SLOT_TOLERANCE_MS/);
   assert.match(viewer, /const frame = selectedFrame \?\?/);
