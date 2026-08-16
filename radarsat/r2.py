@@ -961,6 +961,47 @@ def discover_objects(
     return objects, catalog_bytes
 
 
+def _discover_objects_stable(
+    root: Path,
+    *,
+    whole_frame_only: bool = False,
+    minimum_valid_time: dt.datetime | None = None,
+    existing_video_keys: set[str] | None = None,
+    attempts: int = 12,
+) -> tuple[list[LocalObject], bytes]:
+    """Retry the narrow frame-rotation race during a live publication.
+
+    Catalog discovery already removes frame entries whose image/metadata pair
+    is incomplete. A concurrent retention worker can still unlink another
+    pair in the few milliseconds between that check and the final lstat. The
+    next discovery pass sees the completed rotation and safely omits the pair;
+    structural/static/video safety failures remain immediate errors.
+    """
+
+    last_error: PublicationSafetyError | None = None
+    for attempt in range(attempts):
+        try:
+            return discover_objects(
+                root,
+                whole_frame_only=whole_frame_only,
+                minimum_valid_time=minimum_valid_time,
+                existing_video_keys=existing_video_keys,
+            )
+        except PublicationSafetyError as error:
+            message = str(error)
+            if not message.startswith((
+                "Catalog asset is missing or unreadable: frames/",
+                "Catalog asset is missing or unreadable: metadata/",
+            )):
+                raise
+            last_error = error
+            if attempt + 1 < attempts:
+                time.sleep(min(0.2, 0.02 * (attempt + 1)))
+    raise PublicationSafetyError(
+        f"Could not discover a stable rotating frame set: {last_error}"
+    )
+
+
 def build_catalog_index(catalog_bytes: bytes) -> bytes:
     """Build the small, frequently-polled view of a published catalog.
 
@@ -1003,7 +1044,7 @@ def publication_snapshot(
     known_objects: Mapping[str, tuple[int, int]] | None = None,
     existing_video_keys: set[str] | None = None,
     initial_discovery: tuple[list[LocalObject], bytes] | None = None,
-    attempts: int = 4,
+    attempts: int = 12,
 ) -> tuple[Path, list[LocalObject], bytes]:
     """Hard-link the upload set while live retention continues.
 
@@ -1026,7 +1067,7 @@ def publication_snapshot(
             if attempt == 0 and initial_discovery is not None:
                 objects, catalog_bytes = initial_discovery
             else:
-                objects, catalog_bytes = discover_objects(
+                objects, catalog_bytes = _discover_objects_stable(
                     root,
                     whole_frame_only=whole_frame_only,
                     minimum_valid_time=minimum_valid_time,
@@ -1476,7 +1517,7 @@ def publish(
             # hard links for a snapshot that cannot be uploaded. The regular
             # reconciliation path still inventories R2 and can make space by
             # deleting expired objects after its atomic catalog commit.
-            preflight_objects, preflight_catalog = discover_objects(
+            preflight_objects, preflight_catalog = _discover_objects_stable(
                 root,
                 whole_frame_only=whole_frame_only,
                 minimum_valid_time=minimum_valid_time,
@@ -1490,7 +1531,7 @@ def publish(
             )
             preflight_discovery = (preflight_objects, preflight_catalog)
         if dry_run:
-            objects, catalog_bytes = discover_objects(
+            objects, catalog_bytes = _discover_objects_stable(
                 root,
                 whole_frame_only=whole_frame_only,
                 minimum_valid_time=minimum_valid_time,

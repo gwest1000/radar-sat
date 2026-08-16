@@ -1075,6 +1075,64 @@ class PublisherTests(unittest.TestCase):
                 ("put", "catalog-index.json"),
             ])
 
+    def test_fast_publish_retries_frames_rotated_during_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            stable = discover_objects(root)
+            rotation = PublicationSafetyError(
+                "Catalog asset is missing or unreadable: "
+                "frames/bc/radar-rain/2026/07/20/rotating.png"
+            )
+
+            with mock.patch(
+                "radarsat.r2.discover_objects",
+                side_effect=[rotation, rotation, rotation, rotation, stable],
+            ) as discovery:
+                result = publish(
+                    root,
+                    self.config(),
+                    base / "state.sqlite3",
+                    base / "publish.json",
+                    client=FakeR2(),
+                    now=now,
+                    fast=True,
+                )
+
+            self.assertTrue(result["fast"])
+            self.assertEqual(discovery.call_count, 5)
+
+    def test_fast_publish_does_not_retry_structural_asset_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            structural = PublicationSafetyError(
+                "Catalog asset is missing or unreadable: static/bc/base-dark.png"
+            )
+
+            with mock.patch(
+                "radarsat.r2.discover_objects",
+                side_effect=structural,
+            ) as discovery:
+                with self.assertRaises(PublicationSafetyError):
+                    publish(
+                        root,
+                        self.config(),
+                        base / "state.sqlite3",
+                        base / "publish.json",
+                        client=FakeR2(),
+                        now=now,
+                        fast=True,
+                    )
+
+            self.assertEqual(discovery.call_count, 1)
+
     def test_fast_over_cap_publish_refuses_before_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
