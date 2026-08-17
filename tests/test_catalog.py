@@ -211,12 +211,24 @@ class CatalogTests(unittest.TestCase):
             boundary = root / "static" / "bc" / "boundaries.png"
             boundary.parent.mkdir(parents=True, exist_ok=True)
             boundary.write_bytes(b"boundary")
+            regional_watershed = (
+                root / "static" / "bc" / "bch-watersheds-region-south-coast.png"
+            )
+            regional_watershed.write_bytes(b"regional watershed")
 
             rebuilt = build_catalog(root)
             entry = rebuilt["domains"]["bc"]["staticLayers"]["boundaries"]
+            regional_entry = rebuilt["domains"]["bc"]["staticLayers"][
+                "watersheds-region-south-coast"
+            ]
 
             self.assertEqual(entry["path"], "static/bc/boundaries.png")
             self.assertTrue(entry["revision"].isdigit())
+            self.assertEqual(
+                regional_entry["path"],
+                "static/bc/bch-watersheds-region-south-coast.png",
+            )
+            self.assertTrue(regional_entry["revision"].isdigit())
 
     def test_five_minute_catalog_uses_one_source_and_monotonic_fallbacks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

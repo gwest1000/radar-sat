@@ -66,6 +66,7 @@ REGIONAL_LAYER_BASES = frozenset(
         "hrdps-mslp",
     }
 )
+REGIONAL_STATIC_BASES = frozenset({"watersheds"})
 REGIONAL_PRODUCT_KEYS = {
     "bc-small-overlay": "small",
     "bc-southwest-overlay": "southwest",
@@ -881,17 +882,27 @@ def _proxy_selections(
             or recipe_id in SATELLITE_LAYER_IDS
         ):
             continue
-        static = domain.get("staticLayers", {}).get(recipe_id)
+        region = REGIONAL_PRODUCT_KEYS.get(spec.product_id)
+        static_id = (
+            f"{recipe_id}-region-{region}"
+            if region and recipe_id in REGIONAL_STATIC_BASES
+            else recipe_id
+        )
+        static_layers = domain.get("staticLayers", {})
+        static = static_layers.get(static_id)
+        if not isinstance(static, Mapping):
+            static_id = recipe_id
+            static = static_layers.get(static_id)
         if isinstance(static, Mapping) and static.get("path"):
             prepared.append(
                 (
                     ProxyLayerSelection(
                         recipe_id=recipe_id,
-                        rendered_layer_id=recipe_id,
+                        rendered_layer_id=static_id,
                         source_key=_static_url_key(static),
                         source_path=str(static["path"]),
                         source_valid_time=None,
-                        stage_aligned=False,
+                        stage_aligned=static_id != recipe_id,
                     ),
                     None,
                     None,

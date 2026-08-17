@@ -419,12 +419,21 @@ def build_catalog(root: Path) -> dict[str, Any]:
                                 }
                         layers[layer_directory.name] = entry
             static_layers: dict[str, Any] = {}
-            for layer_id, filename in (
+            static_files = [
                 ("base-dark", "base-dark.png"),
                 ("watersheds", "bch-watersheds.png"),
                 ("transmission-lines", "transmission-lines.png"),
                 ("boundaries", "boundaries.png"),
-            ):
+            ]
+            if domain_id == "bc":
+                static_files.extend(
+                    (
+                        f"watersheds-region-{region_id}",
+                        f"bch-watersheds-region-{region_id}.png",
+                    )
+                    for region_id in VIEWPORTS
+                )
+            for layer_id, filename in static_files:
                 path = root / "static" / domain_id / filename
                 if path.exists():
                     static_layers[layer_id] = {

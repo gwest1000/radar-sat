@@ -347,6 +347,9 @@ def render_watershed_overlay(
     domain: Domain,
     destination: Path,
     source_path: Path | None = None,
+    *,
+    viewport: dict[str, float] | None = None,
+    output_width: int | None = None,
 ) -> None:
     """Render the local BC Hydro watershed polygons onto the aligned map grid."""
     from cartopy.io import shapereader
@@ -361,7 +364,43 @@ def render_watershed_overlay(
     if not projection.is_file():
         raise FileNotFoundError(f"BC Hydro watershed projection is missing: {projection}")
 
-    bbox = projected_bbox(domain)
+    if viewport is not None and output_width is None:
+        raise ValueError("Regional watershed renders require an output width")
+    if output_width is not None and output_width < 1:
+        raise ValueError("Watershed overlay output width must be positive")
+
+    full_bbox = projected_bbox(domain)
+    if viewport is None:
+        bbox = full_bbox
+        render_size = (
+            output_width or domain.width,
+            max(
+                1,
+                round((output_width or domain.width) * domain.height / domain.width),
+            ),
+        )
+    else:
+        full_xmin, full_ymin, full_xmax, full_ymax = full_bbox
+        full_width = full_xmax - full_xmin
+        full_height = full_ymax - full_ymin
+        xmin = full_xmin + viewport["left"] * full_width
+        xmax = xmin + viewport["width"] * full_width
+        ymax = full_ymax - viewport["top"] * full_height
+        ymin = ymax - viewport["height"] * full_height
+        bbox = (xmin, ymin, xmax, ymax)
+        assert output_width is not None
+        render_size = (
+            output_width,
+            max(
+                1,
+                round(
+                    output_width
+                    * domain.height
+                    * viewport["height"]
+                    / (domain.width * viewport["width"])
+                ),
+            ),
+        )
     clip = box(*bbox)
     transformer = Transformer.from_crs(
         CRS.from_wkt(projection.read_text()),
@@ -390,12 +429,15 @@ def render_watershed_overlay(
         projected = transform(transformer.transform, geometry)
         if projected.is_empty or not projected.intersects(clip):
             continue
-        clipped = projected.intersection(clip).simplify(150, preserve_topology=True)
+        clipped = projected.intersection(clip).simplify(
+            30 if viewport is not None else 150,
+            preserve_topology=True,
+        )
         for coordinates in rings(clipped):
             pixels = [
                 (
-                    (x - xmin) / (xmax - xmin) * (domain.width - 1),
-                    (ymax - y) / (ymax - ymin) * (domain.height - 1),
+                    (x - xmin) / (xmax - xmin) * (render_size[0] - 1),
+                    (ymax - y) / (ymax - ymin) * (render_size[1] - 1),
                 )
                 for x, y in coordinates
             ]
@@ -404,12 +446,14 @@ def render_watershed_overlay(
     if not pixel_lines:
         raise RuntimeError("BC Hydro watershed shapefile does not intersect the map domain")
 
-    image = Image.new("RGBA", (domain.width, domain.height), (0, 0, 0, 0))
+    image = Image.new("RGBA", render_size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
+    core_width = max(1, round(render_size[0] / 1440))
+    halo_width = core_width + max(2, round(render_size[0] / 1440))
     for line in pixel_lines:
-        draw.line(line, fill=(3, 16, 23, 215), width=3, joint="curve")
+        draw.line(line, fill=(3, 16, 23, 215), width=halo_width, joint="curve")
     for line in pixel_lines:
-        draw.line(line, fill=(114, 217, 255, 225), width=1, joint="curve")
+        draw.line(line, fill=(114, 217, 255, 225), width=core_width, joint="curve")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     try:

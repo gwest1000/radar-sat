@@ -950,17 +950,26 @@ function composeLayers(
         || (recipe.id === "hotspots" && !usesRasterFire(product))
       )
     ) return [];
-    const staticLayer = domain.staticLayers[recipe.id];
+    const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
+    const regionalStaticId = product.domain === "bc"
+      && regionKey
+      && recipe.id === "watersheds"
+      && domain.staticLayers[`watersheds-region-${regionKey}`]
+      ? `watersheds-region-${regionKey}`
+      : recipe.id;
+    const staticLayer = domain.staticLayers[regionalStaticId];
     if (staticLayer) {
       const url = new URL(staticLayer.path, catalogBase);
       if (staticLayer.revision) url.searchParams.set("v", staticLayer.revision);
       return [{
         id: recipe.id,
+        renderId: regionalStaticId,
         url: url.toString(),
         sourceCacheKey: staticLayer.revision
           ? sourceCacheKey(staticLayer.path, staticLayer.revision)
           : staticLayer.path,
         opacity: recipe.opacity,
+        stageAligned: regionalStaticId.includes("-region-"),
       }];
     }
     let renderedLayerId = rasterLayerId(recipe.id, product, domain, hourlyLightning);

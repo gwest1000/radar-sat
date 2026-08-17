@@ -337,6 +337,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.some((product) => product.group === "Snow / fog"), false);
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(demo.domains.bc.staticLayers.watersheds.path, "static/bc/bch-watersheds.png");
+  assert.match(viewer, /watersheds-region-\$\{regionKey\}/);
+  assert.match(viewer, /stageAligned: regionalStaticId\.includes\("-region-"\)/);
   assert.equal(demo.domains.bc.staticLayers["transmission-lines"].path, "static/bc/transmission-lines.png");
   assert.equal(overlay.legends.includes("transmission-lines"), true);
   assert.match(overlay.notes.join(" "), /54-polygon BC Hydro boundary source/);

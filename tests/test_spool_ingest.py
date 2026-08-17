@@ -443,6 +443,19 @@ class NativeRenderTests(unittest.TestCase):
             )
             self.assertTrue(np.any(cyan))
 
+            regional_destination = root / "bch-watersheds-region.png"
+            viewport = {"left": 0.2, "top": 0.2, "width": 0.6, "height": 0.6}
+            render_watershed_overlay(
+                domain,
+                regional_destination,
+                source,
+                viewport=viewport,
+                output_width=240,
+            )
+            regional = np.asarray(Image.open(regional_destination).convert("RGBA"))
+            self.assertEqual(regional.shape, (200, 240, 4))
+            self.assertTrue(np.any(regional[:, :, 3] > 0))
+
     def test_lightning_trail_uses_haloed_bolts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

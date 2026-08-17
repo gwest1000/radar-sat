@@ -370,6 +370,12 @@ class VideoBuildTests(unittest.TestCase):
             draw = ImageDraw.Draw(boundary_image)
             draw.line((0, 0, 63, 47), fill=(255, 255, 255, 255), width=1)
             boundary_image.save(boundary)
+        regional_watershed = source / "static/bc/bch-watersheds-region-northeast.png"
+        write_rgba(regional_watershed, (0, 0, 0, 0), (64, 48))
+        with Image.open(regional_watershed) as watershed_image:
+            draw = ImageDraw.Draw(watershed_image)
+            draw.line((0, 24, 63, 24), fill=(114, 217, 255, 255), width=2)
+            watershed_image.save(regional_watershed)
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
         frames: list[dict[str, object]] = []
         for index, minute in enumerate((0, 10, 20)):
@@ -387,6 +393,10 @@ class VideoBuildTests(unittest.TestCase):
                     "layers": {"raw-visir": {"maxAgeMinutes": 90, "frames": frames}},
                     "staticLayers": {
                         "base-dark": {"path": "static/bc/base-dark.png", "revision": "1"},
+                        "watersheds-region-northeast": {
+                            "path": "static/bc/bch-watersheds-region-northeast.png",
+                            "revision": "1",
+                        },
                         "boundaries": {"path": "static/bc/boundaries.png", "revision": "1"},
                     },
                 }
@@ -434,9 +444,17 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(manifest["media"]["contentHeight"], 48)
             self.assertEqual(manifest["media"]["frameRate"], VIDEO_FRAME_RATE)
             self.assertIn("static/bc/boundaries.png?v=1", manifest["proxies"])
+            self.assertIn(
+                "static/bc/bch-watersheds-region-northeast.png?v=1",
+                manifest["proxies"],
+            )
             self.assertEqual(
                 [layer["id"] for layer in manifest["frames"][0]["proxyLayers"]],
-                ["boundaries"],
+                ["watersheds", "boundaries"],
+            )
+            self.assertEqual(
+                manifest["frames"][0]["proxyLayers"][0]["renderId"],
+                "watersheds-region-northeast",
             )
             self.assertIsNone(
                 manifest["frames"][0]["proxyLayers"][0]["sourceValidTime"]
@@ -648,7 +666,7 @@ class VideoBuildTests(unittest.TestCase):
                         proxy_selection_cache=selection_cache,
                         proxy_render_cache=render_cache,
                     )
-            self.assertEqual(render.call_count, 1)
+            self.assertEqual(render.call_count, 2)
 
     def test_hls_segments_pack_missing_observations_at_uniform_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1061,9 +1079,9 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(
                 [[layer["id"] for layer in items] for items in proxy_layers],
                 [
-                    ["boundaries"],
-                    ["radar-rain", "boundaries", "lightning-trail"],
-                    ["boundaries", "lightning-trail"],
+                    ["watersheds", "boundaries"],
+                    ["radar-rain", "watersheds", "boundaries", "lightning-trail"],
+                    ["watersheds", "boundaries", "lightning-trail"],
                 ],
             )
             self.assertEqual(
@@ -1071,15 +1089,15 @@ class VideoBuildTests(unittest.TestCase):
                 "2026-08-01T00:05:00Z",
             )
             self.assertEqual(
-                proxy_layers[1][2]["renderId"],
+                proxy_layers[1][3]["renderId"],
                 "lightning-trail-region-northeast",
             )
             self.assertEqual(
-                proxy_layers[1][2]["sourceValidTime"],
+                proxy_layers[1][3]["sourceValidTime"],
                 "2026-08-01T00:04:00Z",
             )
             self.assertEqual(
-                proxy_layers[2][1]["sourceValidTime"],
+                proxy_layers[2][2]["sourceValidTime"],
                 "2026-08-01T00:08:00Z",
             )
             proxy_keys = set(manifest["proxies"])

@@ -91,6 +91,8 @@ LIGHTNING_ARCHIVE_HOURS = 168.0
 FIRE_ARCHIVE_HOURS = 168.0
 STATIC_BOUNDARY_RENDER_VERSION = 4
 STATIC_TRANSMISSION_RENDER_VERSION = 2
+STATIC_WATERSHED_RENDER_VERSION = 2
+REGIONAL_WATERSHED_WIDTH = 2880
 DEFAULT_SOURCE_LAYERS = (
     "daynight",
     "ir",
@@ -514,8 +516,33 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
         render_static_maps(domain, base, boundaries)
         static_versions["boundaries"] = STATIC_BOUNDARY_RENDER_VERSION
     watersheds = root / "static" / domain.id / "bch-watersheds.png"
-    if domain.id == "bc" and not watersheds.exists():
-        render_watershed_overlay(domain, watersheds)
+    watershed_signature = {
+        "renderVersion": STATIC_WATERSHED_RENDER_VERSION,
+        "regionalWidth": REGIONAL_WATERSHED_WIDTH,
+        "viewports": VIEWPORTS,
+    }
+    if domain.id == "bc":
+        regional_watersheds = {
+            region_id: root
+            / "static"
+            / domain.id
+            / f"bch-watersheds-region-{region_id}.png"
+            for region_id in VIEWPORTS
+        }
+        if (
+            not watersheds.exists()
+            or any(not path.exists() for path in regional_watersheds.values())
+            or static_versions.get("watersheds") != watershed_signature
+        ):
+            render_watershed_overlay(domain, watersheds)
+            for region_id, destination in regional_watersheds.items():
+                render_watershed_overlay(
+                    domain,
+                    destination,
+                    viewport=VIEWPORTS[region_id],
+                    output_width=REGIONAL_WATERSHED_WIDTH,
+                )
+            static_versions["watersheds"] = watershed_signature
     transmission_lines = root / "static" / domain.id / "transmission-lines.png"
     if (
         not transmission_lines.exists()
