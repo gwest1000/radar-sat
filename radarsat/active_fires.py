@@ -28,6 +28,10 @@ UNITED_STATES_SOURCE_CODE = 2
 STANDARD_FIRE_CODE = 0
 CANADA_WILDFIRE_OF_NOTE_CODE = 1
 US_LARGE_INCIDENT_CODE = 2
+FIRE_STATUS_UNKNOWN = 0
+FIRE_STATUS_UNDER_CONTROL = 1
+FIRE_STATUS_BEING_HELD = 2
+FIRE_STATUS_OUT_OF_CONTROL = 3
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,26 @@ class ActiveFirePoint:
     size_hectares: float
     source_code: int
     highlight_code: int
+    status_code: int
+
+
+def fire_status_code(value: object) -> int:
+    """Return the CIFFC stage of control ordered from least to most severe."""
+    normalized = " ".join(str(value or "").strip().upper().replace("_", " ").split())
+    return {
+        "UC": FIRE_STATUS_UNDER_CONTROL,
+        "UNDER CONTROL": FIRE_STATUS_UNDER_CONTROL,
+        "BH": FIRE_STATUS_BEING_HELD,
+        "BEING HELD": FIRE_STATUS_BEING_HELD,
+        "OC": FIRE_STATUS_OUT_OF_CONTROL,
+        "OUT OF CONTROL": FIRE_STATUS_OUT_OF_CONTROL,
+    }.get(normalized, FIRE_STATUS_UNKNOWN)
+
+
+def _bc_fire_number(value: object) -> str:
+    """Normalize CWFIF and BCWS identifiers to the provincial fire number."""
+    normalized = str(value or "").strip().upper()
+    return normalized.rsplit("-", 1)[-1]
 
 
 def _feature_collection(response: Any, label: str) -> list[dict[str, Any]]:
@@ -196,6 +220,14 @@ def project_active_fires(
     # When it is available, replace CWFIF's BC subset to avoid duplicate points.
     bcws_features = bc_features or []
     cwfif_features = canadian_features
+    cwfif_bc_status = {
+        _bc_fire_number((feature.get("properties") or {}).get("agency_fire_id")): fire_status_code(
+            (feature.get("properties") or {}).get("stage_of_control_status")
+        )
+        for feature in canadian_features
+        if str((feature.get("properties") or {}).get("agency_code", "")).upper() == "BC"
+        and _bc_fire_number((feature.get("properties") or {}).get("agency_fire_id"))
+    }
     if bcws_features:
         cwfif_features = [
             feature
@@ -222,10 +254,17 @@ def project_active_fires(
                 )
                 size_value = properties.get("fire_size")
                 size_multiplier = 1.0
+                status_code = fire_status_code(properties.get("stage_of_control_status"))
             elif feature_source == "bcws":
                 updated = None
                 size_value = properties.get("CURRENT_SIZE")
                 size_multiplier = 1.0
+                status_code = fire_status_code(properties.get("FIRE_STATUS"))
+                if status_code == FIRE_STATUS_UNKNOWN:
+                    status_code = cwfif_bc_status.get(
+                        _bc_fire_number(properties.get("FIRE_NUMBER")),
+                        FIRE_STATUS_UNKNOWN,
+                    )
                 if str(properties.get("FIRE_OF_NOTE_IND", "")).upper() == "Y":
                     highlight_code = CANADA_WILDFIRE_OF_NOTE_CODE
             else:
@@ -233,6 +272,9 @@ def project_active_fires(
                 size_value = properties.get("IncidentSize")
                 # IRWIN incident size is reported in acres.
                 size_multiplier = 0.40468564224
+                # WFIGS exposes percent contained and control dates, but no
+                # category equivalent to Canada's OC/BH/UC stage of control.
+                status_code = FIRE_STATUS_UNKNOWN
                 # NIFC's closest operational equivalent to a Canadian Fire of
                 # Note is a large incident with a current initial/update ICS-209.
                 # A final report (F) is deliberately not highlighted.
@@ -264,14 +306,17 @@ def project_active_fires(
                 size_hectares,
                 source_code,
                 highlight_code,
+                status_code,
             )
             key = (px, py, source_code)
             previous = points.get(key)
             if previous is None or (
                 candidate.highlight_code,
+                candidate.status_code,
                 candidate.size_hectares,
             ) > (
                 previous.highlight_code,
+                previous.status_code,
                 previous.size_hectares,
             ):
                 points[key] = candidate

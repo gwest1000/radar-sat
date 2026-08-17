@@ -394,9 +394,14 @@ input:focus-visible {
 }
 
 .active-fire-marker {
-  color: #ff7956;
+  color: #ff8a4f;
   filter: drop-shadow(0 0 2px rgba(255, 229, 190, 0.75)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.76));
 }
+
+.active-fire-marker.fire-status-oc { color: #ef5239; }
+.active-fire-marker.fire-status-bh { color: #f4c73f; }
+.active-fire-marker.fire-status-uc { color: #53be69; }
+.active-fire-marker.fire-status-unknown { color: #ff8a4f; }
 
 .active-fire-marker.fire-notable svg {
   width: clamp(14px, 1.65vw, 21px);
@@ -1010,6 +1015,28 @@ input:focus-visible {
   gap: 5px;
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+.fire-status-key {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.fire-status-key > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.fire-status-key .legend-marker {
+  flex-basis: 15px;
+  width: 15px;
+  height: 15px;
 }
 
 .hotspot-symbol {

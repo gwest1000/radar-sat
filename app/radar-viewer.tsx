@@ -1,6 +1,16 @@
 "use client";
 
-import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CSSProperties,
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
 import {
@@ -58,6 +68,7 @@ type FireMarker = {
   kind: "active" | "hotspot";
   notable: boolean;
   highlight: 0 | 1 | 2;
+  status: 0 | 1 | 2 | 3;
   signal: number;
   count: number;
 };
@@ -690,6 +701,7 @@ function clusterNotableFires(markers: FireMarker[], targetDomain: string): FireM
       x: group.reduce((sum, marker) => sum + marker.x, 0) / group.length,
       y: group.reduce((sum, marker) => sum + marker.y, 0) / group.length,
       signal: Math.max(...group.map((marker) => marker.signal)),
+      status: Math.max(...group.map((marker) => marker.status)) as FireMarker["status"],
       count: group.reduce((sum, marker) => sum + marker.count, 0),
     });
   }
@@ -710,10 +722,13 @@ async function buildFireMarkers(
   // symbols per Pacific frame while retaining notable fires and strong heat.
   const overview = targetDomain === "north-america" || targetDomain === "north-pacific";
   const activeMarkers = (activePayload?.points ?? []).flatMap((point, index): FireMarker[] => {
-    const [x, y, , sizeValue, , highlightValue] = point;
+    const [x, y, , sizeValue, , highlightValue, statusValue] = point;
     const sizeHectares = Number.isFinite(sizeValue) ? sizeValue : 0;
     const highlight: FireMarker["highlight"] = highlightValue === 1 || highlightValue === 2
       ? highlightValue
+      : 0;
+    const status: FireMarker["status"] = statusValue === 1 || statusValue === 2 || statusValue === 3
+      ? statusValue
       : 0;
     if (![x, y].every(Number.isFinite) || x < 0 || x > 1 || y < 0 || y > 1) return [];
     if (overview && highlight === 0) return [];
@@ -727,6 +742,7 @@ async function buildFireMarkers(
       kind: "active",
       notable: highlight > 0,
       highlight,
+      status,
       signal: sizeHectares,
       count: 1,
     }];
@@ -754,6 +770,7 @@ async function buildFireMarkers(
       kind: "hotspot",
       notable: false,
       highlight: 0,
+      status: 0,
       signal: frp,
       count: 1,
     }];
@@ -1386,7 +1403,8 @@ function FireCanvas({
             : Math.max(7, Math.min(13, window.innerWidth * 0.0102));
         const hotspotColors = ["#ffb05d", "#f08d43", "#c9663b"];
         const hotspotOpacity = [1, 0.72, 0.44];
-        const colour = active ? "#ff7956" : hotspotColors[marker.age];
+        const activeColours = ["#ff8a4f", "#53be69", "#f4c73f", "#ef5239"];
+        const colour = active ? activeColours[marker.status] : hotspotColors[marker.age];
         const opacity = active ? 1 : hotspotOpacity[marker.age];
 
         context.save();
@@ -1566,18 +1584,20 @@ function FireLegend({
   return (
     <div className="hotspot-legend" aria-label="Active wildfire and thermal hotspot legend">
       <div className="hotspot-key-row">
-        <span className="fire-marker active-fire-marker fire-notable legend-marker"><FlameIcon highlighted /></span>
-        <span>BCWS Wildfire of Note</span>
+        <span className="fire-marker active-fire-marker fire-status-oc fire-notable legend-marker"><FlameIcon highlighted /></span>
+        <span>Yellow outline · BCWS Wildfire of Note</span>
       </div>
       {showUsLarge && (
         <div className="hotspot-key-row">
-          <span className="fire-marker active-fire-marker fire-notable legend-marker"><FlameIcon highlighted /></span>
-          <span>U.S. current ICS-209 large incident</span>
+          <span className="fire-marker active-fire-marker fire-status-unknown fire-notable legend-marker"><FlameIcon highlighted /></span>
+          <span>Yellow outline · U.S. current ICS-209 large incident</span>
         </div>
       )}
-      <div className="hotspot-key-row">
-        <span className="fire-marker active-fire-marker legend-marker"><FlameIcon /></span>
-        <span>Other active wildfire</span>
+      <div className="fire-status-key" aria-label="Agency wildfire stage of control colours">
+        <span><i className="fire-marker active-fire-marker fire-status-oc legend-marker"><FlameIcon /></i>Out of control</span>
+        <span><i className="fire-marker active-fire-marker fire-status-bh legend-marker"><FlameIcon /></i>Being held</span>
+        <span><i className="fire-marker active-fire-marker fire-status-uc legend-marker"><FlameIcon /></i>Under control</span>
+        <span><i className="fire-marker active-fire-marker fire-status-unknown legend-marker"><FlameIcon /></i>U.S. / unavailable</span>
       </div>
       {hotspotRows.map(([label, ageClass]) => (
         <div className="hotspot-key-row" key={label}>
@@ -1620,6 +1640,33 @@ function InfraredLegend() {
   );
 }
 
+type PlaybackStatusLinesHandle = {
+  update: (validTime: string, sourceTimes: string) => void;
+};
+
+const PlaybackStatusLines = memo(forwardRef<PlaybackStatusLinesHandle, {
+  initialValidTime: string;
+  initialSourceTimes: string;
+}>(function PlaybackStatusLines({ initialValidTime, initialSourceTimes }, ref) {
+  const validRef = useRef<HTMLParagraphElement>(null);
+  const sourcesRef = useRef<HTMLParagraphElement>(null);
+  useImperativeHandle(ref, () => ({
+    update(validTime, sourceTimes) {
+      if (validRef.current) {
+        validRef.current.textContent = `VALID ${utcClock(validTime)} UTC · ${localClock(validTime)}`;
+      }
+      if (sourcesRef.current) sourcesRef.current.textContent = sourceTimes;
+    },
+  }), []);
+  return (
+    <>
+      <p ref={validRef} className="valid-line">VALID {utcClock(initialValidTime)} UTC · {localClock(initialValidTime)}</p>
+      <p ref={sourcesRef} className="source-times">{initialSourceTimes}</p>
+    </>
+  );
+}));
+PlaybackStatusLines.displayName = "PlaybackStatusLines";
+
 export function RadarViewer() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [catalogBase, setCatalogBase] = useState("");
@@ -1652,8 +1699,7 @@ export function RadarViewer() {
   const timelineRangeRef = useRef<HTMLInputElement>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const liveEdgeHostRef = useRef<HTMLDivElement>(null);
-  const validLineRef = useRef<HTMLParagraphElement>(null);
-  const sourceTimesRef = useRef<HTMLParagraphElement>(null);
+  const playbackStatusLinesRef = useRef<PlaybackStatusLinesHandle>(null);
   const loadedVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const pendingVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const fullCatalogLoadRef = useRef("");
@@ -2290,10 +2336,7 @@ export function RadarViewer() {
   const displayAnchor = showLiveEdge && liveEdgeState.anchor ? liveEdgeState.anchor : anchor;
   useEffect(() => {
     if (!showLiveEdge || !displayAnchor || !product) return;
-    if (validLineRef.current) {
-      validLineRef.current.textContent = `VALID ${utcClock(displayAnchor.validTime)} UTC · ${localClock(displayAnchor.validTime)}`;
-    }
-    if (sourceTimesRef.current) sourceTimesRef.current.textContent = liveEdgeSourceTimes;
+    playbackStatusLinesRef.current?.update(displayAnchor.validTime, liveEdgeSourceTimes);
     if (mapStageRef.current) {
       mapStageRef.current.setAttribute(
         "aria-label",
@@ -2444,10 +2487,7 @@ export function RadarViewer() {
       frameCountRef.current.textContent = `${index + 1} / ${anchorFrames.length}`;
     }
     if (timelineRangeRef.current) timelineRangeRef.current.value = String(index);
-    if (validLineRef.current) {
-      validLineRef.current.textContent = `VALID ${utcClock(displayedFrame.validTime)} UTC · ${localClock(displayedFrame.validTime)}`;
-    }
-    if (sourceTimesRef.current) sourceTimesRef.current.textContent = times;
+    playbackStatusLinesRef.current?.update(displayedFrame.validTime, times);
     if (mapStageRef.current) {
       mapStageRef.current.setAttribute(
         "aria-label",
@@ -3097,8 +3137,11 @@ export function RadarViewer() {
                 className="map-status"
                 key={`status-${product.id}-${effectiveRangeHours}h-${videoModeReady ? "video" : "images"}`}
               >
-                <p ref={validLineRef} className="valid-line">VALID {utcClock(displayAnchor.validTime)} UTC · {localClock(displayAnchor.validTime)}</p>
-                <p ref={sourceTimesRef} className="source-times">{sourceTimes || `SOURCE ${shortClock(displayAnchor.validTime)}`}</p>
+                <PlaybackStatusLines
+                  ref={playbackStatusLinesRef}
+                  initialValidTime={displayAnchor.validTime}
+                  initialSourceTimes={sourceTimes || `SOURCE ${shortClock(displayAnchor.validTime)}`}
+                />
                 {missingLayers.length > 0 && (
                   <p className="source-warning">Unavailable: {missingLayers.join(", ")}</p>
                 )}

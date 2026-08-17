@@ -330,6 +330,7 @@ LAYERS: dict[str, Layer] = {
             "sizeHectares",
             "sourceCode",
             "highlightCode",
+            "statusCode",
         ),
     ),
     "westwx-visir": Layer(

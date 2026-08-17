@@ -10,6 +10,12 @@ import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from pyproj import Transformer
 
+from .active_fires import (
+    FIRE_STATUS_BEING_HELD,
+    FIRE_STATUS_OUT_OF_CONTROL,
+    FIRE_STATUS_UNDER_CONTROL,
+    FIRE_STATUS_UNKNOWN,
+)
 from .config import Domain
 from .geomet import projected_bbox, projection_longitude
 
@@ -38,7 +44,16 @@ class FireDisplayPoint:
     highlight: int
     signal: float
     age: int
+    status: int = FIRE_STATUS_UNKNOWN
     count: int = 1
+
+
+ACTIVE_FIRE_COLOURS = {
+    FIRE_STATUS_UNKNOWN: (255, 138, 79, 255),
+    FIRE_STATUS_UNDER_CONTROL: (83, 190, 105, 255),
+    FIRE_STATUS_BEING_HELD: (244, 199, 63, 255),
+    FIRE_STATUS_OUT_OF_CONTROL: (239, 82, 57, 255),
+}
 
 
 def fetch_hotspots(
@@ -274,6 +289,9 @@ def _cluster_notable_fires(
             highlight=seed.highlight,
             signal=max(marker.signal for marker in group),
             age=0,
+            # Status codes are severity ordered, so a single clustered flame
+            # truthfully advertises the worst stage represented within it.
+            status=max(marker.status for marker in group),
             count=sum(marker.count for marker in group),
         ))
     return [*regular, *clustered]
@@ -314,6 +332,7 @@ def render_fire_overlay(
             x, y = float(row[0]), float(row[1])
             size_hectares = float(row[3] or 0)
             highlight = int(row[5] or 0)
+            status = int(row[6] or 0) if len(row) > 6 else FIRE_STATUS_UNKNOWN
         except (TypeError, ValueError):
             continue
         if not (math.isfinite(x) and math.isfinite(y) and 0 <= x <= 1 and 0 <= y <= 1):
@@ -328,6 +347,7 @@ def render_fire_overlay(
             highlight=highlight,
             signal=size_hectares,
             age=0,
+            status=status if status in ACTIVE_FIRE_COLOURS else FIRE_STATUS_UNKNOWN,
         ))
     active_markers = _cluster_notable_fires(active_markers, domain)
 
@@ -432,14 +452,15 @@ def render_fire_overlay(
         ]
         closed = [*outline, outline[0]]
         if marker.kind == "active":
+            colour = ACTIVE_FIRE_COLOURS.get(marker.status, ACTIVE_FIRE_COLOURS[FIRE_STATUS_UNKNOWN])
             glow_width = max(3, round(size * 0.26))
             glow_draw.line(
                 closed,
-                fill=(255, 229, 190, 150),
+                fill=(*colour[:3], 150),
                 width=glow_width,
                 joint="curve",
             )
-            glow_draw.polygon(outline, fill=(255, 188, 141, 95))
+            glow_draw.polygon(outline, fill=(*colour[:3], 95))
 
     canvas.alpha_composite(
         glow.filter(ImageFilter.GaussianBlur(radius=max(1.5, symbol_scale * 1.6)))
@@ -468,7 +489,7 @@ def render_fire_overlay(
                 joint="curve",
             )
         if marker.kind == "active":
-            colour = (255, 121, 86, 255)
+            colour = ACTIVE_FIRE_COLOURS.get(marker.status, ACTIVE_FIRE_COLOURS[FIRE_STATUS_UNKNOWN])
             symbol_draw.polygon(outline, fill=colour)
             symbol_draw.line(
                 closed,

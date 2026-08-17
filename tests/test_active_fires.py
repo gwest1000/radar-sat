@@ -12,11 +12,16 @@ from PIL import Image
 from radarsat.active_fires import (
     CANADA_WILDFIRE_OF_NOTE_CODE,
     CANADA_SOURCE_CODE,
+    FIRE_STATUS_BEING_HELD,
+    FIRE_STATUS_OUT_OF_CONTROL,
+    FIRE_STATUS_UNDER_CONTROL,
+    FIRE_STATUS_UNKNOWN,
     STANDARD_FIRE_CODE,
     US_LARGE_INCIDENT_CODE,
     UNITED_STATES_SOURCE_CODE,
     fetch_bc_active_fires,
     fetch_canadian_active_fires,
+    fire_status_code,
     project_active_fires,
 )
 from radarsat.config import DOMAINS, LAYERS, VIEWPORTS, Domain, regional_layer_id
@@ -29,6 +34,7 @@ from radarsat.pipeline import (
     write_metadata,
 )
 from radarsat.point_frames import write_point_frame
+from radarsat.hotspots import FireDisplayPoint, _cluster_notable_fires
 
 
 UTC = dt.timezone.utc
@@ -75,7 +81,16 @@ class ActiveFireTests(unittest.TestCase):
         params = request.call_args.kwargs["params"]
         self.assertEqual(params["where"], "FIRE_STATUS <> 'Out'")
         self.assertIn("FIRE_OF_NOTE_IND", params["outFields"])
+        self.assertIn("FIRE_STATUS", params["outFields"])
         self.assertEqual(params["outSR"], "4326")
+
+    def test_canadian_stage_of_control_mapping_is_severity_ordered(self) -> None:
+        self.assertEqual(fire_status_code("UC"), FIRE_STATUS_UNDER_CONTROL)
+        self.assertEqual(fire_status_code("Being Held"), FIRE_STATUS_BEING_HELD)
+        self.assertEqual(fire_status_code("Out of Control"), FIRE_STATUS_OUT_OF_CONTROL)
+        self.assertEqual(fire_status_code("Fire of Note"), FIRE_STATUS_UNKNOWN)
+        self.assertGreater(FIRE_STATUS_OUT_OF_CONTROL, FIRE_STATUS_BEING_HELD)
+        self.assertGreater(FIRE_STATUS_BEING_HELD, FIRE_STATUS_UNDER_CONTROL)
 
     def test_projection_filters_prescribed_fires_and_converts_us_acres(self) -> None:
         domain = DOMAINS["north-america"]
@@ -86,6 +101,7 @@ class ActiveFireTests(unittest.TestCase):
                     "fire_was_prescribed": 0,
                     "fire_size": 25.0,
                     "status_date": "2026-07-22T18:17:00Z",
+                    "stage_of_control_status": "BH",
                 },
             },
             {
@@ -115,9 +131,51 @@ class ActiveFireTests(unittest.TestCase):
         self.assertEqual(canada.size_hectares, 25.0)
         self.assertEqual(canada.status_age_minutes, 60.0)
         self.assertEqual(canada.highlight_code, STANDARD_FIRE_CODE)
+        self.assertEqual(canada.status_code, FIRE_STATUS_BEING_HELD)
         self.assertAlmostEqual(united_states_point.size_hectares, 40.468564224)
         self.assertEqual(united_states_point.status_age_minutes, 30.0)
         self.assertEqual(united_states_point.highlight_code, STANDARD_FIRE_CODE)
+        self.assertEqual(united_states_point.status_code, FIRE_STATUS_UNKNOWN)
+
+    def test_bcws_fire_of_note_recovers_stage_from_cwfif(self) -> None:
+        domain = DOMAINS["north-america"]
+        canadian = [{
+            "geometry": {"type": "Point", "coordinates": [-121.81, 50.98]},
+            "properties": {
+                "agency_code": "BC",
+                "agency_fire_id": "2026-C40983",
+                "fire_size": 160_000.0,
+                "stage_of_control_status": "OC",
+            },
+        }]
+        bcws = [{
+            "geometry": {"type": "Point", "coordinates": [-121.81, 50.98]},
+            "properties": {
+                "FIRE_NUMBER": "C40983",
+                "FIRE_STATUS": "Fire of Note",
+                "CURRENT_SIZE": 160_314.7,
+                "FIRE_OF_NOTE_IND": "Y",
+            },
+        }]
+
+        points = project_active_fires(canadian, [], domain, VALID, bc_features=bcws)
+
+        self.assertEqual(len(points), 1)
+        self.assertEqual(points[0].highlight_code, CANADA_WILDFIRE_OF_NOTE_CODE)
+        self.assertEqual(points[0].status_code, FIRE_STATUS_OUT_OF_CONTROL)
+
+    def test_notable_cluster_uses_worst_member_status(self) -> None:
+        domain = DOMAINS["bc"]
+        markers = [
+            FireDisplayPoint(0.50, 0.50, "active", True, 1, 100, 0, FIRE_STATUS_UNDER_CONTROL),
+            FireDisplayPoint(0.505, 0.50, "active", True, 1, 200, 0, FIRE_STATUS_OUT_OF_CONTROL),
+        ]
+
+        clustered = _cluster_notable_fires(markers, domain)
+
+        self.assertEqual(len(clustered), 1)
+        self.assertEqual(clustered[0].count, 2)
+        self.assertEqual(clustered[0].status, FIRE_STATUS_OUT_OF_CONTROL)
 
     def test_projection_uses_authority_flags_instead_of_size_threshold(self) -> None:
         domain = DOMAINS["north-america"]
@@ -237,10 +295,12 @@ class ActiveFireTests(unittest.TestCase):
                 "sizeHectares",
                 "sourceCode",
                 "highlightCode",
+                "statusCode",
             ])
             self.assertEqual({point[4] for point in payload["points"]}, {1, 2})
             self.assertEqual({point[5] for point in payload["points"]}, {0})
-            self.assertEqual(metadata["renderVersion"], 3)
+            self.assertEqual({point[6] for point in payload["points"]}, {0})
+            self.assertEqual(metadata["renderVersion"], 4)
             self.assertEqual(metadata["source"], "NRCan CWFIS + BCWS + NIFC WFIGS")
 
     @mock.patch("radarsat.pipeline.fetch_us_active_fires")
@@ -333,7 +393,7 @@ class ActiveFireTests(unittest.TestCase):
                 window_end=valid_time,
                 age_reference_time=valid_time,
                 point_schema=active_layer.point_schema,
-                points=[[0.75, 0.75, None, 250.0, 1, 1]],
+                points=[[0.75, 0.75, None, 250.0, 1, 1, FIRE_STATUS_OUT_OF_CONTROL]],
                 age_mode="source-status-time",
                 age_precision_seconds=60,
             )
@@ -353,7 +413,7 @@ class ActiveFireTests(unittest.TestCase):
                 active_path,
                 extra={
                     "pointCount": 1,
-                    "renderVersion": 3,
+                    "renderVersion": 4,
                     "canadianFeatureCount": 1,
                     "bcwsFeatureCount": 1,
                     "usFeatureCount": 1,

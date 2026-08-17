@@ -85,7 +85,9 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /VIDEO_HUD_UPDATE_INTERVAL_MS = 180/);
   assert.match(viewer, /presentedVideoIndexRef/);
   assert.match(viewer, /timelineRangeRef\.current\.value = String\(index\)/);
-  assert.match(viewer, /validLineRef\.current\.textContent/);
+  assert.match(viewer, /PlaybackStatusLines/);
+  assert.match(viewer, /playbackStatusLinesRef\.current\?\.update\(displayedFrame\.validTime, times\)/);
+  assert.doesNotMatch(viewer, /validLineRef/);
   assert.doesNotMatch(viewer, /setFrameIndex\(\(current\) => current === index \? current : index\)/);
   assert.match(videoLoop, /transport: "progressive-mp4"/);
   assert.match(videoLoop, /track: "live" \| "day" \| "archive"/);
@@ -206,6 +208,9 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
   assert.match(viewer, /active-fire-marker/);
   assert.match(viewer, /clusterNotableFires/);
+  assert.match(viewer, /status: Math\.max\(\.\.\.group\.map\(\(marker\) => marker\.status\)\)/);
+  assert.match(viewer, /const activeColours = \["#ff8a4f", "#53be69", "#f4c73f", "#ef5239"\]/);
+  assert.match(viewer, /U\.S\. \/ unavailable/);
   assert.match(viewer, /context\.fillText\(String\(marker\.count\)/);
   assert.match(viewer, /BCWS Wildfire of Note/);
   assert.match(viewer, /U\.S\. current ICS-209 large incident/);
