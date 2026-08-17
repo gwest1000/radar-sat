@@ -1642,6 +1642,7 @@ export function RadarViewer() {
   const frameCountRef = useRef<HTMLSpanElement>(null);
   const timelineRangeRef = useRef<HTMLInputElement>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
+  const liveEdgeHostRef = useRef<HTMLDivElement>(null);
   const validLineRef = useRef<HTMLParagraphElement>(null);
   const sourceTimesRef = useRef<HTMLParagraphElement>(null);
   const loadedVideoManifestRef = useRef<VideoLoopManifest | null>(null);
@@ -2396,8 +2397,26 @@ export function RadarViewer() {
     [anchorFrames.length, videoModeReady],
   );
 
+  const resetToNewestFrame = useCallback(() => {
+    // The media-clock ref is normally newer than React state during playback.
+    // It belongs to the old loop after a product/range/layer transition and
+    // must not become the base for the first manual step in the new loop.
+    presentedVideoIndexRef.current = NEWEST_FRAME;
+    lastVideoHudUpdateAtRef.current = 0;
+    setFrameIndex(NEWEST_FRAME);
+  }, []);
+
   const handleVideoFramePresented = useCallback((index: number) => {
     presentedVideoIndexRef.current = index;
+    // React's frame index is deliberately throttled while H.264 is playing so
+    // the whole viewer does not rerender for every weather frame. The rapid
+    // radar/lightning/satellite edge is ordinary DOM imagery above the video,
+    // however, and must follow the unthrottled media clock. Otherwise a fresh
+    // final-frame raster can remain over the moving video: the clocks advance
+    // while the map appears frozen. Toggle the edge host transactionally with
+    // the frame that was actually presented.
+    const isHotEdge = index === anchorFrames.length - 1 && liveEdgeState.active;
+    if (liveEdgeHostRef.current) liveEdgeHostRef.current.hidden = !isHotEdge;
     const now = performance.now();
     if (
       index !== 0
@@ -2408,7 +2427,6 @@ export function RadarViewer() {
     const frame = videoAnchorFrames[index];
     const plan = videoPlans[index];
     if (!frame || !plan || !product) return;
-    const isHotEdge = index === anchorFrames.length - 1 && liveEdgeState.active;
     const displayedFrame = isHotEdge && liveEdgeState.anchor ? liveEdgeState.anchor : frame;
     const times = isHotEdge && liveEdgeSourceTimes
       ? liveEdgeSourceTimes
@@ -2840,7 +2858,7 @@ export function RadarViewer() {
       next[controlId] = checked;
       return next;
     });
-    setFrameIndex(NEWEST_FRAME);
+    resetToNewestFrame();
     setPlaying(true);
   };
   const visibleLegends = product.legends.filter((legendId) => {
@@ -2927,7 +2945,7 @@ export function RadarViewer() {
                           availableProducts,
                         ));
                         setProductId(item.id);
-                        setFrameIndex(NEWEST_FRAME);
+                        resetToNewestFrame();
                         setRegionMenuOpen(false);
                         event.currentTarget.blur();
                       }}
@@ -2953,7 +2971,7 @@ export function RadarViewer() {
                 </button>
                 <div className="selector-options range-actions" role="group" aria-label="Archive range">
                   {rangeMenuOptions.map((hours) => (
-                    <button className="range-button" type="button" aria-pressed={effectiveRangeHours === hours} key={hours} onClick={(event) => { setRangeHours(hours); setFrameIndex(NEWEST_FRAME); setPlaying(true); setRangeMenuOpen(false); event.currentTarget.blur(); }}>
+                    <button className="range-button" type="button" aria-pressed={effectiveRangeHours === hours} key={hours} onClick={(event) => { setRangeHours(hours); resetToNewestFrame(); setPlaying(true); setRangeMenuOpen(false); event.currentTarget.blur(); }}>
                       {hours === 168 ? "7 d" : `${hours} h`}
                     </button>
                   ))}
@@ -3027,23 +3045,26 @@ export function RadarViewer() {
                 }}
               />
             ))}
-            {videoModeReady && liveEdgeState.active && liveEdgeState.layers.map((layer) => (
-              <StableMapImage
-                className="map-layer live-edge-layer"
-                src={layer.url}
-                layerId={layer.renderId ?? layer.id}
-                key={`live-edge-${product.id}-${layer.id}`}
-                style={{
-                  ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
-                  opacity: layer.opacity,
-                  visibility: showLiveEdge ? "visible" : "hidden",
-                  filter: [
-                    "ir", "daynight", "convective", "snowfog", "eccc-geocolor",
-                    "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir",
-                  ].includes(layer.id) ? satelliteFilter : undefined,
-                }}
-              />
-            ))}
+            {videoModeReady && liveEdgeState.active && (
+              <div ref={liveEdgeHostRef} className="live-edge-host" hidden={!showLiveEdge}>
+                {liveEdgeState.layers.map((layer) => (
+                  <StableMapImage
+                    className="map-layer live-edge-layer"
+                    src={layer.url}
+                    layerId={layer.renderId ?? layer.id}
+                    key={`live-edge-${product.id}-${layer.id}`}
+                    style={{
+                      ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
+                      opacity: layer.opacity,
+                      filter: [
+                        "ir", "daynight", "convective", "snowfog", "eccc-geocolor",
+                        "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir",
+                      ].includes(layer.id) ? satelliteFilter : undefined,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
             {!videoModeReady && lightningMarkers.length > 0 && (
               <LightningCanvas
                 markers={lightningMarkers}

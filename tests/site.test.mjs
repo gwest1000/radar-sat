@@ -171,6 +171,12 @@ test("exposes stable layer-control targets for deterministic toggles", async () 
   assert.match(viewer, /effectiveRangeHours\}h-/);
   assert.match(viewer, /live-edge\.json/);
   assert.match(viewer, /live-edge-layer/);
+  assert.match(viewer, /liveEdgeHostRef\.current\.hidden = !isHotEdge/);
+  assert.match(viewer, /className="live-edge-host" hidden=\{!showLiveEdge\}/);
+  assert.doesNotMatch(viewer, /visibility: showLiveEdge \? "visible" : "hidden"/);
+  assert.match(viewer, /const resetToNewestFrame = useCallback/);
+  assert.match(viewer, /presentedVideoIndexRef\.current = NEWEST_FRAME/);
+  assert.match(viewer, /setRangeHours\(hours\); resetToNewestFrame\(\)/);
 });
 
 test("renders weather-app lightning bolts and wildfire flames from point frames", async () => {
