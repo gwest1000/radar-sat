@@ -8,6 +8,8 @@ referenced assets through the shared R2 lock, commits the complete catalog, then
 commits the compact `catalog-index.json` discovery document last. Browsers poll
 the index and fetch the complete image history only for a compatibility or
 failure fallback.
+The publisher uses macOS `lockf` for an OS-held, FIFO-ordered lock; process exit
+releases it automatically and stale-lock recovery cannot admit two publishers.
 Raw pruning runs only after observation rendering; any rejected source files
 are explicitly preserved for retry and surfaced by health checks. Expired remote
 objects are deleted only after the catalog commit and only when their timestamps

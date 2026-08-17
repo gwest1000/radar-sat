@@ -324,6 +324,8 @@ class OpsScriptTests(unittest.TestCase):
             PROJECT / "scripts" / "ops" / "publish_locked.zsh"
         ).read_text()
         self.assertIn("RADARSAT_PUBLISH_LOCK_WAIT_SECONDS:-300", publish_locked)
+        self.assertIn("/usr/bin/lockf -k -t", publish_locked)
+        self.assertNotIn("LOCK_OWNER", publish_locked)
         self.assertIn(
             "lightning-edge radar-edge model-contours video video-day video-archive",
             install,
