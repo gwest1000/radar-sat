@@ -195,6 +195,12 @@ class OpsScriptTests(unittest.TestCase):
         ).read_text()
         observations = (PROJECT / "scripts" / "ops" / "run_observation_cycle.zsh").read_text()
         archive = (PROJECT / "scripts" / "ops" / "run_archive_cycle.zsh").read_text()
+        model_contours = (
+            PROJECT / "scripts" / "ops" / "run_model_contour_cycle.zsh"
+        ).read_text()
+        model_contours_plist = (
+            PROJECT / "ops" / "com.greg.radar-sat.model-contours.plist.template"
+        ).read_text()
         heavy_lock = (PROJECT / "scripts" / "ops" / "heavy_satellite_lock.zsh").read_text()
         observation_plist = (
             PROJECT / "ops" / "com.greg.radar-sat.observations.plist.template"
@@ -284,9 +290,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("<string>10</string>", observation_plist)
 
         self.assertIn("--domain north-pacific", archive)
-        self.assertIn("backfill_model_contours.py", archive)
-        self.assertIn("RADARSAT_MODEL_CONTOURS_ENABLED", archive)
-        self.assertIn("RADARSAT_ECMWF_DATA_ROOT", archive)
+        self.assertNotIn("backfill_model_contours.py", archive)
         self.assertIn("--latest-only", archive)
         self.assertIn("RADARSAT_GOES_HAZARDS_ENABLED=0", archive)
         self.assertIn("RADARSAT_ARCHIVE_START_DELAY_SECONDS", archive)
@@ -301,8 +305,29 @@ class OpsScriptTests(unittest.TestCase):
             archive.index("release_heavy_satellite_lock"),
             archive.index("build_raster_tiles.py"),
         )
+        self.assertIn("backfill_model_contours.py", model_contours)
+        self.assertIn("RADARSAT_MODEL_CONTOURS_ENABLED", model_contours)
+        self.assertIn("RADARSAT_ECMWF_DATA_ROOT", model_contours)
+        self.assertIn("RADARSAT_HRDPS_CONTOUR_RECOVERY_HOURS:-0", model_contours)
+        self.assertIn("RADARSAT_MODEL_PUBLISH_LOCK_WAIT_SECONDS:-900", model_contours)
+        self.assertIn("model-contour-cycle.lock", model_contours)
+        self.assertNotIn("try_acquire_heavy_satellite_lock", model_contours)
+        self.assertNotIn("scripts/run_ingest.py", model_contours)
+        self.assertIn("publish_locked.zsh", model_contours)
+        self.assertIn(
+            "--fast --existing-video-only --whole-frame-only --recovery-hours 24",
+            model_contours,
+        )
+        self.assertIn("<integer>1800</integer>", model_contours_plist)
         self.assertIn("heavy-satellite.lock", heavy_lock)
-        self.assertIn("lightning-edge radar-edge video video-day video-archive", install)
+        publish_locked = (
+            PROJECT / "scripts" / "ops" / "publish_locked.zsh"
+        ).read_text()
+        self.assertIn("RADARSAT_PUBLISH_LOCK_WAIT_SECONDS:-300", publish_locked)
+        self.assertIn(
+            "lightning-edge radar-edge model-contours video video-day video-archive",
+            install,
+        )
 
     def test_setup_installs_renderer_and_feed_requirements(self) -> None:
         setup = (PROJECT / "scripts" / "ops" / "setup_local.zsh").read_text()

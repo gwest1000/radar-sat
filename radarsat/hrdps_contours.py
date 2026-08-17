@@ -664,5 +664,8 @@ def update_recent(
             domain_ids=domain_ids,
             download=download,
         )
-        for offset in range(hours, -1, -1)
+        # The live edge is operationally more important than recovery history.
+        # Render newest-first so a bounded worker can never spend its whole run
+        # repainting old model hours before reaching the current field.
+        for offset in range(0, max(0, hours) + 1)
     ]

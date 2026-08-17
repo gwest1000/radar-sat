@@ -8,6 +8,7 @@ source "${PROJECT_ROOT}/scripts/ops/runtime_paths.zsh"
 STATE_ROOT="${RADARSAT_STATE_ROOT:-${PROJECT_ROOT}/var}"
 LOCK_DIR="${STATE_ROOT}/run/publish.lock"
 LOCK_OWNER="${LOCK_DIR}/pid"
+LOCK_WAIT_SECONDS="${RADARSAT_PUBLISH_LOCK_WAIT_SECONDS:-300}"
 
 mkdir -p "${STATE_ROOT}/run" "${STATE_ROOT}/state" "${STATE_ROOT}/status"
 
@@ -28,7 +29,7 @@ acquire_lock() {
     owner_pid=""
     [[ -r "${LOCK_OWNER}" ]] && IFS= read -r owner_pid < "${LOCK_OWNER}"
     if [[ "${owner_pid}" =~ '^[0-9]+$' ]] && kill -0 "${owner_pid}" 2>/dev/null; then
-      if (( attempts >= 300 )); then
+      if (( attempts >= LOCK_WAIT_SECONDS )); then
         print -u2 "Timed out waiting for R2 publication lock owned by PID ${owner_pid}."
         return 1
       fi

@@ -1,8 +1,9 @@
 # Radar-Sat operations
 
 Independent three-minute full-disk and five-minute-BC satellite workers, a
-five-minute observation worker, and a half-hour Pacific archive worker each use
-PID locks. Each completed run atomically rebuilds `catalog.json`, publishes its
+five-minute observation worker, an independent half-hour model-contour worker,
+and a half-hour Pacific archive worker each use PID locks. Each completed run
+atomically rebuilds `catalog.json`, publishes its
 referenced assets through the shared R2 lock, commits the complete catalog, then
 commits the compact `catalog-index.json` discovery document last. Browsers poll
 the index and fetch the complete image history only for a compatibility or
@@ -39,6 +40,16 @@ Live and archive video are also separate jobs and locks. The ten-minute live
 job cannot be blocked by the low-priority hourly archive encoder. Ordinary
 fast publications expose a 24-hour recovery catalog, so all 6-, 12-, and
 24-hour choices remain available even if video decoding is unsupported.
+
+HRDPS and ECMWF model contours have their own `model-contours` agent and lock.
+It refreshes and publishes every 30 minutes without waiting for the slow North
+Pacific satellite blend, so satellite lock contention cannot make the model
+overlays age out of the operational display. Scheduled runs prioritize the
+newest valid hour and let the archive accumulate naturally; set
+`RADARSAT_MODEL_CONTOUR_RECOVERY_HOURS` only when an explicit historical repair
+is needed. The worker can wait up to 15 minutes behind an in-progress atomic R2
+reconciliation instead of discarding a completed render at the generic
+five-minute publisher timeout.
 
 ## Display-resolution H.264 loops
 
@@ -134,7 +145,7 @@ scripts/ops/install_launchd.zsh
 Pass one or more agent names to update only those jobs, for example:
 
 ```bash
-scripts/ops/install_launchd.zsh lightning-edge radar-edge video-day video-archive
+scripts/ops/install_launchd.zsh lightning-edge radar-edge model-contours video-day video-archive
 ```
 
 The live video job retains the native 10/20-minute cadence for 3-, 6-, and

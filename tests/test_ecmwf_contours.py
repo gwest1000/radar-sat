@@ -136,6 +136,7 @@ class EcmwfContourTests(unittest.TestCase):
 
         valid_times = [call.args[2] for call in render.call_args_list]
         self.assertEqual(len(valid_times), 27)
+        self.assertEqual(valid_times[0], now)
         self.assertIn(now - dt.timedelta(hours=24), valid_times)
         self.assertIn(dt.datetime(2026, 8, 6, 9, tzinfo=UTC), valid_times)
         self.assertNotIn(dt.datetime(2026, 8, 6, 11, tzinfo=UTC), valid_times)

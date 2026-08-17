@@ -4,6 +4,7 @@ import datetime as dt
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -16,6 +17,7 @@ from radarsat.hrdps_contours import (
     model_filename,
     render_contours,
     significant_centres,
+    update_recent,
 )
 
 
@@ -45,6 +47,20 @@ class HrdpsContourTests(unittest.TestCase):
             runs = available_runs(root, valid)
             self.assertEqual(runs[0][:2], ("20260807T18Z", dt.datetime(2026, 8, 7, 18, tzinfo=UTC)))
             self.assertEqual(runs[0][2], 4)
+
+    def test_recovery_prioritizes_the_live_hour(self) -> None:
+        now = dt.datetime(2026, 8, 7, 22, tzinfo=UTC)
+        with mock.patch(
+            "radarsat.hrdps_contours.render_valid_time",
+            return_value={"status": "unchanged"},
+        ) as render:
+            update_recent(Path("output"), Path("data"), hours=3, now=now)
+
+        valid_times = [call.args[2] for call in render.call_args_list]
+        self.assertEqual(
+            valid_times,
+            [now - dt.timedelta(hours=offset) for offset in range(4)],
+        )
 
     def test_prominence_filter_rejects_small_wiggles(self) -> None:
         y, x = np.mgrid[:121, :161]

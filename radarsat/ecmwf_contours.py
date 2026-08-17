@@ -368,7 +368,9 @@ def update_recent(
     current = (now or dt.datetime.now(UTC)).astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     valid_times = [
         current - dt.timedelta(hours=offset)
-        for offset in range(max(0, hours), -1, -1)
+        # Keep the latest analysis at the front of the work queue. Historical
+        # recovery can be interrupted without making the live overlay stale.
+        for offset in range(0, max(0, hours) + 1)
         if (
             offset <= ECMWF_HOURLY_RETENTION_HOURS
             or (current - dt.timedelta(hours=offset)).hour
