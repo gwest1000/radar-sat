@@ -3084,7 +3084,10 @@ export function RadarViewer() {
               <FireCanvas markers={fireMarkers} style={cropStyle} />
             )}
             {displayAnchor && (
-              <div className="map-status">
+              <div
+                className="map-status"
+                key={`status-${product.id}-${effectiveRangeHours}h-${videoModeReady ? "video" : "images"}`}
+              >
                 <p ref={validLineRef} className="valid-line">VALID {utcClock(displayAnchor.validTime)} UTC · {localClock(displayAnchor.validTime)}</p>
                 <p ref={sourceTimesRef} className="source-times">{sourceTimes || `SOURCE ${shortClock(displayAnchor.validTime)}`}</p>
                 {missingLayers.length > 0 && (

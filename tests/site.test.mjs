@@ -177,6 +177,7 @@ test("exposes stable layer-control targets for deterministic toggles", async () 
   assert.match(viewer, /const resetToNewestFrame = useCallback/);
   assert.match(viewer, /presentedVideoIndexRef\.current = NEWEST_FRAME/);
   assert.match(viewer, /setRangeHours\(hours\); resetToNewestFrame\(\)/);
+  assert.match(viewer, /key=\{`status-\$\{product\.id\}-\$\{effectiveRangeHours\}h-\$\{videoModeReady \? "video" : "images"\}`\}/);
 });
 
 test("renders weather-app lightning bolts and wildfire flames from point frames", async () => {
