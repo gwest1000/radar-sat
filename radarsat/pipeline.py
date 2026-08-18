@@ -1132,6 +1132,7 @@ def derive_fire_overlays(
     root: Path,
     domain: Domain,
     hours: float = FIRE_ARCHIVE_HOURS,
+    latest_only: bool = False,
 ) -> dict[str, object]:
     """Combine agency fires and thermal hotspots into lightweight transparent PNGs."""
     hotspot_layer = LAYERS["hotspot-points"]
@@ -1143,8 +1144,11 @@ def derive_fire_overlays(
         return {"status": "unavailable", "rendered": 0}
     cutoff = max(hotspot_times) - dt.timedelta(hours=hours)
     anchors = [value for value in hotspot_times if value >= cutoff]
+    if latest_only:
+        newest_active = active_times[-1] if active_times else hotspot_times[-1]
+        anchors = [max(hotspot_times[-1], newest_active)]
     rendered = 0
-    if domain.id == "bc":
+    if domain.id == "bc" and not latest_only:
         retained_stamps = {frame_stamp(value) for value in anchors}
         for region_id in VIEWPORTS:
             regional_layer = LAYERS[regional_layer_id("hotspots", region_id)]
@@ -1198,8 +1202,19 @@ def derive_fire_overlays(
                 return candidate
         return selected
 
+    def hotspot_time_for(anchor: dt.datetime) -> dt.datetime | None:
+        candidates = [
+            value
+            for value in hotspot_times
+            if value <= anchor and anchor - value <= dt.timedelta(hours=24)
+        ]
+        return candidates[-1] if candidates else None
+
     for anchor in anchors:
-        hotspot_payload = payload(hotspot_layer, anchor)
+        selected_hotspot_time = hotspot_time_for(anchor)
+        if selected_hotspot_time is None:
+            continue
+        hotspot_payload = payload(hotspot_layer, selected_hotspot_time)
         if hotspot_payload is None:
             continue
         selected_active_time = active_time_for(anchor)
@@ -1218,7 +1233,7 @@ def derive_fire_overlays(
             if selected_active_time is not None
             else {}
         )
-        source_times = {"hotspots": anchor}
+        source_times = {"hotspots": selected_hotspot_time}
         if selected_active_time is not None:
             source_times["active fires"] = selected_active_time
         standard_fire_version = (
