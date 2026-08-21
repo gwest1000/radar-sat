@@ -3048,6 +3048,25 @@ export function RadarViewer() {
   const activeLayerLabels = optional
     .filter(isLayerEnabled)
     .map((layer) => layerControlLabel(layer.id));
+  const playbackBuildStatus = activeComposite
+    ? videoModeReady
+      ? {
+          mode: "prebuilt",
+          label: "Prebuilt loop",
+          description: "The selected satellite and overlay combination is playing as one pre-rendered video.",
+        }
+      : {
+          mode: "loading",
+          label: "Loading prebuilt",
+          description: "A pre-rendered loop is available and is being prepared; image layers are shown until it is ready.",
+        }
+    : {
+        mode: "dynamic",
+        label: "Dynamic layers",
+        description: videoFallbackReason
+          ? `The selected loop is being assembled from separate image layers. ${videoFallbackReason}`
+          : "This layer combination is being assembled from separate image layers in the browser.",
+      };
   const toggleOptionalLayer = (layer: ProductLayer, checked: boolean) => {
     setOptionalLayers((current) => {
       const next = { ...current };
@@ -3123,20 +3142,6 @@ export function RadarViewer() {
                   onChange={(event) => setSpeedIndex(Number(event.target.value))}
                 />
                 <span className="speed-value">{speed}×</span>
-              </label>
-              <label className="quality-control">
-                <span>Decoder</span>
-                <select
-                  aria-label="Playback quality"
-                  value={playbackQuality}
-                  onChange={(event) => setPlaybackQuality(
-                    event.target.value as "auto" | "efficient" | "high",
-                  )}
-                >
-                  <option value="auto">Auto</option>
-                  <option value="efficient">Power efficient</option>
-                  <option value="high">High quality</option>
-                </select>
               </label>
               <div
                 className={`expanding-selector product-switcher${regionMenuOpen ? " is-open" : ""}`}
@@ -3339,57 +3344,39 @@ export function RadarViewer() {
         </div>
 
         <aside className="legend-rail" aria-label="Map legends">
-          {optional.length > 0 && (
-            <div
-              className={`layer-selector${layersMenuOpen ? " is-open" : ""}`}
-              onMouseLeave={(event) => {
-                setLayersMenuOpen(false);
-                const focused = document.activeElement;
-                if (focused instanceof HTMLElement && event.currentTarget.contains(focused)) {
-                  focused.blur();
-                }
-              }}
-            >
-              <button
-                className="layers-summary"
-                type="button"
-                aria-expanded={layersMenuOpen}
-                onClick={() => setLayersMenuOpen((open) => !open)}
+          <div className={`layer-toolbar${optional.length ? "" : " decoder-only"}`}>
+            {optional.length > 0 && (
+              <div
+                className={`layer-selector${layersMenuOpen ? " is-open" : ""}`}
+                onMouseLeave={(event) => {
+                  setLayersMenuOpen(false);
+                  const focused = document.activeElement;
+                  if (focused instanceof HTMLElement && event.currentTarget.contains(focused)) {
+                    focused.blur();
+                  }
+                }}
               >
-                <span className="layers-summary-heading">
-                  <span className="selector-label">Layers</span>
-                  <span className="layers-count">{activeLayerLabels.length} on</span>
-                </span>
-                <span className="layers-chevron" aria-hidden="true">⌄</span>
-              </button>
-              <div className="layers-popover" role="group" aria-label="Overlay layers">
-                <div className="layers-popover-heading">
-                  <span>Layers</span>
-                  <span>{activeLayerLabels.length} active</span>
-                </div>
-                <div className="sidebar-layer-controls">
-                  <section className="layer-control-section" aria-label="Common weather layers">
-                    <p className="layer-control-section-title">Common</p>
-                    {commonOptional.map((layer) => (
-                      <div className="field-select" key={layer.id}>
-                        <input
-                          aria-label={layerControlLabel(layer.id)}
-                          type="checkbox"
-                          data-layer-id={layer.id}
-                          id={`layer-${product.id}-${layer.id}`}
-                          checked={isLayerEnabled(layer)}
-                          onChange={(event) => toggleOptionalLayer(layer, event.target.checked)}
-                        />
-                        <label htmlFor={`layer-${product.id}-${layer.id}`}>
-                          {layerControlLabel(layer.id)}
-                        </label>
-                      </div>
-                    ))}
-                  </section>
-                  {regionalSatelliteOptional.length > 0 && (
-                    <section className="layer-control-section" aria-label="Additional BC satellite products">
-                      <p className="layer-control-section-title">Additional BC satellite</p>
-                      {regionalSatelliteOptional.map((layer) => (
+                <button
+                  className="layers-summary"
+                  type="button"
+                  aria-expanded={layersMenuOpen}
+                  onClick={() => setLayersMenuOpen((open) => !open)}
+                >
+                  <span className="layers-summary-heading">
+                    <span className="selector-label">Layers</span>
+                    <span className="layers-count">{activeLayerLabels.length} on</span>
+                  </span>
+                  <span className="layers-chevron" aria-hidden="true">⌄</span>
+                </button>
+                <div className="layers-popover" role="group" aria-label="Overlay layers">
+                  <div className="layers-popover-heading">
+                    <span>Layers</span>
+                    <span>{activeLayerLabels.length} active</span>
+                  </div>
+                  <div className="sidebar-layer-controls">
+                    <section className="layer-control-section" aria-label="Common weather layers">
+                      <p className="layer-control-section-title">Common</p>
+                      {commonOptional.map((layer) => (
                         <div className="field-select" key={layer.id}>
                           <input
                             aria-label={layerControlLabel(layer.id)}
@@ -3405,11 +3392,56 @@ export function RadarViewer() {
                         </div>
                       ))}
                     </section>
-                  )}
+                    {regionalSatelliteOptional.length > 0 && (
+                      <section className="layer-control-section" aria-label="Additional BC satellite products">
+                        <p className="layer-control-section-title">Additional BC satellite</p>
+                        {regionalSatelliteOptional.map((layer) => (
+                          <div className="field-select" key={layer.id}>
+                            <input
+                              aria-label={layerControlLabel(layer.id)}
+                              type="checkbox"
+                              data-layer-id={layer.id}
+                              id={`layer-${product.id}-${layer.id}`}
+                              checked={isLayerEnabled(layer)}
+                              onChange={(event) => toggleOptionalLayer(layer, event.target.checked)}
+                            />
+                            <label htmlFor={`layer-${product.id}-${layer.id}`}>
+                              {layerControlLabel(layer.id)}
+                            </label>
+                          </div>
+                        ))}
+                      </section>
+                    )}
+                  </div>
                 </div>
               </div>
+            )}
+            <label className="quality-control sidebar-quality-control">
+              <span>Decoder</span>
+              <select
+                aria-label="Playback quality"
+                value={playbackQuality}
+                onChange={(event) => setPlaybackQuality(
+                  event.target.value as "auto" | "efficient" | "high",
+                )}
+              >
+                <option value="auto">Auto</option>
+                <option value="efficient">Power efficient</option>
+                <option value="high">High quality</option>
+              </select>
+            </label>
+            <div
+              className={`playback-build-indicator is-${playbackBuildStatus.mode}`}
+              data-playback-build={playbackBuildStatus.mode}
+              role="status"
+              aria-live="polite"
+              aria-label={`${playbackBuildStatus.label}. ${playbackBuildStatus.description}`}
+              title={playbackBuildStatus.description}
+            >
+              <span className="playback-build-dot" aria-hidden="true" />
+              <span>{playbackBuildStatus.label}</span>
             </div>
-          )}
+          </div>
           <div className="legend-content">
             <h2 className="legend-title">Legend</h2>
             {visibleLegends.map((legendId) => {

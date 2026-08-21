@@ -604,13 +604,11 @@ input:focus-visible {
 }
 
 .speed-control {
-  grid-column: 1;
+  grid-column: 1 / -1;
   grid-row: 2;
 }
 
 .quality-control {
-  grid-column: 2;
-  grid-row: 2;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -875,6 +873,100 @@ input:focus-visible {
 
 .layer-selector {
   flex: 0 0 auto;
+  min-width: 0;
+}
+
+.layer-toolbar {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.95fr) minmax(99px, 1.05fr);
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.layer-toolbar.decoder-only {
+  grid-template-columns: 1fr;
+}
+
+.sidebar-quality-control {
+  grid-template-columns: 1fr;
+  align-content: center;
+  gap: 2px;
+  min-height: 42px;
+  padding: 4px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+
+.sidebar-quality-control > span {
+  color: var(--faint);
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.sidebar-quality-control select {
+  height: 22px;
+  padding: 1px 3px;
+  font-size: 0.66rem;
+}
+
+.playback-build-indicator {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #0a1116;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.playback-build-dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+  box-shadow: 0 0 0 2px rgba(111, 130, 140, 0.16);
+}
+
+.playback-build-indicator.is-prebuilt {
+  border-color: rgba(112, 214, 155, 0.4);
+  color: #bff2d3;
+}
+
+.playback-build-indicator.is-prebuilt .playback-build-dot {
+  background: var(--good);
+  box-shadow: 0 0 0 2px rgba(112, 214, 155, 0.17);
+}
+
+.playback-build-indicator.is-loading {
+  border-color: rgba(95, 210, 238, 0.38);
+  color: #bceef8;
+}
+
+.playback-build-indicator.is-loading .playback-build-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(95, 210, 238, 0.16);
+}
+
+.playback-build-indicator.is-dynamic {
+  border-color: rgba(255, 200, 87, 0.34);
+  color: #f4d58c;
+}
+
+.playback-build-indicator.is-dynamic .playback-build-dot {
+  background: var(--warn);
+  box-shadow: 0 0 0 2px rgba(255, 200, 87, 0.14);
 }
 
 .layers-summary {
@@ -883,7 +975,7 @@ input:focus-visible {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 3px 7px;
   width: 100%;
-  min-height: 34px;
+  min-height: 42px;
   padding: 6px 24px 6px 8px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;

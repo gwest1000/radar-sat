@@ -145,6 +145,14 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /satelliteFilter=\{activeComposite \? undefined : satelliteFilter\}/);
   assert.match(viewer, /nativeLoop=\{activeComposite\?\.nativeLoop\}/);
   assert.match(viewer, /playbackQuality/);
+  assert.match(viewer, /label: "Prebuilt loop"/);
+  assert.match(viewer, /label: "Loading prebuilt"/);
+  assert.match(viewer, /label: "Dynamic layers"/);
+  assert.match(viewer, /data-playback-build={playbackBuildStatus\.mode}/);
+  assert.match(viewer, /className="quality-control sidebar-quality-control"/);
+  assert.match(styles, /\.layer-toolbar\s*\{/);
+  assert.match(styles, /\.playback-build-indicator\.is-prebuilt/);
+  assert.match(styles, /\.playback-build-indicator\.is-dynamic/);
   assert.match(viewer, /navigator\.mediaCapabilities/);
   assert.match(viewer, /ResizeObserver/);
   assert.match(viewer, /setFailedDefaultComposite/);
