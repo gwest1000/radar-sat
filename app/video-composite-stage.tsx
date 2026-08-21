@@ -743,7 +743,14 @@ export function VideoCompositeStage({
       requestedIndexRef.current = safeIndex;
       seekingRef.current = true;
       video.pause();
-      const target = plans[safeIndex].frame.ptsSeconds;
+      const frame = plans[safeIndex].frame;
+      // Chromium can resolve an exact MP4 sample-boundary seek a fraction of a
+      // millisecond before the requested PTS (for example 3.999999 instead of
+      // 4.000000). The media clock then reports the requested frame while the
+      // video plane still displays the preceding sample. Seek a few
+      // milliseconds inside the sample so paused scrubbing and frame buttons
+      // deterministically present the intended meteorological frame.
+      const target = frame.ptsSeconds + Math.min(0.005, frame.durationSeconds / 4);
       const finishSeek = () => {
         if (operationEpochRef.current !== operationEpoch) return;
         seekedListenerRef.current = undefined;

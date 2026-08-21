@@ -87,6 +87,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /VIDEO_HUD_UPDATE_INTERVAL_MS = 180/);
   assert.match(viewer, /presentedVideoIndexRef/);
   assert.match(viewer, /timelineRangeRef\.current\.value = String\(index\)/);
+  assert.match(viewer, /timelineRangeRef\.current\.value = String\(index\)[\s\S]*?now - lastVideoHudUpdateAtRef\.current < VIDEO_HUD_UPDATE_INTERVAL_MS/);
   assert.match(viewer, /PlaybackStatusLines/);
   assert.match(viewer, /playbackStatusLinesRef\.current\?\.update\(displayedFrame\.validTime, times\)/);
   assert.doesNotMatch(viewer, /validLineRef/);
@@ -127,6 +128,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(compositor, /data-surface-cache-limit/);
   assert.match(compositor, /data-surface-builds/);
   assert.match(compositor, /if \(playingRef\.current\) return/);
+  assert.match(compositor, /frame\.ptsSeconds \+ Math\.min\(0\.005, frame\.durationSeconds \/ 4\)/);
   assert.match(compositor, /if \(speed >= 4\) return 12/);
   assert.match(compositor, /PLAYBACK_SURFACE_PIXELS = 1_300_000/);
   assert.match(compositor, /playbackSurfaceSize\(manifest\.width, manifest\.height\)/);
@@ -237,6 +239,8 @@ test("exposes stable layer-control targets for deterministic toggles", async () 
   assert.doesNotMatch(viewer, /visibility: showLiveEdge \? "visible" : "hidden"/);
   assert.match(viewer, /const resetToNewestFrame = useCallback/);
   assert.match(viewer, /presentedVideoIndexRef\.current = NEWEST_FRAME/);
+  assert.match(viewer, /const selectFrame = useCallback[\s\S]*?presentedVideoIndexRef\.current = index;[\s\S]*?setFrameIndex\(index\)/);
+  assert.match(viewer, /onChange=\{\(event\) => selectFrame\(Number\(event\.target\.value\)\)\}/);
   assert.match(viewer, /setRangeHours\(hours\); resetToNewestFrame\(\)/);
   assert.match(viewer, /key=\{`status-\$\{product\.id\}-\$\{effectiveRangeHours\}h-\$\{videoModeReady \? "video" : "images"\}`\}/);
 });

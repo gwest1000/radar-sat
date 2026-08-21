@@ -2863,6 +2863,13 @@ export function RadarViewer() {
     setFrameIndex(NEWEST_FRAME);
   }, []);
 
+  const selectFrame = useCallback((index: number) => {
+    setPlaying(false);
+    presentedVideoIndexRef.current = index;
+    lastVideoHudUpdateAtRef.current = 0;
+    setFrameIndex(index);
+  }, []);
+
   const handleVideoFramePresented = useCallback((index: number) => {
     if (
       activeExactComposite === sidecarExactComposite
@@ -2881,6 +2888,14 @@ export function RadarViewer() {
     // the frame that was actually presented.
     const isHotEdge = index === anchorFrames.length - 1 && liveEdgeState.active;
     if (liveEdgeHostRef.current) liveEdgeHostRef.current.hidden = !isHotEdge;
+    // These two controls are cheap direct DOM updates and must follow every
+    // presented meteorological frame. Keeping them behind the slower status
+    // HUD throttle makes a smooth 4x loop appear to jump two to four frames at
+    // a time even though the video itself presents every frame.
+    if (frameCountRef.current) {
+      frameCountRef.current.textContent = `${index + 1} / ${anchorFrames.length}`;
+    }
+    if (timelineRangeRef.current) timelineRangeRef.current.value = String(index);
     const now = performance.now();
     if (
       index !== 0
@@ -2895,10 +2910,6 @@ export function RadarViewer() {
     const times = isHotEdge && liveEdgeSourceTimes
       ? liveEdgeSourceTimes
       : videoHudSourceTimes[index] ?? "";
-    if (frameCountRef.current) {
-      frameCountRef.current.textContent = `${index + 1} / ${anchorFrames.length}`;
-    }
-    if (timelineRangeRef.current) timelineRangeRef.current.value = String(index);
     playbackStatusLinesRef.current?.update(displayedFrame.validTime, times);
     if (mapStageRef.current) {
       mapStageRef.current.setAttribute(
@@ -3558,7 +3569,7 @@ export function RadarViewer() {
               max={Math.max(0, anchorFrames.length - 1)}
               value={currentFrameIndex}
               disabled={anchorFrames.length < 2}
-              onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)); }}
+              onChange={(event) => selectFrame(Number(event.target.value))}
             />
           </div>
 
