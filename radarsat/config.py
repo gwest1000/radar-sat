@@ -724,6 +724,15 @@ VIDEO_ARCHIVE_PRODUCTS = frozenset(
     }
 )
 
+VIDEO_TRACKS_BY_PRODUCT: dict[str, tuple[str, ...]] = {
+    product_id: (
+        "live",
+        *(("day",) if 24 in ranges else ()),
+        *(("archive",) if product_id in VIDEO_ARCHIVE_PRODUCTS else ()),
+    )
+    for product_id, ranges in VIDEO_EXACT_RANGES.items()
+}
+
 VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
     product_id: (
         {

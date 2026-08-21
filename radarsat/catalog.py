@@ -8,7 +8,14 @@ from concurrent.futures import Executor, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from .config import DOMAINS, LAYERS, LEGENDS, PRODUCTS, VIEWPORTS
+from .config import (
+    DOMAINS,
+    LAYERS,
+    LEGENDS,
+    PRODUCTS,
+    VIDEO_TRACKS_BY_PRODUCT,
+    VIEWPORTS,
+)
 
 
 UTC = dt.timezone.utc
@@ -249,7 +256,10 @@ def read_video_profiles(root: Path) -> dict[str, Any]:
         except OSError:
             continue
         for track, pointer in profiles.items():
-            if track not in VIDEO_TRACKS:
+            if (
+                track not in VIDEO_TRACKS
+                or track not in VIDEO_TRACKS_BY_PRODUCT.get(product_id, ())
+            ):
                 continue
             validated = _valid_video_manifest_pointer(
                 root,

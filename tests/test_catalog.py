@@ -344,6 +344,26 @@ class CatalogTests(unittest.TestCase):
 
             self.assertNotIn("videoProfiles", build_catalog(root))
 
+    def test_catalog_omits_track_not_offered_by_product(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            generation = "20260722T1200Z-abcdef012345"
+            manifest_path = (
+                "video-manifests/bc-northeast-overlay/eccc-geocolor/archive/"
+                f"{generation}.json"
+            )
+            self.write_video_pointer(
+                root,
+                manifest_path=manifest_path,
+                manifest_updates={"track": "archive"},
+            )
+            index = root / "video-index/bc-northeast-overlay/eccc-geocolor.json"
+            payload = json.loads(index.read_text())
+            payload["profiles"] = {"archive": payload["profiles"]["live"]}
+            index.write_text(json.dumps(payload))
+
+            self.assertNotIn("videoProfiles", build_catalog(root))
+
     def test_catalog_omits_mismatched_or_unsafe_video_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

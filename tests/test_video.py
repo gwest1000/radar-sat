@@ -14,6 +14,7 @@ from unittest import mock
 
 from PIL import Image, ImageDraw
 
+from radarsat.config import VIDEO_TRACKS_BY_PRODUCT
 from radarsat.video import (
     ProfileSpec,
     VIDEO_FRAME_RATE,
@@ -50,7 +51,7 @@ def write_rgba(path: Path, colour: tuple[int, int, int, int], size: tuple[int, i
 
 
 class VideoSelectionTests(unittest.TestCase):
-    def test_every_product_has_a_thirty_minute_day_track(self) -> None:
+    def test_profiles_follow_the_operational_range_matrix(self) -> None:
         by_product_layer: dict[tuple[str, str], dict[str, int]] = {}
         for spec in VIDEO_PROFILES:
             by_product_layer.setdefault((spec.product_id, spec.layer_id), {})[
@@ -58,10 +59,13 @@ class VideoSelectionTests(unittest.TestCase):
             ] = spec.cadence_minutes
 
         self.assertTrue(by_product_layer)
-        for tracks in by_product_layer.values():
-            self.assertEqual(tracks["day"], 30)
+        for (product_id, _layer_id), tracks in by_product_layer.items():
+            self.assertEqual(set(tracks), set(VIDEO_TRACKS_BY_PRODUCT[product_id]))
             self.assertIn("live", tracks)
-            self.assertEqual(tracks["archive"], 60)
+            if "day" in tracks:
+                self.assertEqual(tracks["day"], 30)
+            if "archive" in tracks:
+                self.assertEqual(tracks["archive"], 60)
 
         specs = {
             (spec.product_id, spec.layer_id, spec.track): spec
@@ -69,11 +73,12 @@ class VideoSelectionTests(unittest.TestCase):
         }
         for product_id, layer_id in by_product_layer:
             live = specs[(product_id, layer_id, "live")]
-            day = specs[(product_id, layer_id, "day")]
-            self.assertEqual(day.media_group, live.media_group)
-            self.assertEqual(day.resolved_media_viewport, live.resolved_media_viewport)
-            self.assertEqual(day.resolved_media_width, live.resolved_media_width)
-            self.assertEqual(day.resolved_media_height, live.resolved_media_height)
+            if "day" in VIDEO_TRACKS_BY_PRODUCT[product_id]:
+                day = specs[(product_id, layer_id, "day")]
+                self.assertEqual(day.media_group, live.media_group)
+                self.assertEqual(day.resolved_media_viewport, live.resolved_media_viewport)
+                self.assertEqual(day.resolved_media_width, live.resolved_media_width)
+                self.assertEqual(day.resolved_media_height, live.resolved_media_height)
 
     def test_track_index_updates_preserve_other_tracks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

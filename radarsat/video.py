@@ -23,6 +23,7 @@ from .config import (
     VIDEO_ARCHIVE_PRODUCTS,
     VIDEO_COMPOSITE_PRESETS,
     VIDEO_EXACT_RANGES,
+    VIDEO_TRACKS_BY_PRODUCT,
     VIEWPORTS,
 )
 
@@ -246,6 +247,8 @@ def _all_profiles() -> tuple[ProfileSpec, ...]:
                 ("day", int(product.get("dayFrameIntervalMinutes", 30))),
                 ("archive", int(product.get("archiveFrameIntervalMinutes", 60))),
             ):
+                if track not in VIDEO_TRACKS_BY_PRODUCT.get(product_id, ("live",)):
+                    continue
                 media_group, media_viewport, media_width, media_height = _media_geometry(
                     product_id, domain_id, layer_id, track
                 )
