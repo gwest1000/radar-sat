@@ -94,8 +94,6 @@ STATIC_TRANSMISSION_RENDER_VERSION = 2
 STATIC_WATERSHED_RENDER_VERSION = 2
 REGIONAL_WATERSHED_WIDTH = 2880
 DEFAULT_SOURCE_LAYERS = (
-    "daynight",
-    "ir",
     "convective",
     "snowfog",
     "radar-rain",

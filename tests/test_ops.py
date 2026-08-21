@@ -81,8 +81,8 @@ def add_video_profile(
     generation: str = "20260720T2340Z-abcdef012345",
     *,
     product_id: str = "bc-northeast-overlay",
+    layer_id: str = "raw-visir",
 ) -> set[str]:
-    layer_id = "raw-visir"
     track = "live"
     media_generation = f"{generation[:14]}-fedcba543210"
     media_relative = f"videos/{product_id}/{layer_id}/{track}/{media_generation}.mp4"
@@ -175,6 +175,58 @@ def add_video_profile(
     }
     catalog_path.write_text(json.dumps(catalog))
     return {media_relative, manifest_relative, proxy_relative, static_relative}
+
+
+def add_v2_exact_composite_profile(root: Path) -> set[str]:
+    product_id = "bc-large-overlay"
+    layer_id = "eccc-geocolor"
+    expected = add_video_profile(
+        root,
+        product_id=product_id,
+        layer_id=layer_id,
+    )
+    manifest_relative = next(key for key in expected if key.startswith("video-manifests/"))
+    manifest_path = root / manifest_relative
+    payload = json.loads(manifest_path.read_text())
+    payload["schemaVersion"] = 2
+    viewport = {"left": 0.0, "top": 0.05, "width": 1.0, "height": 0.9}
+    payload["viewport"] = viewport
+    payload["width"] = 1280
+    payload["height"] = 860
+    exact_relative = (
+        f"videos/composite-{product_id}/{layer_id}/live/exact-3h/display/"
+        "20260720T2340Z-123456789abc.mp4"
+    )
+    exact = root / exact_relative
+    exact.parent.mkdir(parents=True, exist_ok=True)
+    exact.write_bytes(b"exact-vfr-composite-mp4")
+    payload["composites"] = [{
+        "id": "operational-full-v1",
+        "layerIds": ["base-dark", layer_id, "radar-rain", "lightning-trail"],
+        "mediaViewport": viewport,
+        "ranges": [{
+            "hours": 3,
+            "firstFrame": 0,
+            "frameCount": 2,
+            "durationsSeconds": [0.2, 0.8],
+            "boundaryIntervalMultiplier": 4,
+            "renditions": [{
+                "id": "display",
+                "media": {
+                    "path": exact_relative,
+                    "mimeType": "video/mp4",
+                    "codec": "avc1",
+                    "width": 1280,
+                    "height": 876,
+                    "contentHeight": 860,
+                    "byteLength": exact.stat().st_size,
+                    "sha256": hashlib.sha256(exact.read_bytes()).hexdigest(),
+                },
+            }],
+        }],
+    }]
+    manifest_path.write_text(json.dumps(payload))
+    return {*expected, exact_relative}
 
 
 def add_hls_video_profile(
@@ -700,6 +752,25 @@ class PublisherTests(unittest.TestCase):
             self.assertTrue(composite_keys)
             self.assertTrue(composite_keys.isdisjoint(expired))
 
+    def test_v2_exact_composite_is_discovered_and_torn_variant_fails_open(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            make_archive(root, dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC))
+            expected = add_v2_exact_composite_profile(root)
+
+            objects, payload = discover_objects(root)
+            keys = {item.key for item in objects}
+            exact = next(key for key in expected if "/exact-3h/" in key)
+            self.assertIn(exact, keys)
+            self.assertIn("videoProfiles", json.loads(payload))
+
+            (root / exact).unlink()
+            objects, payload = discover_objects(root)
+            keys = {item.key for item in objects}
+            self.assertNotIn(exact, keys)
+            self.assertTrue(any(key.startswith("videos/bc-large-overlay/") for key in keys))
+            self.assertIn("videoProfiles", json.loads(payload))
+
     def test_incomplete_default_composite_fails_open_to_base_video(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -824,7 +895,7 @@ class PublisherTests(unittest.TestCase):
 
             self.assertNotIn("videoProfiles", json.loads(payload))
 
-    def test_video_retention_keeps_newest_three_and_one_hour_grace(self) -> None:
+    def test_video_retention_keeps_newest_two_and_fifteen_minute_grace(self) -> None:
         now = dt.datetime(2026, 7, 21, 12, tzinfo=UTC)
         generations = [
             "20260721T0800Z-000000000000",
@@ -845,8 +916,8 @@ class PublisherTests(unittest.TestCase):
         desired_proxy = "video-proxies/north-america-overlay/radar-rain/cccccccccccccccc.png"
         remote.update({grace_proxy: 1, old_proxy: 1, desired_proxy: 1})
         modified.update({
-            grace_proxy: now - dt.timedelta(minutes=59),
-            old_proxy: now - dt.timedelta(hours=1, minutes=1),
+            grace_proxy: now - dt.timedelta(minutes=14),
+            old_proxy: now - dt.timedelta(minutes=16),
             desired_proxy: now - dt.timedelta(days=1),
         })
 
@@ -863,10 +934,38 @@ class PublisherTests(unittest.TestCase):
         self.assertIn(old_proxy, expired)
         self.assertNotIn(grace_proxy, expired)
         self.assertNotIn(desired_proxy, expired)
-        for generation in generations[-3:]:
+        for generation in generations[-2:]:
             self.assertFalse(any(generation in key for key in expired))
-        for generation in generations[:2]:
+        for generation in generations[:3]:
             self.assertTrue(any(generation in key for key in expired))
+
+        current_exact = (
+            "videos/composite-bc-large-overlay/eccc-geocolor/live/"
+            "exact-3h/high/20260721T1200Z-aaaaaaaaaaaa.mp4"
+        )
+        grace_exact = (
+            "videos/composite-bc-large-overlay/eccc-geocolor/live/"
+            "exact-3h/high/20260721T1150Z-bbbbbbbbbbbb.mp4"
+        )
+        old_exact = (
+            "videos/composite-bc-large-overlay/eccc-geocolor/live/"
+            "exact-3h/high/20260721T1100Z-cccccccccccc.mp4"
+        )
+        exact_remote = {current_exact: 1, grace_exact: 1, old_exact: 1}
+        exact_modified = {
+            current_exact: now - dt.timedelta(hours=1),
+            grace_exact: now - dt.timedelta(minutes=14),
+            old_exact: now - dt.timedelta(minutes=16),
+        }
+        exact_expired = expired_video_keys(
+            exact_remote,
+            now,
+            desired_keys={current_exact},
+            modified_at=exact_modified,
+        )
+        self.assertNotIn(current_exact, exact_expired)
+        self.assertNotIn(grace_exact, exact_expired)
+        self.assertIn(old_exact, exact_expired)
 
         retired = expired_video_keys(remote, now, modified_at=modified)
         for generation in generations:
@@ -915,7 +1014,7 @@ class PublisherTests(unittest.TestCase):
             deleted = fake.events[delete_index][1]
             self.assertTrue(
                 all(
-                    any(generation in key for generation in generations[:2])
+                    any(generation in key for generation in generations[:3])
                     for key in deleted
                 )
             )

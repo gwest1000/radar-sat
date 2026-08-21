@@ -67,6 +67,8 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /previousGeneration === nextCatalog\.generatedAt/);
   assert.doesNotMatch(viewer, /window\.location\.reload\(\)/);
   assert.match(viewer, /VIEWER_PREFERENCES_KEY/);
+  assert.match(viewer, /function mscPrimaryFrames/);
+  assert.match(viewer, /now - slot \* intervalMs >= 35 \* 60_000/);
 });
 
 test("uses an atomic H.264 compositor for complete live and archive profiles", async () => {
@@ -132,17 +134,31 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(compositor, /requestVideoFrameCallback/);
   assert.match(compositor, /data-overlay-stalls="0"/);
   assert.match(videoLoop, /defaultComposite\?: VideoDefaultComposite/);
+  assert.match(videoLoop, /composites\?: VideoCompositePreset\[\]/);
+  assert.match(videoLoop, /export function exactCompositeManifest/);
+  assert.match(videoLoop, /candidate\.hours === rangeHours/);
+  assert.match(videoLoop, /const durationSeconds = range\.durationsSeconds\[index\]/);
   assert.match(videoLoop, /validDefaultComposite/);
   assert.match(videoLoop, /return \{ \.\.\.parsed, defaultComposite: undefined \}/);
   assert.match(viewer, /sameLayerSet\(enabledVideoLayerIds, candidateDefaultComposite\.layerIds\)/);
-  assert.match(viewer, /mediaViewport: activeDefaultComposite\.mediaViewport/);
-  assert.match(viewer, /satelliteFilter=\{activeDefaultComposite \? undefined : satelliteFilter\}/);
+  assert.match(viewer, /mediaViewport: activeExactComposite\.manifest\.mediaViewport \?\? FULL_VIEWPORT/);
+  assert.match(viewer, /satelliteFilter=\{activeComposite \? undefined : satelliteFilter\}/);
+  assert.match(viewer, /nativeLoop=\{activeComposite\?\.nativeLoop\}/);
+  assert.match(viewer, /playbackQuality/);
+  assert.match(viewer, /navigator\.mediaCapabilities/);
+  assert.match(viewer, /ResizeObserver/);
   assert.match(viewer, /setFailedDefaultComposite/);
   assert.match(viewer, /data-composite-preset=/);
   assert.match(compositor, /const fullyComposited = Boolean\(compositePresetId\)/);
   assert.match(compositor, /fullyComposited \? EMPTY_PREPARED_SURFACES/);
   assert.match(compositor, /if \(!fullyComposited\) commitSurfaces\(prepared\)/);
   assert.match(compositor, /getVideoPlaybackQuality/);
+  assert.match(compositor, /loop=\{nativeLoop\}/);
+  assert.match(compositor, /data-cadence-p95-error-ms/);
+  assert.match(compositor, /data-boundary-gap-ms/);
+  assert.match(compositor, /weatherFramesSkipped/);
+  assert.match(compositor, /weatherFramesOutOfOrder/);
+  assert.match(compositor, /data-frame-processing-ms/);
   assert.match(compositor, /VIDEO_PROGRESS_TIMEOUT_MS = 30_000/);
   assert.match(compositor, /maxBufferSize: HLS_BUFFER_BYTES/);
   assert.match(compositor, /HLS_LIVE_BUFFER_SECONDS = 40/);
@@ -221,7 +237,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /Medium\/low-confidence smoke tint/);
   assert.match(viewer, /ecccFallbackPointReferences/);
   assert.match(viewer, /layerId === "westwx-visir"\) return "NOAA VIS\/IR"/);
-  assert.match(viewer, /layerId === "daynight"\) return "ECCC VIS\/IR"/);
+  assert.doesNotMatch(viewer, /layerId === "daynight"/);
   assert.match(viewer, /pointDomain = domain\?\.layers\["active-fire-points"\]/);
   assert.match(viewer, /targetDomain === "north-america" \|\| targetDomain === "north-pacific"/);
   assert.doesNotMatch(viewer, /latestRollingPointFrameReferences/);
@@ -308,16 +324,17 @@ test("ships a runtime data configuration", async () => {
   const small = demo.products.find((product) => product.id === "bc-small-overlay");
   assert.equal(overlay.shortTitle, "BC XL");
   assert.equal(small.shortTitle, "BC");
-  assert.equal(small.anchorLayer, "raw-visir-5min");
+  assert.equal(small.anchorLayer, "eccc-geocolor");
   assert.equal(small.frameIntervalMinutes, 10);
   assert.equal(small.dayFrameIntervalMinutes, 30);
   assert.equal(small.archiveFrameIntervalMinutes, 60);
   assert.equal(small.maxHours, 168);
   assert.deepEqual(overlay.viewport, { left: 0, top: 0.05, width: 1, height: 0.9 });
   assert.deepEqual(small.viewport, { left: 0.16404, top: 0.22489, width: 0.670919, height: 0.581179 });
-  assert.equal(overlay.anchorLayer, "raw-visir");
-  assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, true);
-  assert.equal(overlay.layers.find((layer) => layer.id === "daynight").defaultEnabled, false);
+  assert.equal(overlay.anchorLayer, "eccc-geocolor");
+  assert.equal(overlay.layers.find((layer) => layer.id === "eccc-geocolor").defaultEnabled, true);
+  assert.equal(overlay.layers.some((layer) => layer.id === "daynight"), false);
+  assert.equal(overlay.layers.some((layer) => layer.id === "ir"), false);
   assert.equal(overlay.layers.find((layer) => layer.id === "convective").optional, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").optional, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
@@ -328,9 +345,9 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "lightning-trail").controlId, "lightning");
   assert.deepEqual(
     overlay.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
-    ["raw-visir", "raw-ir", "eccc-geocolor", "daynight", "ir", "convective", "snowfog"],
+    ["eccc-geocolor", "raw-visir", "raw-ir", "convective", "snowfog"],
   );
-  assert.equal(overlay.layers.find((layer) => layer.id === "eccc-geocolor").defaultEnabled, false);
+  assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, false);
   assert.match(viewer, /layerId === "eccc-geocolor"\) return "MSC GeoColor"/);
   assert.equal(overlay.layers.find((layer) => layer.id === "snowfog").defaultEnabled, false);
   assert.equal(overlay.layers.find((layer) => layer.id === "model-hgt500").defaultEnabled, false);

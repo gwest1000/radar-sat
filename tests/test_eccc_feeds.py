@@ -21,7 +21,7 @@ class EcccFeedConfigTests(unittest.TestCase):
         samples = {
             "radarsat_goes_west.conf": (
                 "https://dd.weather.gc.ca/20260720/WXO-DD/satellite/goes/west/23/"
-                "20260720T2330Z_MSC_GOES-West_DayVis-NightIR_1km.tif"
+                "20260720T2330Z_MSC_GOES-West_GeoColor_1km.tif"
             ),
             "radarsat_lightning.conf": (
                 "https://dd.weather.gc.ca/20260720/WXO-DD/lightning/"
@@ -56,8 +56,6 @@ class EcccFeedConfigTests(unittest.TestCase):
             spool = Path(temporary)
             tiffs = [
                 spool / "satellite" / f"{timestamp}_MSC_GOES-West_GeoColor_1km.tif",
-                spool / "satellite" / f"{timestamp}_MSC_GOES-West_DayVis-NightIR_1km.tif",
-                spool / "satellite" / f"{timestamp}_MSC_GOES-West_NightIR_2km.tif",
                 spool / "satellite" / (
                     f"{timestamp}_MSC_GOES-West_VisibleIRSandwich-NightMicrophysicsIR_1km.tif"
                 ),

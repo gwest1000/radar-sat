@@ -31,6 +31,8 @@ from radarsat.pipeline import (
     write_metadata,
 )
 from radarsat.spool import (
+    MSC_GEOCOLOR_HEIGHT,
+    MSC_GEOCOLOR_WIDTH,
     NATIVE_LAYER_IDS,
     NATIVE_SOURCE,
     NativeFile,
@@ -133,13 +135,13 @@ class NativeDiscoveryTests(unittest.TestCase):
 
             self.assertEqual(
                 [(item.layer_id, item.path.name) for item in files],
-                [("daynight", completed.name), ("eccc-geocolor", geocolor.name)],
+                [("eccc-geocolor", geocolor.name)],
             )
             self.assertEqual(len(rejected), 2)
             self.assertTrue(any("non-symlink" in value for value in rejected))
             self.assertTrue(any("signature" in value for value in rejected))
 
-    def test_standalone_ir_requires_its_documented_two_kilometre_resolution(self) -> None:
+    def test_removed_eccc_ir_is_not_discovered_at_any_resolution(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             spool = Path(temporary)
             correct = spool / "satellite" / "20260721T0012Z_MSC_GOES-West_NightIR_2km.tif"
@@ -149,8 +151,8 @@ class NativeDiscoveryTests(unittest.TestCase):
 
             files, rejected = discover_spool(spool, now=VALID + dt.timedelta(minutes=10))
 
-            self.assertEqual([(item.layer_id, item.path.name) for item in files], [("ir", correct.name)])
-            self.assertTrue(any("expected 2km resolution" in value for value in rejected))
+            self.assertEqual(files, [])
+            self.assertEqual(rejected, [])
 
 
 class NativeRenderTests(unittest.TestCase):
@@ -824,7 +826,7 @@ class NativeRenderTests(unittest.TestCase):
             old = VALID - dt.timedelta(hours=8)
             for valid in (old, VALID):
                 path = spool / "satellite" / (
-                    f"{valid:%Y%m%dT%H%MZ}_MSC_GOES-West_DayVis-NightIR_1km.tif"
+                    f"{valid:%Y%m%dT%H%MZ}_MSC_GOES-West_GeoColor_1km.tif"
                 )
                 write_satellite(path, valid)
 
@@ -837,36 +839,43 @@ class NativeRenderTests(unittest.TestCase):
                 now=VALID,
             )
 
-            self.assertEqual(result.rendered["daynight"], 2)
+            self.assertEqual(result.rendered["eccc-geocolor"], 2)
             self.assertTrue(
-                frame_path(output, test_domain(), LAYERS["daynight"], old).exists()
+                frame_path(output, test_domain(), LAYERS["eccc-geocolor"], old).exists()
             )
 
     def test_native_geotiffs_replace_wms_frames_and_write_standard_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             spool, output = root / "spool", root / "output"
-            satellite = spool / "satellite" / "20260721T0012Z_MSC_GOES-West_DayVis-NightIR_1km.tif"
+            satellite = spool / "satellite" / "20260721T0012Z_MSC_GOES-West_GeoColor_1km.tif"
             lightning = spool / "lightning" / "20260721T0012Z_MSC_Lightning_2.5km.tif"
             write_satellite(satellite)
             write_lightning(lightning)
             domain = test_domain()
 
             # A same-time WMS bootstrap frame must be replaced when native data arrives.
-            old_frame = frame_path(output, domain, LAYERS["daynight"], VALID)
+            old_frame = frame_path(output, domain, LAYERS["eccc-geocolor"], VALID)
             old_frame.parent.mkdir(parents=True)
             Image.new("RGB", (domain.width, domain.height), "red").save(old_frame, "WEBP")
-            write_metadata(output, domain, LAYERS["daynight"], VALID, old_frame)
+            write_metadata(
+                output,
+                domain,
+                LAYERS["eccc-geocolor"],
+                VALID,
+                old_frame,
+                source="ECCC GeoMet",
+            )
 
             result = ingest_spool(spool, output, domain, 1, False, now=VALID)
 
-            self.assertEqual(result.rendered, {"daynight": 1, "lightning": 1})
-            day_meta = json.loads(metadata_path(output, domain, LAYERS["daynight"], VALID).read_text())
+            self.assertEqual(result.rendered, {"eccc-geocolor": 1, "lightning": 1})
+            day_meta = json.loads(metadata_path(output, domain, LAYERS["eccc-geocolor"], VALID).read_text())
             self.assertEqual(day_meta["source"], NATIVE_SOURCE)
             self.assertEqual(day_meta["sourceFormat"], "GeoTIFF")
             self.assertEqual(day_meta["sourceTimes"]["native"], "2026-07-21T00:12:00Z")
-            with Image.open(frame_path(output, domain, LAYERS["daynight"], VALID)) as image:
-                self.assertEqual(image.size, (domain.width, domain.height))
+            with Image.open(frame_path(output, domain, LAYERS["eccc-geocolor"], VALID)) as image:
+                self.assertEqual(image.size, (MSC_GEOCOLOR_WIDTH, MSC_GEOCOLOR_HEIGHT))
                 self.assertNotEqual(image.convert("RGB").getpixel((domain.width // 2, domain.height // 2)), (255, 0, 0))
             with Image.open(frame_path(output, domain, LAYERS["lightning"], VALID)) as image:
                 rgba = np.asarray(image.convert("RGBA"))
@@ -1074,7 +1083,7 @@ class PipelineIntegrationTests(unittest.TestCase):
     def test_only_mode_preserves_geomet_for_composite_and_ptype(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "output"
-            native_result = SpoolIngestResult(rendered={"daynight": 1})
+            native_result = SpoolIngestResult(rendered={"eccc-geocolor": 1})
             catalog = output / "catalog.json"
             with (
                 mock.patch("radarsat.pipeline.GeoMetClient") as client_class,

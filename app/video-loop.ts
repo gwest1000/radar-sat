@@ -56,8 +56,29 @@ export type VideoDefaultComposite = {
   media: VideoMedia;
 };
 
+export type VideoCompositeRendition = {
+  id: string;
+  media: VideoMedia;
+};
+
+export type VideoCompositeRange = {
+  hours: number;
+  firstFrame: number;
+  frameCount: number;
+  durationsSeconds: number[];
+  boundaryIntervalMultiplier: number;
+  renditions: VideoCompositeRendition[];
+};
+
+export type VideoCompositePreset = {
+  id: string;
+  layerIds: string[];
+  mediaViewport: Record<string, number>;
+  ranges: VideoCompositeRange[];
+};
+
 export type VideoLoopManifest = {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   generation: string;
   generatedAt: string;
   productId: string;
@@ -71,6 +92,7 @@ export type VideoLoopManifest = {
   mediaViewport?: Record<string, number>;
   media: VideoMedia;
   defaultComposite?: VideoDefaultComposite;
+  composites?: VideoCompositePreset[];
   frames: VideoManifestFrame[];
   proxies: Record<string, VideoProxy>;
   staticOverlay?: VideoProxy;
@@ -141,7 +163,7 @@ function validFrame(value: unknown): value is VideoManifestFrame {
     });
 }
 
-function validMedia(value: unknown, transport: unknown): value is VideoMedia {
+function validMedia(value: unknown, transport?: unknown): value is VideoMedia {
   if (!value || typeof value !== "object") return false;
   const media = value as Partial<VideoMedia>;
   if (
@@ -166,7 +188,9 @@ function validMedia(value: unknown, transport: unknown): value is VideoMedia {
     || typeof media.sha256 !== "string"
     || !media.sha256
   ) return false;
-  if (transport !== "hls-ts") return true;
+  const segmented = transport === "hls-ts"
+    || media.mimeType === "application/vnd.apple.mpegurl";
+  if (!segmented) return true;
   return Array.isArray(media.segments)
     && media.segments.length > 0
     && media.segments.every((segment) => (
@@ -180,6 +204,55 @@ function validMedia(value: unknown, transport: unknown): value is VideoMedia {
       && Number.isInteger(segment.firstFrame)
       && Number.isInteger(segment.lastFrame)
     ));
+}
+
+function validCompositePreset(
+  value: unknown,
+  manifest: Partial<VideoLoopManifest>,
+): value is VideoCompositePreset {
+  if (!value || typeof value !== "object") return false;
+  const composite = value as Partial<VideoCompositePreset>;
+  const viewport = manifest.viewport ?? { left: 0, top: 0, width: 1, height: 1 };
+  if (
+    typeof composite.id !== "string"
+    || !composite.id
+    || !Array.isArray(composite.layerIds)
+    || !composite.layerIds.length
+    || composite.layerIds.some((id) => typeof id !== "string" || !id)
+    || new Set(composite.layerIds).size !== composite.layerIds.length
+    || !validViewport(composite.mediaViewport)
+    || composite.mediaViewport.left !== viewport.left
+    || composite.mediaViewport.top !== viewport.top
+    || composite.mediaViewport.width !== viewport.width
+    || composite.mediaViewport.height !== viewport.height
+    || !Array.isArray(composite.ranges)
+    || !composite.ranges.length
+  ) return false;
+  return composite.ranges.every((range) => {
+    if (!range || typeof range !== "object") return false;
+    const candidate = range as Partial<VideoCompositeRange>;
+    if (
+      !finitePositive(candidate.hours)
+      || !Number.isInteger(candidate.firstFrame)
+      || Number(candidate.firstFrame) < 0
+      || !Number.isInteger(candidate.frameCount)
+      || Number(candidate.frameCount) < 2
+      || Number(candidate.firstFrame) + Number(candidate.frameCount) > (manifest.frames?.length ?? 0)
+      || !Array.isArray(candidate.durationsSeconds)
+      || candidate.durationsSeconds.length !== candidate.frameCount
+      || !candidate.durationsSeconds.every(finitePositive)
+      || candidate.boundaryIntervalMultiplier !== 4
+      || !Array.isArray(candidate.renditions)
+      || !candidate.renditions.length
+    ) return false;
+    return candidate.renditions.every((rendition) => (
+      Boolean(rendition)
+      && typeof rendition.id === "string"
+      && Boolean(rendition.id)
+      && validMedia(rendition.media)
+      && (rendition.media.contentHeight ?? rendition.media.height) > 0
+    ));
+  });
 }
 
 function validDefaultComposite(
@@ -212,7 +285,7 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
   if (!value || typeof value !== "object") throw new Error("Video manifest is not an object.");
   const manifest = value as Partial<VideoLoopManifest>;
   if (
-    manifest.schemaVersion !== 1
+    ![1, 2].includes(Number(manifest.schemaVersion))
     || typeof manifest.generation !== "string"
     || typeof manifest.generatedAt !== "string"
     || typeof manifest.productId !== "string"
@@ -261,7 +334,10 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
   ) {
     return { ...parsed, defaultComposite: undefined };
   }
-  return parsed;
+  const composites = parsed.composites?.filter((value) => (
+    validCompositePreset(value, parsed)
+  ));
+  return { ...parsed, composites: composites?.length ? composites : undefined };
 }
 
 export function loadVideoLoopManifest(url: string): Promise<VideoLoopManifest> {
@@ -292,6 +368,57 @@ export function loadVideoLoopManifest(url: string): Promise<VideoLoopManifest> {
 export function sourceCacheKey(path: string, revision: string): string {
   const query = new URLSearchParams({ v: revision });
   return `${path}?${query.toString()}`;
+}
+
+export function exactCompositeManifest(
+  manifest: VideoLoopManifest,
+  layerIds: readonly string[],
+  rangeHours: number,
+  preferredRendition: "efficient" | "high" | "auto" = "auto",
+): { manifest: VideoLoopManifest; presetId: string; renditionId: string } | null {
+  const preset = manifest.composites?.find((candidate) => {
+    const left = new Set(candidate.layerIds);
+    return left.size === layerIds.length && layerIds.every((id) => left.has(id));
+  });
+  const range = preset?.ranges.find((candidate) => candidate.hours === rangeHours);
+  if (!preset || !range) return null;
+  const rendition = preferredRendition === "efficient"
+    ? range.renditions.find((candidate) => candidate.id === "efficient")
+      ?? range.renditions[0]
+    : preferredRendition === "high"
+      ? range.renditions.find((candidate) => candidate.id === "high")
+        ?? range.renditions[range.renditions.length - 1]
+      : range.renditions[range.renditions.length - 1];
+  if (!rendition) return null;
+  let pts = 0;
+  const frames = manifest.frames
+    .slice(range.firstFrame, range.firstFrame + range.frameCount)
+    .map((frame, index) => {
+      const durationSeconds = range.durationsSeconds[index];
+      const result = {
+        ...frame,
+        index,
+        ptsSeconds: pts,
+        durationSeconds,
+      };
+      pts += durationSeconds;
+      return result;
+    });
+  return {
+    presetId: preset.id,
+    renditionId: rendition.id,
+    manifest: {
+      ...manifest,
+      transport: rendition.media.mimeType === "application/vnd.apple.mpegurl"
+        ? "hls-ts"
+        : "progressive-mp4",
+      width: rendition.media.width,
+      height: rendition.media.contentHeight ?? rendition.media.height,
+      mediaViewport: preset.mediaViewport,
+      media: rendition.media,
+      frames,
+    },
+  };
 }
 
 export function selectVideoFrames(

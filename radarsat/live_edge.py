@@ -15,6 +15,7 @@ from .r2 import LIVE_EDGE_KEY, LocalObject, R2Config, boto3_client, upload_catal
 UTC = dt.timezone.utc
 LIVE_EDGE_BASE_LAYERS = frozenset(
     {
+        "eccc-geocolor",
         "radar-rain",
         "radar-coverage",
         "lightning-trail",
@@ -113,7 +114,7 @@ def publish_live_edge(
 ) -> dict[str, object]:
     payload, objects = build_live_edge_index(root, now=now)
     if not objects:
-        raise RuntimeError("No live-edge radar or lightning objects are available")
+        raise RuntimeError("No live-edge satellite, radar, or lightning objects are available")
     r2_client = client or boto3_client(config)
     previous: dict[str, list[int]] = {}
     if state_path is not None:

@@ -83,24 +83,6 @@ DOMAINS: dict[str, Domain] = {
 
 
 LAYERS: dict[str, Layer] = {
-    "daynight": Layer(
-        id="daynight",
-        title="GOES-West day visible / night IR",
-        source_layer="GOES-West_1km_DayVis-NightIR",
-        image_format="image/jpeg",
-        extension="webp",
-        role="background",
-        max_age_minutes=40,
-    ),
-    "ir": Layer(
-        id="ir",
-        title="GOES-West enhanced infrared imagery",
-        source_layer="GOES-West_2km_NightIR",
-        image_format="image/jpeg",
-        extension="webp",
-        role="background",
-        max_age_minutes=40,
-    ),
     "natural": Layer(
         id="natural",
         title="GOES-West natural colour",
@@ -137,7 +119,7 @@ LAYERS: dict[str, Layer] = {
         extension="webp",
         role="background",
         source="ECCC Datamart",
-        max_age_minutes=45,
+        max_age_minutes=35,
     ),
     "radar-rain": Layer(
         id="radar-rain",
@@ -540,7 +522,7 @@ def _overlay_product(
         "shortTitle": short_title,
         "group": "Overlay",
         "domain": "bc",
-        "anchorLayer": visir_layer,
+        "anchorLayer": "eccc-geocolor",
         "frameIntervalMinutes": 10,
         "dayFrameIntervalMinutes": 30,
         "archiveFrameIntervalMinutes": 60,
@@ -552,11 +534,9 @@ def _overlay_product(
         ),
         "layers": [
             {"id": "base-dark", "opacity": 1.0},
-            {"id": visir_layer, "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite", "controlId": "noaa-visir"},
+            {"id": "eccc-geocolor", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite", "controlSection": "regional-satellite"},
+            {"id": visir_layer, "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlId": "noaa-visir"},
             {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlId": "noaa-ir"},
-            {"id": "eccc-geocolor", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlSection": "regional-satellite"},
-            {"id": "daynight", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlSection": "regional-satellite"},
-            {"id": "ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlSection": "regional-satellite"},
             {"id": "convective", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlSection": "regional-satellite"},
             {"id": "snowfog", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlSection": "regional-satellite"},
             {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": False},
@@ -575,13 +555,13 @@ def _overlay_product(
         "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
             (
-                "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5°N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback."
+                "This view uses the one-kilometre MSC GeoColor product across BC. NOAA GeoColor is used only for a matching slot that is still missing when the display would otherwise be more than 35 minutes behind real time."
                 if five_minute
-                else "This view prefers 0.5 km-grid NOAA STAR/CIRA full-disk GeoColor on genuine ten-minute GOES-18 scan times. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the automatic availability fallback."
+                else "This view uses the one-kilometre MSC GeoColor product across BC. NOAA GeoColor is used only for a matching slot that is still missing when the display would otherwise be more than 35 minutes behind real time."
             ),
             "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15–35 km north to northeast of its true BC position.",
             "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
-            "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
+            "MSC GeoColor is the preferred one-kilometre, ten-minute BC satellite background. NOAA GeoColor fills a matching slot only after the 35-minute availability deadline; a later rebuild replaces that fallback with MSC when it arrives.",
             "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
             "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
             "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters.",
@@ -718,6 +698,70 @@ PRODUCTS: list[dict[str, object]] = [
         BROAD_VIEWPORTS["north-pacific"],
     ),
 ]
+
+# Exact-range, fully composited playback is generated from this operational
+# policy instead of a hard-coded two-domain pilot.  Satellite IDs are supplied
+# by the active profile (MSC GeoColor for the BC family, NOAA for broad views);
+# the entries below name only optional overlay controllers.
+VIDEO_EXACT_RANGES: dict[str, tuple[int, ...]] = {
+    "bc-small-overlay": (3, 6, 12, 24),
+    "bc-southwest-overlay": (3, 6, 12, 24),
+    "bc-southeast-overlay": (3, 6, 12, 24),
+    "bc-northeast-overlay": (3, 6, 12, 24),
+    "bc-large-overlay": (3, 6, 12, 24),
+    "bc-south-coast-overlay": (3, 6, 12),
+    "pacific-wna-overlay": (12, 24),
+    "north-america-overlay": (12, 24),
+    "north-pacific-overlay": (12, 24),
+}
+
+VIDEO_ARCHIVE_PRODUCTS = frozenset(
+    {
+        "bc-large-overlay",
+        "pacific-wna-overlay",
+        "north-america-overlay",
+        "north-pacific-overlay",
+    }
+)
+
+VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
+    product_id: (
+        {
+            "id": "operational-full-v1",
+            "optionalLayers": (
+                "smoke",
+                "radar-rain",
+                "lightning-trail" if product_id.startswith("bc-") else "glm-lightning-trail",
+                "hotspots",
+                "model-mslp",
+                "model-hgt500",
+            ),
+        },
+        {
+            "id": "operational-core-v1",
+            "optionalLayers": (
+                "radar-rain",
+                "lightning-trail" if product_id.startswith("bc-") else "glm-lightning-trail",
+                "model-mslp",
+                "model-hgt500",
+            ),
+        },
+    )
+    for product_id in VIDEO_EXACT_RANGES
+}
+
+# South Coast's common display intentionally omits model contours. Its full
+# preset differs from the core only by smoke and fire.
+VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"] = (
+    {
+        "id": "operational-full-v1",
+        "optionalLayers": ("smoke", "radar-rain", "lightning-trail", "hotspots"),
+    },
+    {
+        "id": "operational-core-v1",
+        "optionalLayers": ("radar-rain", "lightning-trail"),
+    },
+)
 
 
 LEGENDS: dict[str, dict[str, str]] = {

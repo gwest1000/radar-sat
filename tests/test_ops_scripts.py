@@ -225,6 +225,9 @@ class OpsScriptTests(unittest.TestCase):
         radar_edge = (
             PROJECT / "scripts" / "ops" / "run_radar_edge_cycle.zsh"
         ).read_text()
+        msc_edge = (
+            PROJECT / "scripts" / "ops" / "run_msc_satellite_edge_cycle.zsh"
+        ).read_text()
         self.assertNotIn("build_satellite_video.py", satellite)
         self.assertIn("build_satellite_video.py", video)
         self.assertIn('run_video_phase "${VIDEO_TRACK}"', video)
@@ -237,12 +240,14 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("RADARSAT_VIDEO_ENABLED", video)
         self.assertIn('--track "${track}"', video)
         self.assertIn('args+=(--layer "${layer}")', video)
-        self.assertIn('"raw-visir,raw-visir-5min" "westwx-visir" "raw-visir"', video)
+        self.assertIn('"eccc-geocolor" "westwx-visir" "raw-visir"', video)
         self.assertIn('video-${VIDEO_TRACK}-cycle.lock', video)
         self.assertIn("refresh_lightning_edge.py", lightning_edge)
         self.assertIn("refresh_radar_edge.py", radar_edge)
+        self.assertIn("refresh_msc_satellite_edge.py", msc_edge)
         self.assertIn("live_edge_publish.zsh", lightning_edge)
         self.assertIn("live_edge_publish.zsh", radar_edge)
+        self.assertIn("live_edge_publish.zsh", msc_edge)
         self.assertIn("refresh_status=0", radar_edge)
         self.assertLess(
             radar_edge.index("refresh_radar_edge.py"),
@@ -254,8 +259,9 @@ class OpsScriptTests(unittest.TestCase):
         )
         self.assertIn("--archive-hours", video)
         self.assertIn("last-good profiles", video)
-        self.assertIn("<integer>600</integer>", video_plist)
+        self.assertIn("<integer>300</integer>", video_plist)
         self.assertIn("video-day", install)
+        self.assertIn("msc-satellite-edge", install)
         self.assertIn("--sector full-disk", satellite)
         self.assertNotIn("backfill_five_minute_bc_satellite.py", satellite)
         self.assertNotIn("backfill_native_bc_satellite.py", satellite)

@@ -144,6 +144,94 @@ class VideoSelectionTests(unittest.TestCase):
         self.assertEqual([item.valid_time.minute for item in selected], [0, 10, 20, 30, 40, 50])
         self.assertEqual(selected[3].source_valid_time, base + dt.timedelta(minutes=30))
 
+    def test_bc_msc_primary_uses_only_same_slot_noaa_after_35_minute_deadline(self) -> None:
+        base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
+        msc = [
+            frame(f"frames/bc/eccc-geocolor/{minute}.webp", base + dt.timedelta(minutes=minute))
+            for minute in (0, 10)
+        ]
+        standard = [
+            frame(f"frames/bc/raw-visir/{minute}.webp", base + dt.timedelta(minutes=minute))
+            for minute in (20, 30, 40)
+        ]
+        native = [
+            frame("frames/bc/raw-visir-native/20.webp", base + dt.timedelta(minutes=20))
+        ]
+        catalog = {
+            "domains": {
+                "bc": {
+                    "layers": {
+                        "eccc-geocolor": {"maxAgeMinutes": 35, "frames": msc},
+                        "raw-visir": {"frames": standard},
+                        "raw-visir-native": {"frames": native},
+                    }
+                }
+            }
+        }
+        spec = ProfileSpec(
+            "bc-northeast-overlay",
+            "bc",
+            "eccc-geocolor",
+            {"left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0},
+            64,
+            48,
+            10,
+        )
+
+        inside_deadline = _selected_satellite_frames(
+            catalog,
+            spec,
+            1,
+            now=base + dt.timedelta(minutes=54),
+        )
+        self.assertEqual(
+            [item.encoded_source_layer for item in inside_deadline],
+            ["eccc-geocolor", "eccc-geocolor"],
+        )
+
+        expired = _selected_satellite_frames(
+            catalog,
+            spec,
+            1,
+            now=base + dt.timedelta(minutes=56),
+        )
+        self.assertEqual(
+            [item.encoded_source_layer for item in expired],
+            ["eccc-geocolor", "eccc-geocolor", "raw-visir-native"],
+        )
+        self.assertEqual(expired[-1].valid_time, base + dt.timedelta(minutes=20))
+
+        # A later MSC arrival replaces the exceptional NOAA fill on rebuild.
+        msc.append(
+            frame("frames/bc/eccc-geocolor/20.webp", base + dt.timedelta(minutes=20))
+        )
+        upgraded = _selected_satellite_frames(
+            catalog,
+            spec,
+            1,
+            now=base + dt.timedelta(minutes=56),
+        )
+        self.assertEqual(upgraded[-1].encoded_source_layer, "eccc-geocolor")
+
+        # A genuinely missing slot is not manufactured by holding the prior
+        # MSC image under a later display timestamp.
+        msc.append(
+            frame("frames/bc/eccc-geocolor/40.webp", base + dt.timedelta(minutes=40))
+        )
+        standard.clear()
+        native.clear()
+        with_gap = _selected_satellite_frames(
+            catalog,
+            spec,
+            1,
+            now=base + dt.timedelta(minutes=80),
+        )
+        self.assertEqual(
+            [item.valid_time for item in with_gap],
+            [base, base + dt.timedelta(minutes=10), base + dt.timedelta(minutes=20), base + dt.timedelta(minutes=40)],
+        )
+        self.assertEqual(with_gap[2].encoded_source_layer, "eccc-geocolor")
+
     def test_broad_selection_honours_max_age_and_never_regresses(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
         broad_frames = [
@@ -529,11 +617,17 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(unchanged["status"], "unchanged")
 
-    def test_default_composite_pilot_bakes_default_stack_and_is_content_addressed(self) -> None:
+    def test_configured_composites_build_exact_vfr_ranges_and_are_content_addressed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             catalog, original_spec = self.make_source(root)
-            spec = replace(original_spec, product_id="bc-large-overlay")
+            layers = catalog["domains"]["bc"]["layers"]
+            layers["eccc-geocolor"] = layers.pop("raw-visir")
+            spec = replace(
+                original_spec,
+                product_id="bc-large-overlay",
+                layer_id="eccc-geocolor",
+            )
             output = root / "output"
 
             first = build_profile(
@@ -547,13 +641,18 @@ class VideoBuildTests(unittest.TestCase):
             first_manifest = json.loads(
                 (output / str(first["manifestPath"])).read_text()
             )
-            composite = first_manifest["defaultComposite"]
-            self.assertEqual(composite["id"], "operational-default-v1")
+            self.assertEqual(first_manifest["schemaVersion"], 2)
+            self.assertEqual(
+                [item["id"] for item in first_manifest["composites"]],
+                ["operational-full-v1", "operational-core-v1"],
+            )
+            composite = first_manifest["composites"][0]
             self.assertEqual(
                 composite["layerIds"],
                 [
                     "base-dark",
-                    "raw-visir",
+                    "eccc-geocolor",
+                    "smoke",
                     "radar-coverage",
                     "radar-rain",
                     "watersheds",
@@ -561,29 +660,55 @@ class VideoBuildTests(unittest.TestCase):
                     "boundaries",
                     "lightning-trail",
                     "hotspots",
+                    "model-mslp",
+                    "model-hgt500",
                 ],
             )
             self.assertEqual(composite["mediaViewport"], spec.viewport)
-            self.assertEqual(composite["media"]["width"], 64)
-            self.assertEqual(composite["media"]["contentHeight"], 48)
+            self.assertEqual([item["hours"] for item in composite["ranges"]], [3, 6, 12])
+            exact_range = composite["ranges"][0]
+            rendition = exact_range["renditions"][0]
+            self.assertEqual(rendition["id"], "display")
+            self.assertEqual(rendition["media"]["width"], 64)
+            self.assertEqual(rendition["media"]["contentHeight"], 48)
+            self.assertEqual(exact_range["durationsSeconds"], [0.2, 0.2, 0.8])
+            self.assertEqual(exact_range["boundaryIntervalMultiplier"], 4)
             self.assertIn(
-                "videos/composite-bc-large-overlay/raw-visir/live/",
-                composite["media"]["path"],
+                "videos/composite-bc-large-overlay/eccc-geocolor/live/exact-3h/display/",
+                rendition["media"]["path"],
             )
-            first_segment = composite["media"]["segments"][0]
-            self.assertIn(
-                "video-segments/composite-bc-large-overlay/raw-visir/live/",
-                first_segment["path"],
+            exact_media = output / rendition["media"]["path"]
+            self.assertTrue(exact_media.is_file())
+            packets = subprocess.run(
+                [
+                    str(shutil.which("ffprobe")),
+                    "-v", "error", "-select_streams", "v:0",
+                    "-show_entries", "packet=pts_time,duration_time",
+                    "-of", "json", str(exact_media),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
             )
-            self.assertTrue((output / first_segment["path"]).is_file())
+            packet_values = json.loads(packets.stdout)["packets"]
+            self.assertEqual(len(packet_values), 3)
+            self.assertEqual(
+                [round(float(item["duration_time"]), 2) for item in packet_values],
+                [0.2, 0.2, 0.8],
+            )
             self.assertGreater(first["compositeMediaBytes"], 0)
 
-            # A static-overlay content change leaves the satellite-only media
-            # reusable, but must produce a new composite segment and manifest.
+            # A new satellite anchor plus a static-overlay content change must
+            # bind the next immutable exact MP4 to the new rendered proxy.
             boundary = root / "source/static/bc/boundaries.png"
             write_rgba(boundary, (255, 0, 0, 255), (64, 48))
             stat = boundary.stat()
             os.utime(boundary, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+            new_relative = "frames/bc/raw-visir/30.webp"
+            shutil.copy2(root / "source/frames/bc/raw-visir/20.webp", root / "source" / new_relative)
+            layers["eccc-geocolor"]["frames"].append(
+                frame(new_relative, dt.datetime(2026, 8, 1, 0, 30, tzinfo=UTC))
+            )
             second = build_profile(
                 root / "source",
                 output,
@@ -596,18 +721,10 @@ class VideoBuildTests(unittest.TestCase):
                 (output / str(second["manifestPath"])).read_text()
             )
             self.assertNotEqual(second["generation"], first["generation"])
-            self.assertEqual(
-                second_manifest["media"]["segments"][0]["path"],
-                first_manifest["media"]["segments"][0]["path"],
-            )
-            self.assertNotEqual(
-                second_manifest["defaultComposite"]["media"]["segments"][0]["path"],
-                first_segment["path"],
-            )
-            protected = output / second_manifest["defaultComposite"]["media"][
-                "segments"
-            ][0]["path"]
-            orphan = protected.with_name("orphan.ts")
+            second_media = second_manifest["composites"][0]["ranges"][0]["renditions"][0]["media"]["path"]
+            self.assertNotEqual(second_media, rendition["media"]["path"])
+            protected = output / second_media
+            orphan = protected.with_name("20260801T0030Z-deadbeefdead.mp4")
             orphan.write_bytes(b"orphan")
             old = dt.datetime.now(UTC) - dt.timedelta(hours=2)
             os.utime(orphan, (old.timestamp(), old.timestamp()))
@@ -633,18 +750,18 @@ class VideoBuildTests(unittest.TestCase):
             manifest = json.loads(
                 (root / "output" / str(result["manifestPath"])).read_text()
             )
-            self.assertNotIn("defaultComposite", manifest)
+            self.assertNotIn("composites", manifest)
 
     def test_satellite_choices_reuse_rendered_proxy_results(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             catalog, first_spec = self.make_source(root)
             layers = catalog["domains"]["bc"]["layers"]
-            layers["daynight"] = dict(layers["raw-visir"])
+            layers["convective"] = dict(layers["raw-visir"])
             second_spec = ProfileSpec(
                 first_spec.product_id,
                 first_spec.domain_id,
-                "daynight",
+                "convective",
                 first_spec.viewport,
                 first_spec.width,
                 first_spec.height,
@@ -674,11 +791,11 @@ class VideoBuildTests(unittest.TestCase):
             catalog, spec = self.make_source(root)
             base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
             layers = catalog["domains"]["bc"]["layers"]
-            layers["daynight"] = layers.pop("raw-visir")
+            layers["convective"] = layers.pop("raw-visir")
             spec = ProfileSpec(
                 spec.product_id,
                 spec.domain_id,
-                "daynight",
+                "convective",
                 spec.viewport,
                 spec.width,
                 spec.height,
@@ -686,9 +803,9 @@ class VideoBuildTests(unittest.TestCase):
                 crf=spec.crf,
                 preset=spec.preset,
             )
-            frames = layers["daynight"]["frames"]
+            frames = layers["convective"]["frames"]
             assert isinstance(frames, list)
-            layers["daynight"]["maxAgeMinutes"] = 0
+            layers["convective"]["maxAgeMinutes"] = 0
             # Two complete playback chunks with a skipped UTC segment group.
             # The gap must not change any frame's display duration.
             originals = list(frames)

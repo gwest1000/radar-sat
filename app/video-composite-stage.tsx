@@ -69,6 +69,12 @@ const HLS_BACK_BUFFER_SECONDS = 15;
 const MAX_CONCURRENT_OVERLAY_DECODES = 3;
 const EMPTY_PREPARED_SURFACES: PreparedSurfaces = {};
 
+function percentile95(values: readonly number[]): number {
+  if (!values.length) return 0;
+  const ordered = [...values].sort((left, right) => left - right);
+  return ordered[Math.min(ordered.length - 1, Math.ceil(ordered.length * 0.95) - 1)];
+}
+
 function playbackSurfaceSize(width: number, height: number): { width: number; height: number } {
   const scale = Math.min(1, Math.sqrt(PLAYBACK_SURFACE_PIXELS / (width * height)));
   return {
@@ -376,6 +382,7 @@ export function VideoCompositeStage({
   satelliteFilter,
   compositePresetId,
   compositeMediaPath,
+  nativeLoop = false,
   onFramePresented,
   onFailure,
   onLoopBoundary,
@@ -390,6 +397,7 @@ export function VideoCompositeStage({
   satelliteFilter?: string;
   compositePresetId?: string;
   compositeMediaPath?: string;
+  nativeLoop?: boolean;
   onFramePresented: (index: number) => void;
   onFailure: (message: string) => void;
   onLoopBoundary?: () => void;
@@ -434,6 +442,12 @@ export function VideoCompositeStage({
   const overlayStallsRef = useRef(0);
   const presentedFramesRef = useRef(0);
   const lastDiagnosticsAtRef = useRef(0);
+  const lastFrameCommitAtRef = useRef(0);
+  const cadenceErrorsRef = useRef<number[]>([]);
+  const lastBoundaryGapRef = useRef(0);
+  const lastFrameProcessingRef = useRef(0);
+  const skippedWeatherFramesRef = useRef(0);
+  const outOfOrderWeatherFramesRef = useRef(0);
   const lastProgressAtRef = useRef(0);
   const seekingRef = useRef(false);
   const disposedRef = useRef(false);
@@ -447,7 +461,15 @@ export function VideoCompositeStage({
   const previousPlanRevisionRef = useRef(planRevision);
 
   useLayoutEffect(() => { playingRef.current = playing; }, [playing]);
-  useEffect(() => { speedRef.current = speed; }, [speed]);
+  useEffect(() => {
+    speedRef.current = speed;
+    // Cadence errors from the old playback rate are not comparable with the
+    // new target interval. Start a fresh timing window without disturbing the
+    // active circuit or decoder.
+    cadenceErrorsRef.current = [];
+    lastFrameCommitAtRef.current = 0;
+    lastBoundaryGapRef.current = 0;
+  }, [speed]);
   useEffect(() => {
     surfaceCache.setLimit(surfaceEntryLimit);
   }, [surfaceCache, surfaceEntryLimit]);
@@ -547,6 +569,7 @@ export function VideoCompositeStage({
       || !playingRef.current
       || index !== plans.length - 1
       || loopTimerRef.current !== undefined
+      || nativeLoop
     ) return;
     video.pause();
     const delay = plans[index].frame.durationSeconds * 1_000 / speedRef.current;
@@ -555,9 +578,10 @@ export function VideoCompositeStage({
       onLoopBoundary?.();
       seekToIndexRef.current(0);
     }, delay);
-  }, [onLoopBoundary, plans]);
+  }, [nativeLoop, onLoopBoundary, plans]);
 
   const handleVideoFrame = useCallback((mediaTime: number) => {
+    const processingStarted = performance.now();
     const video = videoRef.current;
     const stage = stageRef.current;
     const surfaces = surfaceCache;
@@ -588,11 +612,37 @@ export function VideoCompositeStage({
         || plans[index]?.cacheKey !== plan.cacheKey
       ) return false;
       if (!fullyComposited) commitSurfaces(prepared);
+      const previousIndex = committedIndexRef.current;
       committedIndexRef.current = index;
       requestedIndexRef.current = index;
       presentedFramesRef.current += 1;
       lastProgressAtRef.current = Date.now();
       const now = Date.now();
+      const committedAt = performance.now();
+      if (previousIndex >= 0 && lastFrameCommitAtRef.current > 0) {
+        const actualInterval = committedAt - lastFrameCommitAtRef.current;
+        const expectedInterval = plans[previousIndex].frame.durationSeconds
+          * 1_000 / Math.max(speedRef.current, 0.01);
+        const isBoundary = index === 0 && previousIndex === plans.length - 1;
+        if (isBoundary) {
+          lastBoundaryGapRef.current = actualInterval;
+        } else {
+          cadenceErrorsRef.current.push(Math.abs(actualInterval - expectedInterval));
+          if (cadenceErrorsRef.current.length > 256) cadenceErrorsRef.current.shift();
+        }
+        if (playingRef.current) {
+          const expectedIndex = (previousIndex + 1) % plans.length;
+          if (index !== expectedIndex) {
+            if (index > previousIndex) {
+              skippedWeatherFramesRef.current += index - previousIndex - 1;
+            } else {
+              outOfOrderWeatherFramesRef.current += 1;
+            }
+          }
+        }
+      }
+      lastFrameCommitAtRef.current = committedAt;
+      lastFrameProcessingRef.current = committedAt - processingStarted;
       if (
         index === 0
         || index === plans.length - 1
@@ -603,6 +653,17 @@ export function VideoCompositeStage({
         stage.dataset.overlayStalls = String(overlayStallsRef.current);
         const quality = video.getVideoPlaybackQuality?.();
         stage.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
+        stage.dataset.videoDroppedRatio = String(
+          quality?.totalVideoFrames
+            ? quality.droppedVideoFrames / quality.totalVideoFrames
+            : 0,
+        );
+        stage.dataset.cadenceP95ErrorMs = percentile95(cadenceErrorsRef.current).toFixed(2);
+        stage.dataset.cadenceMaxErrorMs = Math.max(0, ...cadenceErrorsRef.current).toFixed(2);
+        stage.dataset.boundaryGapMs = lastBoundaryGapRef.current.toFixed(2);
+        stage.dataset.frameProcessingMs = lastFrameProcessingRef.current.toFixed(2);
+        stage.dataset.weatherFramesSkipped = String(skippedWeatherFramesRef.current);
+        stage.dataset.weatherFramesOutOfOrder = String(outOfOrderWeatherFramesRef.current);
         stage.dataset.surfaceCacheEntries = String(surfaces.size);
         stage.dataset.surfaceCacheLimit = String(surfaces.limit);
         stage.dataset.surfaceBuilds = String(surfaces.builds);
@@ -618,7 +679,10 @@ export function VideoCompositeStage({
           });
         }
       }
-      if (index === plans.length - 1) scheduleLoop(index);
+      if (index === 0 && previousIndex === plans.length - 1 && nativeLoop) {
+        onLoopBoundary?.();
+      }
+      if (index === plans.length - 1 && !nativeLoop) scheduleLoop(index);
       else requestFrameRef.current();
       return true;
     };
@@ -650,7 +714,7 @@ export function VideoCompositeStage({
     }).catch((reason) => {
       if (operationEpochRef.current === operationEpoch) fail(reason);
     });
-  }, [commitSurfaces, fail, fullyComposited, onFramePresented, planFrames, plans, playVideo, scheduleLoop, surfaceBudgetBytes, surfaceCache]);
+  }, [commitSurfaces, fail, fullyComposited, nativeLoop, onFramePresented, onLoopBoundary, planFrames, plans, playVideo, scheduleLoop, surfaceBudgetBytes, surfaceCache]);
 
   useEffect(() => {
     requestFrameRef.current = () => {
@@ -744,6 +808,10 @@ export function VideoCompositeStage({
       ) return;
       if (!fullyComposited) commitSurfaces(prepared);
       committedIndexRef.current = index;
+      lastFrameCommitAtRef.current = 0;
+      cadenceErrorsRef.current = [];
+      skippedWeatherFramesRef.current = 0;
+      outOfOrderWeatherFramesRef.current = 0;
       requestedIndexRef.current = index;
       presentedFramesRef.current += 1;
       lastProgressAtRef.current = Date.now();
@@ -751,6 +819,8 @@ export function VideoCompositeStage({
       stage.dataset.overlayStalls = String(overlayStallsRef.current);
       const quality = video.getVideoPlaybackQuality?.();
       stage.dataset.videoDropped = String(quality?.droppedVideoFrames ?? 0);
+      stage.dataset.weatherFramesSkipped = "0";
+      stage.dataset.weatherFramesOutOfOrder = "0";
       stage.dataset.surfaceCacheEntries = String(surfaceCache.size);
       stage.dataset.surfaceCacheLimit = String(surfaceCache.limit);
       stage.dataset.surfaceBuilds = String(surfaceCache.builds);
@@ -758,7 +828,7 @@ export function VideoCompositeStage({
       onFramePresented(index);
       requestFrameRef.current();
       if (playingRef.current) {
-        if (index === plans.length - 1) scheduleLoop(index);
+        if (index === plans.length - 1 && !nativeLoop) scheduleLoop(index);
         else playVideo(video);
       }
     }).catch((reason) => {
@@ -769,6 +839,7 @@ export function VideoCompositeStage({
     fail,
     fullyComposited,
     invalidateOperation,
+    nativeLoop,
     onFramePresented,
     planRevision,
     plans,
@@ -884,12 +955,12 @@ export function VideoCompositeStage({
         window.clearTimeout(loopTimerRef.current);
         loopTimerRef.current = undefined;
       }
-    } else if (committedIndexRef.current === plans.length - 1) {
+    } else if (committedIndexRef.current === plans.length - 1 && !nativeLoop) {
       scheduleLoop(committedIndexRef.current);
     } else {
       playVideo(video);
     }
-  }, [plans.length, playing, playVideo, scheduleLoop]);
+  }, [nativeLoop, plans.length, playing, playVideo, scheduleLoop]);
 
   useEffect(() => {
     if (!playing || failedRef.current) return;
@@ -1005,6 +1076,14 @@ export function VideoCompositeStage({
       data-overlay-stalls="0"
       data-presented-frames="0"
       data-video-dropped="0"
+      data-video-dropped-ratio="0"
+      data-cadence-p95-error-ms="0"
+      data-cadence-max-error-ms="0"
+      data-boundary-gap-ms="0"
+      data-frame-processing-ms="0"
+      data-weather-frames-skipped="0"
+      data-weather-frames-out-of-order="0"
+      data-native-loop={nativeLoop ? "true" : "false"}
       data-surface-cache-entries="0"
       data-surface-cache-limit={surfaceEntryLimit}
       data-surface-builds="0"
@@ -1018,6 +1097,7 @@ export function VideoCompositeStage({
         style={videoStyle}
         crossOrigin="anonymous"
         muted
+        loop={nativeLoop}
         playsInline
         preload="auto"
         aria-hidden="true"

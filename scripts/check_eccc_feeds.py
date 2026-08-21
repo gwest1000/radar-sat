@@ -46,14 +46,6 @@ FEEDS: dict[str, FeedSpec] = {
             r"^(?P<time>\d{8}T\d{4}Z)_MSC_GOES-West_GeoColor_1km\.tif$"
         ),
     ),
-    "goes-daynight": FeedSpec(
-        directory="satellite",
-        suffix=".tif",
-        max_age_minutes=45,
-        pattern=re.compile(
-            r"^(?P<time>\d{8}T\d{4}Z)_MSC_GOES-West_DayVis-NightIR_1km\.tif$"
-        ),
-    ),
     "goes-convective": FeedSpec(
         directory="satellite",
         suffix=".tif",
@@ -61,14 +53,6 @@ FEEDS: dict[str, FeedSpec] = {
         pattern=re.compile(
             r"^(?P<time>\d{8}T\d{4}Z)_MSC_GOES-West_"
             r"VisibleIRSandwich-NightMicrophysicsIR_1km\.tif$"
-        ),
-    ),
-    "goes-ir": FeedSpec(
-        directory="satellite",
-        suffix=".tif",
-        max_age_minutes=45,
-        pattern=re.compile(
-            r"^(?P<time>\d{8}T\d{4}Z)_MSC_GOES-West_NightIR_2km\.tif$"
         ),
     ),
     "goes-snowfog": FeedSpec(

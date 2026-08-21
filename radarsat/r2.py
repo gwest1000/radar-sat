@@ -19,7 +19,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from .config import DOMAINS
+from .config import (
+    DOMAINS,
+    VIDEO_ARCHIVE_PRODUCTS,
+    VIDEO_COMPOSITE_PRESETS,
+    VIDEO_EXACT_RANGES,
+)
 from .geomet import format_utc
 from .pipeline import write_status
 from .retention import keep_layer_frame
@@ -40,18 +45,21 @@ MUTABLE_CACHE_CONTROL = "public, max-age=60, must-revalidate"
 STATIC_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400"
 CATALOG_CACHE_CONTROL = "no-cache, max-age=0, must-revalidate"
 LIVE_EDGE_KEY = "live-edge.json"
-DEFAULT_WARN_BYTES = 6_500_000_000
-DEFAULT_MAX_BYTES = 8_000_000_000
+DEFAULT_WARN_BYTES = 9_000_000_000
+DEFAULT_MAX_BYTES = 9_800_000_000
 # R2 begins leaving requests pending when a single Mac opens two dozen PUTs at
 # once.  Twelve still fills the uplink, while avoiding that long-tail stall.
 UPLOAD_WORKERS = 12
 STAMP_RE = re.compile(r"^(\d{8}T\d{4}Z)$")
 VIDEO_GENERATION_RE = re.compile(r"^(\d{8}T\d{4}Z)-([0-9a-f]{12})$")
 VIDEO_TRACKS = frozenset({"live", "day", "archive"})
-VIDEO_MIN_GENERATIONS = 3
-VIDEO_ORPHAN_GRACE = dt.timedelta(hours=1)
+VIDEO_MIN_GENERATIONS = 2
+VIDEO_ORPHAN_GRACE = dt.timedelta(minutes=15)
 DEFAULT_COMPOSITE_PRESET_ID = "operational-default-v1"
-DEFAULT_COMPOSITE_PILOT_PROFILES = frozenset({
+# Read-only compatibility for the two schema-v1 manifests that may remain
+# catalog-referenced during rollout. New schema-v2 composites are validated
+# entirely from config below; no new pilot artifacts are generated.
+LEGACY_DEFAULT_COMPOSITE_PROFILES = frozenset({
     ("bc-large-overlay", "raw-visir"),
     ("north-america-overlay", "westwx-visir"),
 })
@@ -488,7 +496,7 @@ def _default_composite_paths(
     if value is None:
         return []
     if (
-        (product_id, layer_id) not in DEFAULT_COMPOSITE_PILOT_PROFILES
+        (product_id, layer_id) not in LEGACY_DEFAULT_COMPOSITE_PROFILES
         or not isinstance(value, Mapping)
         or value.get("id") != DEFAULT_COMPOSITE_PRESET_ID
         or payload.get("transport") != "hls-ts"
@@ -593,6 +601,187 @@ def _default_composite_paths(
     return [media_relative, *segment_paths]
 
 
+def _composite_v2_paths(
+    root: Path,
+    product_id: str,
+    layer_id: str,
+    track: str,
+    payload: Mapping[str, object],
+) -> list[str]:
+    values = payload.get("composites")
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        return []
+    configured = {
+        str(value.get("id"))
+        for value in VIDEO_COMPOSITE_PRESETS.get(product_id, ())
+        if isinstance(value, Mapping)
+    }
+    configured_ranges = set(VIDEO_EXACT_RANGES.get(product_id, ()))
+    allowed_ranges = (
+        {value for value in configured_ranges if value < 24}
+        if track == "live"
+        else ({24} if track == "day" and 24 in configured_ranges else set())
+        if track == "day"
+        else ({168} if product_id in VIDEO_ARCHIVE_PRODUCTS else set())
+    )
+    result: list[str] = []
+    for composite in values:
+        if not isinstance(composite, Mapping):
+            continue
+        preset_id = composite.get("id")
+        layer_ids = composite.get("layerIds")
+        ranges = composite.get("ranges")
+        if (
+            not isinstance(preset_id, str)
+            or preset_id not in configured
+            or not isinstance(layer_ids, list)
+            or not layer_ids
+            or len(set(layer_ids)) != len(layer_ids)
+            or any(
+                not isinstance(value, str)
+                or re.fullmatch(r"[a-z0-9][a-z0-9-]*", value) is None
+                for value in layer_ids
+            )
+            or composite.get("mediaViewport") != payload.get("viewport")
+            or not isinstance(ranges, list)
+            or not ranges
+        ):
+            continue
+        composite_paths: list[str] = []
+        valid = True
+        for range_value in ranges:
+            if not isinstance(range_value, Mapping):
+                valid = False
+                break
+            hours = range_value.get("hours")
+            first_frame = range_value.get("firstFrame")
+            frame_count = range_value.get("frameCount")
+            durations = range_value.get("durationsSeconds")
+            renditions = range_value.get("renditions")
+            frames = payload.get("frames")
+            if (
+                not isinstance(hours, int)
+                or hours not in allowed_ranges
+                or not isinstance(first_frame, int)
+                or first_frame < 0
+                or not isinstance(frame_count, int)
+                or frame_count < 2
+                or not isinstance(frames, list)
+                or first_frame + frame_count > len(frames)
+                or not isinstance(durations, list)
+                or len(durations) != frame_count
+                or any(
+                    not isinstance(value, (int, float))
+                    or isinstance(value, bool)
+                    or value <= 0
+                    for value in durations
+                )
+                or range_value.get("boundaryIntervalMultiplier") != 4
+                or not isinstance(renditions, list)
+                or not renditions
+            ):
+                valid = False
+                break
+            for rendition in renditions:
+                if not isinstance(rendition, Mapping):
+                    valid = False
+                    break
+                rendition_id = rendition.get("id")
+                media = rendition.get("media")
+                if (
+                    rendition_id not in {"display", "efficient", "high"}
+                    or not isinstance(media, Mapping)
+                ):
+                    valid = False
+                    break
+                media_relative = _safe_relative_value(media.get("path"))
+                parts = Path(media_relative).parts if media_relative else ()
+                mime = media.get("mimeType")
+                if mime == "video/mp4":
+                    expected_prefix = (
+                        "videos",
+                        f"composite-{product_id}",
+                        layer_id,
+                        track,
+                        f"exact-{hours}h",
+                        rendition_id,
+                    )
+                    shape_ok = (
+                        len(parts) == 7
+                        and parts[:6] == expected_prefix
+                        and VIDEO_GENERATION_RE.fullmatch(Path(parts[6]).stem) is not None
+                        and Path(parts[6]).suffix == ".mp4"
+                    )
+                    segment_values: list[object] = []
+                elif mime == "application/vnd.apple.mpegurl" and hours == 168:
+                    owner = f"composite-{product_id}-{preset_id}"
+                    shape_ok = (
+                        len(parts) == 5
+                        and parts[:4] == ("videos", owner, layer_id, track)
+                        and VIDEO_GENERATION_RE.fullmatch(Path(parts[4]).stem) is not None
+                        and Path(parts[4]).suffix == ".m3u8"
+                    )
+                    segment_values = media.get("segments") if isinstance(media.get("segments"), list) else []
+                else:
+                    shape_ok = False
+                    segment_values = []
+                if (
+                    not shape_ok
+                    or not isinstance(media.get("sha256"), str)
+                    or re.fullmatch(r"[0-9a-f]{64}", str(media.get("sha256"))) is None
+                    or media_relative is None
+                    or not _video_asset_available(root, media_relative, media.get("byteLength"))
+                ):
+                    valid = False
+                    break
+                composite_paths.append(media_relative)
+                if mime == "application/vnd.apple.mpegurl":
+                    if not segment_values:
+                        valid = False
+                        break
+                    owner = f"composite-{product_id}-{preset_id}"
+                    declared_segments: list[str] = []
+                    for segment in segment_values:
+                        if not isinstance(segment, Mapping):
+                            valid = False
+                            break
+                        relative = _safe_relative_value(segment.get("path"))
+                        segment_parts = Path(relative).parts if relative else ()
+                        if (
+                            relative is None
+                            or len(segment_parts) != 5
+                            or segment_parts[:4] != ("video-segments", owner, layer_id, track)
+                            or re.fullmatch(r"\d{8}T\d{4}Z-[0-9a-f]{16}\.ts", segment_parts[4]) is None
+                            or not _video_asset_available(root, relative, segment.get("byteLength"))
+                        ):
+                            valid = False
+                            break
+                        declared_segments.append(relative)
+                    if not valid:
+                        break
+                    try:
+                        playlist_root = (root / media_relative).parent
+                        referenced = [
+                            (playlist_root / line.strip()).resolve().relative_to(root.resolve()).as_posix()
+                            for line in (root / media_relative).read_text().splitlines()
+                            if line.strip() and not line.lstrip().startswith("#")
+                        ]
+                    except (OSError, UnicodeDecodeError, ValueError):
+                        valid = False
+                        break
+                    if referenced != declared_segments:
+                        valid = False
+                        break
+                    composite_paths.extend(declared_segments)
+            if not valid:
+                break
+        if valid:
+            result.extend(composite_paths)
+    return result
+
+
 def _video_manifest_paths(
     root: Path,
     product_id: str,
@@ -612,7 +801,7 @@ def _video_manifest_paths(
         return None
     if (
         not isinstance(payload, Mapping)
-        or payload.get("schemaVersion") != 1
+        or payload.get("schemaVersion") not in {1, 2}
         or payload.get("generation") != generation
         or payload.get("productId") != product_id
         or payload.get("layerId") != layer_id
@@ -722,6 +911,15 @@ def _video_manifest_paths(
     # base media/proxy profile remains publishable.
     paths.extend(
         _default_composite_paths(
+            root,
+            product_id,
+            layer_id,
+            track,
+            payload,
+        )
+    )
+    paths.extend(
+        _composite_v2_paths(
             root,
             product_id,
             layer_id,
@@ -1294,6 +1492,20 @@ def _video_generation_key(key: str) -> tuple[tuple[str, str, str, str], str] | N
     return (parts[0], parts[1], parts[2], parts[3]), generation
 
 
+def _is_exact_composite_media(key: str) -> bool:
+    parts = Path(key).parts
+    return (
+        len(parts) == 7
+        and parts[0] == "videos"
+        and parts[1].startswith("composite-")
+        and parts[3] in VIDEO_TRACKS
+        and re.fullmatch(r"exact-(?:3|6|12|24)h", parts[4]) is not None
+        and parts[5] in {"display", "efficient", "high"}
+        and Path(parts[6]).suffix == ".mp4"
+        and VIDEO_GENERATION_RE.fullmatch(Path(parts[6]).stem) is not None
+    )
+
+
 def _generation_time(generation: str) -> dt.datetime:
     match = VIDEO_GENERATION_RE.fullmatch(generation)
     if match is None:
@@ -1310,9 +1522,9 @@ def expired_video_keys(
 ) -> list[str]:
     """Select unreachable video generations after a browser-safe grace.
 
-    For an active product/layer/track, the newest three generations survive
-    regardless of age, protecting recovery after a long feed stall. A retired
-    profile with no catalog-referenced object keeps only the one-hour browser
+    For an active product/layer/track, the newest two generations survive
+    regardless of age, protecting one atomic browser handoff. A retired
+    profile with no catalog-referenced object keeps only the fifteen-minute browser
     grace; otherwise old secondary profiles would occupy R2 indefinitely.
     Catalog-referenced objects are always excluded from this post-commit pass.
     """
@@ -1347,6 +1559,22 @@ def expired_video_keys(
             if last_changed <= cutoff:
                 expired.update(key for key in keys if key not in desired)
 
+    # Exact-range MP4s live below range/rendition directories rather than the
+    # legacy flat generation directory. They are immutable dependencies of the
+    # retained manifests, so reachability plus a short browser handoff grace is
+    # both safer and dramatically smaller than retaining every rolling rewrite.
+    for key in remote:
+        if key in desired or not _is_exact_composite_media(key):
+            continue
+        modified = modifications.get(key)
+        changed = (
+            _as_utc(modified)
+            if isinstance(modified, dt.datetime)
+            else _generation_time(Path(key).stem)
+        )
+        if changed <= cutoff:
+            expired.add(key)
+
     for key in remote:
         if key in desired or not key.startswith(
             ("video-proxies/", "video-static-overlays/", "video-segments/")
@@ -1369,9 +1597,9 @@ def retained_local_video_keys(
 ) -> set[str]:
     """Protect dependencies of the locally retained newest generations.
 
-    The encoder keeps its newest three immutable manifests. Reading those
+    The encoder keeps its newest two immutable manifests. Reading those
     sidecars lets remote cleanup preserve an old generation's shared proxy
-    objects even when the proxy itself was uploaded more than one hour ago.
+    objects even when the proxy itself predates the short handoff grace.
     No missing historical object is re-uploaded; this set only constrains the
     post-commit deletion pass.
     """

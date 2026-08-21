@@ -20,7 +20,7 @@ class CatalogTests(unittest.TestCase):
         root: Path,
         *,
         manifest_path: str = (
-            "video-manifests/bc-northeast-overlay/raw-visir/live/"
+            "video-manifests/bc-northeast-overlay/eccc-geocolor/live/"
             "20260722T1200Z-abcdef012345.json"
         ),
         manifest_updates: dict[str, object] | None = None,
@@ -32,17 +32,17 @@ class CatalogTests(unittest.TestCase):
             "schemaVersion": 1,
             "generation": generation,
             "productId": "bc-northeast-overlay",
-            "layerId": "raw-visir",
+            "layerId": "eccc-geocolor",
             "track": "live",
         }
         payload.update(manifest_updates or {})
         manifest.write_text(json.dumps(payload))
-        index = root / "video-index/bc-northeast-overlay/raw-visir.json"
+        index = root / "video-index/bc-northeast-overlay/eccc-geocolor.json"
         index.parent.mkdir(parents=True, exist_ok=True)
         index.write_text(json.dumps({
             "schemaVersion": 1,
             "productId": "bc-northeast-overlay",
-            "layerId": "raw-visir",
+            "layerId": "eccc-geocolor",
             "profiles": {
                 "live": {
                     "generation": generation,
@@ -287,11 +287,11 @@ class CatalogTests(unittest.TestCase):
             catalog = build_catalog(root)
 
             self.assertEqual(
-                catalog["videoProfiles"]["bc-northeast-overlay"]["raw-visir"]["live"],
+                catalog["videoProfiles"]["bc-northeast-overlay"]["eccc-geocolor"]["live"],
                 {
                     "generation": "20260722T1200Z-abcdef012345",
                     "manifestPath": (
-                        "video-manifests/bc-northeast-overlay/raw-visir/live/"
+                        "video-manifests/bc-northeast-overlay/eccc-geocolor/live/"
                         "20260722T1200Z-abcdef012345.json"
                     ),
                 },
@@ -338,7 +338,7 @@ class CatalogTests(unittest.TestCase):
             )
             self.assertNotIn("videoProfiles", build_catalog(root))
 
-            index = root / "video-index/bc-northeast-overlay/raw-visir.json"
+            index = root / "video-index/bc-northeast-overlay/eccc-geocolor.json"
             payload = json.loads(index.read_text())
             payload["profiles"]["live"]["manifestPath"] = "../outside.json"
             index.write_text(json.dumps(payload))

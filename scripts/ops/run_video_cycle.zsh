@@ -77,17 +77,20 @@ run_video_group() {
 run_parallel_video_groups() {
   local track="$1"
   local bc_layers="$2" north_america_layers="$3" pacific_layers="$4"
-  local bc_pid=0 north_america_pid=0 pacific_pid=0 build_status=0
+  local bc_primary_pid=0 bc_secondary_pid=0 north_america_pid=0 pacific_pid=0 build_status=0
   run_video_group "${track}" "${bc_layers}" \
-    bc-large-overlay bc-small-overlay bc-southwest-overlay \
+    bc-large-overlay bc-small-overlay bc-southwest-overlay &
+  bc_primary_pid=$!
+  run_video_group "${track}" "${bc_layers}" \
     bc-southeast-overlay bc-northeast-overlay bc-south-coast-overlay &
-  bc_pid=$!
+  bc_secondary_pid=$!
   run_video_group "${track}" "${north_america_layers}" north-america-overlay &
   north_america_pid=$!
   run_video_group "${track}" "${pacific_layers}" \
     pacific-wna-overlay north-pacific-overlay &
   pacific_pid=$!
-  wait "${bc_pid}" || build_status=1
+  wait "${bc_primary_pid}" || build_status=1
+  wait "${bc_secondary_pid}" || build_status=1
   wait "${north_america_pid}" || build_status=1
   wait "${pacific_pid}" || build_status=1
   if [[ "${track}" == "live" ]]; then
@@ -118,7 +121,7 @@ run_video_phase() {
 # Live and archive are deliberately separate launchd jobs and locks. Archive
 # maintenance can therefore never delay a newly ingested operational frame.
 if ! run_video_phase "${VIDEO_TRACK}" \
-  "raw-visir,raw-visir-5min" "westwx-visir" "raw-visir"; then
+  "eccc-geocolor" "westwx-visir" "raw-visir"; then
   print -u2 "Default ${VIDEO_TRACK} H.264 refresh failed; retaining last-good profiles."
   exit 1
 fi

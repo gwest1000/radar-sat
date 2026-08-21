@@ -70,27 +70,22 @@ RADARSAT_VIDEO_ARCHIVE_HOURS=168
 # RADARSAT_FFMPEG=/opt/homebrew/bin/ffmpeg
 ```
 
-The satellite cycle rebuilds only the completed-hour segment whose selected
-source-frame fingerprint changed. Overlay-only changes create a new small
-immutable manifest and reuse the existing H.264 segments. HLS playlists,
-segments, manifests, and proxy assets upload before
-`catalog.json`; a failed encode or incomplete generation leaves the previous
-pointer intact and the browser falls back to ordinary image frames. Satellite
-media are shared by domain, source layer and quality tier, while each product
-keeps its own lossless display-sized overlay proxies. This avoids duplicating
-the same video for every regional crop. Live tracks use one-hour immutable
-MPEG-TS segments and seven-day archive tracks use six-hour segments behind a
-small immutable HLS playlist. This keeps routine encoding, upload, and orphan
-storage proportional to the new data instead of rewriting a rolling 24-hour
-movie each cycle.
+For the two configured operational layer stacks, the 3-, 6-, 12- and 24-hour
+loops are exact-range progressive MP4s with one variable-duration H.264 sample
+per weather frame. The browser uses native looping and performs no JavaScript
+seek at the boundary. BC products publish efficient 1280-pixel and high
+1920-pixel renditions; broad products publish only their useful display-scale
+rendition. Seven-day and uncommon layer combinations retain the HLS plus
+lossless-proxy fallback until the later CMAF migration.
 
-The ten-minute operational job refreshes only the satellite layer selected by
-default in each domain (`raw-visir`, regional `raw-visir-5min`, or
-`westwx-visir`). Building every alternative satellite choice before the next
-cycle took several hours and made the default loop stale. IR, GeoColor,
-day/night, convective, and snow/fog remain fully available through the
-lossless image renderer. Obsolete non-default video pointers are omitted from
-the public catalog so they do not consume protected R2 storage indefinitely.
+The independent live, day and archive jobs cannot block one another. The live
+job runs every five minutes and builds four product groups in parallel on the
+Mac. It refreshes MSC GeoColor for the BC family, NOAA VIS/IR for North America,
+and NOAA VIS/IR for the two Pacific products. A separate one-minute MSC edge
+job renders and publishes only the newest Datamart GeoColor frame, so the live
+edge is not held behind video encoding. ECCC DayVis/NightIR and standalone
+NightIR are no longer subscribed, rendered or exposed; NOAA remains the IR-only
+choice.
 
 The browser intentionally buffers complete live tracks because a 24-hour
 weather loop is only about 25–33 seconds of encoded playback and must remain
@@ -102,9 +97,10 @@ adaptive decoded-memory budget, allowing a six-hour loop—and, on an 8 GB+
 device, normally the full 24-hour loop—to avoid rebuilding overlays after its
 first circuit.
 
-The publisher always protects the current catalog's media and proxy objects,
-keeps the newest three generations unconditionally, and gives older orphaned
-generations a one-hour browser-transition grace. Content-addressed proxy and
+The publisher always protects the current catalog's media and proxy objects
+plus one immediately previous manifest for an atomic browser handoff.
+Unreferenced rolling exact MP4s receive a fifteen-minute transition grace and
+are then removed. Content-addressed proxy and
 static-overlay prefixes deliberately have no blind R2 age lifecycle: boundary,
 watershed, transmission-line, or other unchanged proxies may remain referenced
 for longer than nine days. The publisher's post-commit reachability cleanup
@@ -147,7 +143,7 @@ scripts/ops/install_launchd.zsh
 Pass one or more agent names to update only those jobs, for example:
 
 ```bash
-scripts/ops/install_launchd.zsh lightning-edge radar-edge model-contours video-day video-archive
+scripts/ops/install_launchd.zsh msc-satellite-edge lightning-edge radar-edge model-contours video-day video-archive
 ```
 
 The live video job retains the native 10/20-minute cadence for 3-, 6-, and
@@ -163,7 +159,8 @@ separate, short-lived administrative token, then revoke it. Do not broaden the
 long-lived Object Read & Write publisher token; it intentionally cannot change
 bucket configuration.
 
-The publisher warns at 6.5 GB and refuses growth beyond 8 GB by default. It lists
+The publisher warns at 9.0 GB and refuses growth beyond 9.8 GB by default,
+retaining an explicit margin below the 10 GB free-storage allowance. It lists
 the dedicated bucket before every commit so the guard includes orphaned and
 out-of-band objects, not just the local archive.
 

@@ -17,12 +17,12 @@ CANONICAL_FIVE_MINUTE_RENDER_VERSION = 4
 VIDEO_GENERATION_RE = re.compile(r"^\d{8}T\d{4}Z-[0-9a-f]{12}$")
 VIDEO_TRACKS = frozenset({"live", "day", "archive"})
 PUBLIC_VIDEO_LAYERS = {
-    "bc-large-overlay": "raw-visir",
-    "bc-small-overlay": "raw-visir-5min",
-    "bc-southwest-overlay": "raw-visir-5min",
-    "bc-southeast-overlay": "raw-visir-5min",
-    "bc-northeast-overlay": "raw-visir",
-    "bc-south-coast-overlay": "raw-visir-5min",
+    "bc-large-overlay": "eccc-geocolor",
+    "bc-small-overlay": "eccc-geocolor",
+    "bc-southwest-overlay": "eccc-geocolor",
+    "bc-southeast-overlay": "eccc-geocolor",
+    "bc-northeast-overlay": "eccc-geocolor",
+    "bc-south-coast-overlay": "eccc-geocolor",
     "north-america-overlay": "westwx-visir",
     "pacific-wna-overlay": "raw-visir",
     "north-pacific-overlay": "raw-visir",
@@ -192,7 +192,7 @@ def _valid_video_manifest_pointer(
         return None
     if not isinstance(payload, dict) or any(
         (
-            payload.get("schemaVersion") != 1,
+            payload.get("schemaVersion") not in {1, 2},
             payload.get("productId") != product_id,
             payload.get("layerId") != layer_id,
             payload.get("track") != track,
@@ -225,7 +225,7 @@ def read_video_profiles(root: Path) -> dict[str, Any]:
             payload = json.loads(index_path.read_bytes())
         except (OSError, json.JSONDecodeError):
             continue
-        if not isinstance(payload, dict) or payload.get("schemaVersion") != 1:
+        if not isinstance(payload, dict) or payload.get("schemaVersion") not in {1, 2}:
             continue
         product_id = payload.get("productId")
         layer_id = payload.get("layerId")

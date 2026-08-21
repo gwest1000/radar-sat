@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-14T22:02:10.452564Z",
+  "generatedAt": "2026-08-20T23:16:22.217572Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -94,31 +94,9 @@
           "role": "background",
           "format": "image/jpeg"
         },
-        "daynight": {
-          "title": "GOES-West day visible / night IR",
-          "maxAgeMinutes": 40,
-          "frames": [
-            {
-              "validTime": "2026-08-14T21:20:00Z",
-              "path": "frames/bc/daynight/2026/08/14/20260814T2120Z.webp",
-              "source": "ECCC Datamart",
-              "sourceLayer": "satellite/goes/west/DayVis-NightIR",
-              "fetchedAt": "2026-08-14T21:46:29Z",
-              "sourceTimes": {
-                "native": "2026-08-14T21:20:22Z"
-              },
-              "sourceFormat": "GeoTIFF",
-              "sourceFiles": [
-                "20260814T2120Z_MSC_GOES-West_DayVis-NightIR_1km.tif"
-              ]
-            }
-          ],
-          "role": "background",
-          "format": "image/jpeg"
-        },
         "eccc-geocolor": {
           "title": "MSC GOES-West GeoColor",
-          "maxAgeMinutes": 45,
+          "maxAgeMinutes": 35,
           "frames": [
             {
               "validTime": "2026-08-14T21:20:00Z",
@@ -1153,28 +1131,6 @@
           ],
           "role": "overlay",
           "format": "image/png"
-        },
-        "ir": {
-          "title": "GOES-West enhanced infrared imagery",
-          "maxAgeMinutes": 40,
-          "frames": [
-            {
-              "validTime": "2026-08-14T21:20:00Z",
-              "path": "frames/bc/ir/2026/08/14/20260814T2120Z.webp",
-              "source": "ECCC Datamart",
-              "sourceLayer": "satellite/goes/west/NightIR",
-              "fetchedAt": "2026-08-14T21:47:16Z",
-              "sourceTimes": {
-                "native": "2026-08-14T21:20:22Z"
-              },
-              "sourceFormat": "GeoTIFF",
-              "sourceFiles": [
-                "20260814T2120Z_MSC_GOES-West_NightIR_2km.tif"
-              ]
-            }
-          ],
-          "role": "background",
-          "format": "image/jpeg"
         },
         "lightning": {
           "title": "CLDN 10-minute flash density",
@@ -3810,7 +3766,7 @@
       "shortTitle": "BC XL",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir",
+      "anchorLayer": "eccc-geocolor",
       "frameIntervalMinutes": 10,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 60,
@@ -3822,10 +3778,18 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir",
+          "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
+        },
+        {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-visir"
         },
@@ -3836,30 +3800,6 @@
           "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-ir"
-        },
-        {
-          "id": "eccc-geocolor",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
@@ -3955,10 +3895,10 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view prefers 0.5 km-grid NOAA STAR/CIRA full-disk GeoColor on genuine ten-minute GOES-18 scan times. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the automatic availability fallback.",
+        "This view uses the one-kilometre MSC GeoColor product across BC. NOAA GeoColor is used only for a matching slot that is still missing when the display would otherwise be more than 35 minutes behind real time.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
-        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
+        "MSC GeoColor is the preferred one-kilometre, ten-minute BC satellite background. NOAA GeoColor fills a matching slot only after the 35-minute availability deadline; a later rebuild replaces that fallback with MSC when it arrives.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
@@ -3976,7 +3916,7 @@
       "shortTitle": "BC",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir-5min",
+      "anchorLayer": "eccc-geocolor",
       "frameIntervalMinutes": 10,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 60,
@@ -3988,10 +3928,18 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir-5min",
+          "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
+        },
+        {
+          "id": "raw-visir-5min",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-visir"
         },
@@ -4002,30 +3950,6 @@
           "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-ir"
-        },
-        {
-          "id": "eccc-geocolor",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
@@ -4121,10 +4045,10 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
+        "This view uses the one-kilometre MSC GeoColor product across BC. NOAA GeoColor is used only for a matching slot that is still missing when the display would otherwise be more than 35 minutes behind real time.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
-        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
+        "MSC GeoColor is the preferred one-kilometre, ten-minute BC satellite background. NOAA GeoColor fills a matching slot only after the 35-minute availability deadline; a later rebuild replaces that fallback with MSC when it arrives.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
@@ -4143,7 +4067,7 @@
       "shortTitle": "BC SW",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir-5min",
+      "anchorLayer": "eccc-geocolor",
       "frameIntervalMinutes": 10,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 60,
@@ -4155,10 +4079,18 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir-5min",
+          "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
+        },
+        {
+          "id": "raw-visir-5min",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-visir"
         },
@@ -4169,30 +4101,6 @@
           "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-ir"
-        },
-        {
-          "id": "eccc-geocolor",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
@@ -4288,10 +4196,10 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
+        "This view uses the one-kilometre MSC GeoColor product across BC. NOAA GeoColor is used only for a matching slot that is still missing when the display would otherwise be more than 35 minutes behind real time.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
-        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
+        "MSC GeoColor is the preferred one-kilometre, ten-minute BC satellite background. NOAA GeoColor fills a matching slot only after the 35-minute availability deadline; a later rebuild replaces that fallback with MSC when it arrives.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
@@ -4310,7 +4218,7 @@
       "shortTitle": "BC SE",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir-5min",
+      "anchorLayer": "eccc-geocolor",
       "frameIntervalMinutes": 10,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 60,
@@ -4322,10 +4230,18 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir-5min",
+          "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
+        },
+        {
+          "id": "raw-visir-5min",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-visir"
         },
@@ -4336,30 +4252,6 @@
           "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-ir"
-        },
-        {
-          "id": "eccc-geocolor",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
@@ -4455,10 +4347,10 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
+        "This view uses the one-kilometre MSC GeoColor product across BC. NOAA GeoColor is used only for a matching slot that is still missing when the display would otherwise be more than 35 minutes behind real time.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
-        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
+        "MSC GeoColor is the preferred one-kilometre, ten-minute BC satellite background. NOAA GeoColor fills a matching slot only after the 35-minute availability deadline; a later rebuild replaces that fallback with MSC when it arrives.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
@@ -4477,7 +4369,7 @@
       "shortTitle": "BC NE",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir",
+      "anchorLayer": "eccc-geocolor",
       "frameIntervalMinutes": 10,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 60,
@@ -4489,10 +4381,18 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir",
+          "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
+        },
+        {
+          "id": "raw-visir",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-visir"
         },
@@ -4503,30 +4403,6 @@
           "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-ir"
-        },
-        {
-          "id": "eccc-geocolor",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
@@ -4622,10 +4498,10 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view prefers 0.5 km-grid NOAA STAR/CIRA full-disk GeoColor on genuine ten-minute GOES-18 scan times. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the automatic availability fallback.",
+        "This view uses the one-kilometre MSC GeoColor product across BC. NOAA GeoColor is used only for a matching slot that is still missing when the display would otherwise be more than 35 minutes behind real time.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
-        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
+        "MSC GeoColor is the preferred one-kilometre, ten-minute BC satellite background. NOAA GeoColor fills a matching slot only after the 35-minute availability deadline; a later rebuild replaces that fallback with MSC when it arrives.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."
@@ -4644,7 +4520,7 @@
       "shortTitle": "South Coast",
       "group": "Overlay",
       "domain": "bc",
-      "anchorLayer": "raw-visir-5min",
+      "anchorLayer": "eccc-geocolor",
       "frameIntervalMinutes": 10,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 60,
@@ -4656,10 +4532,18 @@
           "opacity": 1.0
         },
         {
-          "id": "raw-visir-5min",
+          "id": "eccc-geocolor",
           "opacity": 1.0,
           "optional": true,
           "defaultEnabled": true,
+          "choiceGroup": "satellite",
+          "controlSection": "regional-satellite"
+        },
+        {
+          "id": "raw-visir-5min",
+          "opacity": 1.0,
+          "optional": true,
+          "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-visir"
         },
@@ -4670,30 +4554,6 @@
           "defaultEnabled": false,
           "choiceGroup": "satellite",
           "controlId": "noaa-ir"
-        },
-        {
-          "id": "eccc-geocolor",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "daynight",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
-        },
-        {
-          "id": "ir",
-          "opacity": 1.0,
-          "optional": true,
-          "defaultEnabled": false,
-          "choiceGroup": "satellite",
-          "controlSection": "regional-satellite"
         },
         {
           "id": "convective",
@@ -4789,10 +4649,11 @@
         "transmission-lines"
       ],
       "notes": [
-        "This view uses 0.5 km-grid NOAA STAR/CIRA GeoColor every five minutes south of about 53.5\u00b0N, with a preferred 0.5 km-grid ten-minute full-disk image filling northern BC. Infrared channels are physically coarser than daytime visible imagery, and the standard NOAA full-disk render remains the availability fallback.",
+        "This view uses the one-kilometre MSC GeoColor product across BC. NOAA GeoColor is used only for a matching slot that is still missing when the display would otherwise be more than 35 minutes behind real time.",
+        "South Coast radar keeps the ECCC one-kilometre continental rain-rate mosaic as its complete-coverage base and overlays public 250-m-range-bin dual-polarization precipitation rates from KATX and KLGX where those U.S. radars can see.",
         "Satellite cloud tops are not parallax-corrected because the RGB source does not contain per-pixel cloud height; deep cloud can appear 15\u201335 km north to northeast of its true BC position.",
         "The smoke tint marks NOAA ADP low/medium/high-confidence daytime clear-sky detections; transparency is not proof of smoke-free air and the colours do not represent concentration.",
-        "MSC GeoColor is an independent one-kilometre, ten-minute GOES-West RGB from the ECCC Datamart. It is useful for comparison and backup, but its normal publication lag is longer than the preferred NOAA/CIRA GeoColor feed.",
+        "MSC GeoColor is the preferred one-kilometre, ten-minute BC satellite background. NOAA GeoColor fills a matching slot only after the 35-minute availability deadline; a later rebuild replaces that fallback with MSC when it arrives.",
         "Watersheds use the 54-polygon BC Hydro boundary source shared with the forecast-model plots.",
         "Transmission lines use the public GeoBC network shared with the forecast-model fire-weather plots.",
         "Filled coral flames are agency-reported active wildfires. Larger flames are official BCWS Wildfires of Note or, on the North America display, current U.S. ICS-209 large incidents; size alone does not enlarge an icon. Smaller hollow flames are timestamped NRCan CWFIS satellite thermal detections, not confirmed fire perimeters."

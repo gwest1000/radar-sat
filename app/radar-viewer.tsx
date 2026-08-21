@@ -19,6 +19,7 @@ import {
   VideoCompositeStage,
 } from "./video-composite-stage";
 import {
+  exactCompositeManifest,
   loadVideoLoopManifest,
   selectVideoFrames,
   sourceCacheKey,
@@ -79,6 +80,7 @@ type ViewerPreferences = {
   rangeHours: number;
   optionalLayers: Record<string, boolean>;
   playing: boolean;
+  playbackQuality?: "auto" | "efficient" | "high";
 };
 
 type DynamicLayer = {
@@ -184,7 +186,8 @@ const REGION_MENU_BOTTOM_TO_TOP = [
 const REGION_MENU_TOP_TO_BOTTOM = [...REGION_MENU_BOTTOM_TO_TOP].reverse();
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 const VIDEO_HUD_UPDATE_INTERVAL_MS = 180;
-const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v6";
+const VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v7";
+const LEGACY_V6_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v6";
 const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const OLDER_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
@@ -215,7 +218,7 @@ const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
 const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]);
 const SATELLITE_LAYERS = new Set([
   "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir",
-  "westwx-visir", "westwx-ir", "eccc-geocolor", "daynight", "ir",
+  "westwx-visir", "westwx-ir", "eccc-geocolor",
   "convective", "snowfog",
 ]);
 // The derived lightning trails are compact transparent PNGs. Prefer them to
@@ -298,6 +301,36 @@ function mergedFrames(...collections: Frame[][]): Frame[] {
   return [...byTime.values()].sort((left, right) => (
     Date.parse(left.validTime) - Date.parse(right.validTime)
   ));
+}
+
+function mscPrimaryFrames(
+  mscFrames: Frame[],
+  nativeNoaaFrames: Frame[],
+  standardNoaaFrames: Frame[],
+  now = Date.now(),
+): Frame[] {
+  const intervalMs = 10 * 60_000;
+  const slotMap = (frames: Frame[]) => new Map(frames.flatMap((frame) => {
+    const time = Date.parse(frame.validTime);
+    if (!Number.isFinite(time)) return [];
+    const slot = Math.round(time / intervalMs);
+    return Math.abs(time - slot * intervalMs) <= SAME_SLOT_TOLERANCE_MS
+      ? [[slot, frame] as const]
+      : [];
+  }));
+  const msc = slotMap(mscFrames);
+  const native = slotMap(nativeNoaaFrames);
+  const standard = slotMap(standardNoaaFrames);
+  const slots = [...new Set([...msc.keys(), ...native.keys(), ...standard.keys()])]
+    .sort((left, right) => left - right);
+  return slots.flatMap((slot): Frame[] => {
+    const primary = msc.get(slot);
+    const fallback = now - slot * intervalMs >= 35 * 60_000
+      ? native.get(slot) ?? standard.get(slot)
+      : undefined;
+    const selected = primary ?? fallback;
+    return selected ? [{ ...selected, validTime: new Date(slot * intervalMs).toISOString() }] : [];
+  });
 }
 
 function playbackFrames(
@@ -943,7 +976,7 @@ function activeAnchorLayer(product: Product, optionalLayers: Record<string, bool
     const recipe = product.layers.find((candidate) => candidate.id === id);
     return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
   };
-  return ["raw-visir-5min", "raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "eccc-geocolor", "daynight", "ir", "convective", "snowfog", "radar-rain", "ptype", "lightning-trail", "hotspots"]
+  return ["eccc-geocolor", "raw-visir-5min", "raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "convective", "snowfog", "radar-rain", "ptype", "lightning-trail", "hotspots"]
     .find(enabled) ?? product.anchorLayer;
 }
 
@@ -1216,7 +1249,7 @@ function layerLabel(layerId: string): string {
   if (["model-hgt500", "hrdps-hgt500", "ecmwf-hgt500"].includes(layerId)) return "H500";
   if (["model-mslp", "hrdps-mslp", "ecmwf-mslp"].includes(layerId)) return "MSLP";
   if (
-    ["daynight", "ir", "convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir"].includes(layerId)
+    ["convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir"].includes(layerId)
     || layerId.startsWith("westwx-")
   ) return "SAT";
   return layerId.toUpperCase();
@@ -1230,8 +1263,6 @@ function sourceLabel(layerId: string): string | null {
 
 function layerControlLabel(layerId: string): string {
   if (layerId === "eccc-geocolor") return "MSC GeoColor";
-  if (layerId === "ir") return "ECCC IR";
-  if (layerId === "daynight") return "ECCC VIS/IR";
   if (layerId === "convective") return "ECCC Convective";
   if (layerId === "snowfog") return "Snow / Fog";
   if (layerId === "westwx-visir") return "NOAA VIS/IR";
@@ -1678,6 +1709,9 @@ export function RadarViewer() {
   const [speedIndex, setSpeedIndex] = useState(3);
   const [rangeHours, setRangeHours] = useState(3);
   const [optionalLayers, setOptionalLayers] = useState<Record<string, boolean>>({});
+  const [playbackQuality, setPlaybackQuality] = useState<"auto" | "efficient" | "high">("auto");
+  const [stageCssWidth, setStageCssWidth] = useState(0);
+  const [highRenditionPowerEfficient, setHighRenditionPowerEfficient] = useState<boolean | null>(null);
   const [lightningMarkers, setLightningMarkers] = useState<LightningMarker[]>([]);
   const [ecccFallbackLightningMarkers, setEcccFallbackLightningMarkers] = useState<LightningMarker[]>([]);
   const [fireMarkers, setFireMarkers] = useState<FireMarker[]>([]);
@@ -1687,6 +1721,7 @@ export function RadarViewer() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
   const [loadedVideoManifest, setLoadedVideoManifest] = useState<VideoLoopManifest | null>(null);
+  const [pendingVideoManifest, setPendingVideoManifest] = useState<VideoLoopManifest | null>(null);
   const [failedVideoGeneration, setFailedVideoGeneration] = useState("");
   const [videoFallbackReason, setVideoFallbackReason] = useState("");
   const [failedDefaultComposite, setFailedDefaultComposite] = useState<{
@@ -1709,6 +1744,7 @@ export function RadarViewer() {
     rangeHours: 3,
     optionalLayers: {},
     playing: true,
+    playbackQuality: "auto",
   });
   const preferencesLoadedRef = useRef(false);
 
@@ -1780,6 +1816,8 @@ export function RadarViewer() {
                     ?? window.sessionStorage.getItem(VIEWER_PREFERENCES_KEY);
                   stored = JSON.parse(
                     currentPreferences
+                      ?? window.localStorage.getItem(LEGACY_V6_VIEWER_PREFERENCES_KEY)
+                      ?? window.sessionStorage.getItem(LEGACY_V6_VIEWER_PREFERENCES_KEY)
                       ?? window.localStorage.getItem(LEGACY_VIEWER_PREFERENCES_KEY)
                       ?? window.sessionStorage.getItem(LEGACY_VIEWER_PREFERENCES_KEY)
                       ?? window.sessionStorage.getItem(OLDER_VIEWER_PREFERENCES_KEY)
@@ -1818,6 +1856,11 @@ export function RadarViewer() {
                   ));
                 }
                 setFrameIndex(NEWEST_FRAME);
+                setPlaybackQuality(
+                  ["auto", "efficient", "high"].includes(String(stored.playbackQuality))
+                    ? stored.playbackQuality as "auto" | "efficient" | "high"
+                    : "auto",
+                );
                 setPlaying(
                   typeof stored.playing === "boolean"
                     ? stored.playing
@@ -1894,7 +1937,7 @@ export function RadarViewer() {
 
   useEffect(() => {
     if (!preferencesLoadedRef.current) return;
-    const preferences = { productId, speedIndex, rangeHours, optionalLayers, playing };
+    const preferences = { productId, speedIndex, rangeHours, optionalLayers, playing, playbackQuality };
     preferencesRef.current = preferences;
     try {
       window.localStorage.setItem(VIEWER_PREFERENCES_KEY, JSON.stringify(preferences));
@@ -1902,7 +1945,17 @@ export function RadarViewer() {
       // Private browsing or a disabled storage quota should not impair the
       // operational display.
     }
-  }, [optionalLayers, playing, productId, rangeHours, speedIndex]);
+  }, [optionalLayers, playbackQuality, playing, productId, rangeHours, speedIndex]);
+
+  useEffect(() => {
+    const stage = mapStageRef.current;
+    if (!stage || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      setStageCssWidth(Math.round(entry.contentRect.width));
+    });
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [productId]);
 
   useEffect(() => {
     loadedVideoManifestRef.current = loadedVideoManifest;
@@ -1939,9 +1992,27 @@ export function RadarViewer() {
   const liveEdgeDomain = useMemo<Domain | undefined>(() => {
     if (!domain) return undefined;
     const edge = liveEdgeIndex?.domains[domain.id];
-    return edge
-      ? { ...domain, layers: { ...domain.layers, ...edge.layers } }
-      : domain;
+    const layers = { ...domain.layers };
+    for (const [layerId, edgeLayer] of Object.entries(edge?.layers ?? {})) {
+      const historical = domain.layers[layerId];
+      layers[layerId] = {
+        ...(historical ?? edgeLayer),
+        ...edgeLayer,
+        frames: mergedFrames(historical?.frames ?? [], edgeLayer.frames ?? []),
+      };
+    }
+    const mscLayer = layers["eccc-geocolor"];
+    if (domain.id === "bc" && mscLayer) {
+      layers["eccc-geocolor"] = {
+        ...mscLayer,
+        frames: mscPrimaryFrames(
+          mscLayer.frames ?? [],
+          layers["raw-visir-native"]?.frames ?? [],
+          layers["raw-visir"]?.frames ?? [],
+        ),
+      };
+    }
+    return { ...domain, layers };
   }, [domain, liveEdgeIndex]);
   const activeAnchorId = useMemo(
     () => product ? activeAnchorLayer(product, optionalLayers) : "",
@@ -1987,8 +2058,10 @@ export function RadarViewer() {
         && active.generation !== manifest.generation
       ) {
         pendingVideoManifestRef.current = manifest;
+        setPendingVideoManifest(manifest);
       } else {
         pendingVideoManifestRef.current = null;
+        setPendingVideoManifest(null);
         setLoadedVideoManifest(manifest);
       }
       setFailedVideoGeneration("");
@@ -2003,13 +2076,13 @@ export function RadarViewer() {
   }, [catalogBase, failedVideoGeneration, product, videoLayerId, videoPointer, videoPointerKey, videoTrack]);
 
   const fallbackAnchorFrames = useMemo(() => {
-    if (!domain || !product) return [];
+    if (!liveEdgeDomain || !product) return [];
     const frames = activeAnchorId === "raw-visir-5min"
       ? mergedFrames(
-          domain.layers["raw-visir"]?.frames ?? [],
-          domain.layers["raw-visir-5min"]?.frames ?? [],
+          liveEdgeDomain.layers["raw-visir"]?.frames ?? [],
+          liveEdgeDomain.layers["raw-visir-5min"]?.frames ?? [],
         )
-      : domain.layers[activeAnchorId]?.frames ?? [];
+      : liveEdgeDomain.layers[activeAnchorId]?.frames ?? [];
     if (!frames.length) return [];
     return playbackFrames(
       frames,
@@ -2018,7 +2091,7 @@ export function RadarViewer() {
       product.dayFrameIntervalMinutes,
       product.archiveFrameIntervalMinutes,
     );
-  }, [activeAnchorId, domain, effectiveRangeHours, product]);
+  }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, product]);
 
   const videoFreshEnough = useMemo(() => {
     if (!loadedVideoManifest || !fallbackAnchorFrames.length || !product) return true;
@@ -2058,34 +2131,117 @@ export function RadarViewer() {
   const enabledVideoLayerIds = useMemo(() => product?.layers
     .filter((recipe) => isProductLayerEnabled(recipe, optionalLayers, product.layers))
     .map((recipe) => recipe.id) ?? [], [optionalLayers, product]);
+  const highExactComposite = useMemo(() => candidateVideoManifest
+    ? exactCompositeManifest(
+        candidateVideoManifest,
+        enabledVideoLayerIds,
+        effectiveRangeHours,
+        "high",
+      )
+    : null, [candidateVideoManifest, effectiveRangeHours, enabledVideoLayerIds]);
+  useEffect(() => {
+    let cancelled = false;
+    const media = highExactComposite?.manifest.media;
+    const capabilities = navigator.mediaCapabilities;
+    if (!media || !capabilities?.decodingInfo || !media.mimeType.startsWith("video/mp4")) {
+      return;
+    }
+    const duration = highExactComposite.manifest.frames.reduce(
+      (total, frame) => total + frame.durationSeconds,
+      0,
+    );
+    void capabilities.decodingInfo({
+      type: "file",
+      video: {
+        contentType: 'video/mp4; codecs="avc1.640028"',
+        width: media.width,
+        height: media.height,
+        bitrate: Math.max(1, Math.round(media.byteLength * 8 / Math.max(duration, 0.1))),
+        framerate: 20,
+      },
+    }).then((info) => {
+      if (!cancelled) setHighRenditionPowerEfficient(info.supported && info.smooth && info.powerEfficient);
+    }).catch(() => {
+      if (!cancelled) setHighRenditionPowerEfficient(null);
+    });
+    return () => { cancelled = true; };
+  }, [highExactComposite]);
+  const automaticRendition = highRenditionPowerEfficient === false
+    || (stageCssWidth > 0 && stageCssWidth * Math.min(
+      typeof window === "undefined" ? 1 : window.devicePixelRatio || 1,
+      1.5,
+    ) <= 1360)
+    ? "efficient"
+    : "high";
+  const requestedRendition = playbackQuality === "auto"
+    ? automaticRendition
+    : playbackQuality;
+  const exactComposite = useMemo(() => candidateVideoManifest
+    ? exactCompositeManifest(
+        candidateVideoManifest,
+        enabledVideoLayerIds,
+        effectiveRangeHours,
+        requestedRendition,
+      )
+    : null, [candidateVideoManifest, effectiveRangeHours, enabledVideoLayerIds, requestedRendition]);
+  const pendingExactComposite = useMemo(() => pendingVideoManifest
+    ? exactCompositeManifest(
+        pendingVideoManifest,
+        enabledVideoLayerIds,
+        effectiveRangeHours,
+        requestedRendition,
+      )
+    : null, [effectiveRangeHours, enabledVideoLayerIds, pendingVideoManifest, requestedRendition]);
   const candidateDefaultComposite = candidateVideoManifest?.defaultComposite;
   const candidateDefaultCompositeKey = candidateDefaultComposite && candidateVideoManifest
     ? `${candidateVideoManifest.generation}/${candidateDefaultComposite.id}/${candidateDefaultComposite.media.path}`
     : "";
-  const activeDefaultComposite = candidateDefaultComposite
+  const legacyDefaultComposite = candidateDefaultComposite
     && candidateDefaultCompositeKey !== failedDefaultComposite?.key
     && sameLayerSet(enabledVideoLayerIds, candidateDefaultComposite.layerIds)
     ? candidateDefaultComposite
     : undefined;
+  const exactCompositeKey = exactComposite
+    ? `${exactComposite.manifest.generation}/${exactComposite.presetId}/${exactComposite.renditionId}/${exactComposite.manifest.media.path}`
+    : "";
+  const activeExactComposite = exactCompositeKey !== failedDefaultComposite?.key
+    ? exactComposite
+    : null;
+  const activeComposite = useMemo(() => activeExactComposite
+    ? {
+        id: `${activeExactComposite.presetId}:${activeExactComposite.renditionId}`,
+        media: activeExactComposite.manifest.media,
+        mediaViewport: activeExactComposite.manifest.mediaViewport ?? FULL_VIEWPORT,
+        nativeLoop: activeExactComposite.manifest.transport === "progressive-mp4",
+      }
+    : legacyDefaultComposite
+      ? { ...legacyDefaultComposite, nativeLoop: false }
+      : undefined, [activeExactComposite, legacyDefaultComposite]);
+  const activeCompositeKey = activeExactComposite ? exactCompositeKey : candidateDefaultCompositeKey;
   const playbackVideoManifest = useMemo<VideoLoopManifest | null>(() => (
-    candidateVideoManifest && activeDefaultComposite
-      ? {
-          ...candidateVideoManifest,
-          media: activeDefaultComposite.media,
-          mediaViewport: activeDefaultComposite.mediaViewport,
-        }
-      : candidateVideoManifest
-  ), [activeDefaultComposite, candidateVideoManifest]);
+    activeExactComposite?.manifest
+      ?? (candidateVideoManifest && legacyDefaultComposite
+        ? {
+            ...candidateVideoManifest,
+            media: legacyDefaultComposite.media,
+            mediaViewport: legacyDefaultComposite.mediaViewport,
+          }
+        : candidateVideoManifest)
+  ), [activeExactComposite, candidateVideoManifest, legacyDefaultComposite]);
   const videoManifestFrames = useMemo(
-    () => candidateVideoManifest
-      ? selectVideoFrames(candidateVideoManifest, effectiveRangeHours)
+    () => playbackVideoManifest
+      ? activeExactComposite
+        ? playbackVideoManifest.frames
+        : selectVideoFrames(playbackVideoManifest, effectiveRangeHours)
       : [],
-    [candidateVideoManifest, effectiveRangeHours],
+    [activeExactComposite, effectiveRangeHours, playbackVideoManifest],
   );
   const videoAnchorFrames = useMemo<Frame[]>(() => videoManifestFrames.map((frame) => ({
     validTime: frame.validTime,
     path: frame.sourcePath,
-    source: "NOAA GOES-18",
+    source: frame.encodedSourceLayer === "eccc-geocolor"
+      ? "ECCC Datamart"
+      : "NOAA GOES-18",
     sourceLayer: frame.encodedSourceLayer,
     fetchedAt: frame.sourceFetchedAt,
     sourceTimes: frame.sourceTimes ?? { satellite: frame.sourceValidTime },
@@ -2110,10 +2266,10 @@ export function RadarViewer() {
       const manifestFrame = videoManifestFrames[index];
       const underlays: VideoCanvasProxyLayer[] = [];
       const overlays: VideoCanvasProxyLayer[] = [];
-      if (activeDefaultComposite) {
+      if (activeComposite) {
         plans.push({
           frame: manifestFrame,
-          cacheKey: `composite:${activeDefaultComposite.id}:${activeDefaultComposite.media.path}`,
+          cacheKey: `composite:${activeComposite.id}:${activeComposite.media.path}`,
           underlays,
           overlays,
         });
@@ -2153,7 +2309,7 @@ export function RadarViewer() {
     }
     return plans;
   }, [
-    activeDefaultComposite,
+    activeComposite,
     catalogBase,
     optionalLayers,
     playbackVideoManifest,
@@ -2513,12 +2669,13 @@ export function RadarViewer() {
     const pending = pendingVideoManifestRef.current;
     if (pending && pending.generation !== activeVideoGeneration) {
       pendingVideoManifestRef.current = null;
+      setPendingVideoManifest(null);
       loadedVideoManifestRef.current = pending;
       setLoadedVideoManifest(pending);
       return;
     }
-    if (activeDefaultComposite && candidateDefaultCompositeKey) {
-      setFailedDefaultComposite({ key: candidateDefaultCompositeKey, reason: message });
+    if (activeComposite && activeCompositeKey) {
+      setFailedDefaultComposite({ key: activeCompositeKey, reason: message });
       setVideoFallbackReason("");
       return;
     }
@@ -2527,9 +2684,9 @@ export function RadarViewer() {
       handleVideoFailure(activeVideoGeneration);
     }
   }, [
-    activeDefaultComposite,
+    activeComposite,
+    activeCompositeKey,
     activeVideoGeneration,
-    candidateDefaultCompositeKey,
     handleVideoFailure,
   ]);
 
@@ -2537,6 +2694,7 @@ export function RadarViewer() {
     const pending = pendingVideoManifestRef.current;
     if (!pending) return;
     pendingVideoManifestRef.current = null;
+    setPendingVideoManifest(null);
     loadedVideoManifestRef.current = pending;
     setLoadedVideoManifest(pending);
     setFrameIndex(0);
@@ -2609,7 +2767,7 @@ export function RadarViewer() {
   }, [activeFirePointReferences, firePointReferences, product]);
 
   useEffect(() => {
-    if (videoModeReady || !isAnimating || !catalog || !domain || !product || !catalogBase) return;
+    if (videoModeReady || !isAnimating || !catalog || !domain || !liveEdgeDomain || !product || !catalogBase) return;
     const pointReferencesFor = (candidate: Frame): PointFrameReference[] => {
       const references = product.layers.flatMap((recipe) => {
         if (!isProductLayerEnabled(recipe, optionalLayers, product.layers)) return [];
@@ -2678,7 +2836,7 @@ export function RadarViewer() {
       const candidate = anchorFrames[index];
       const layers = composeLayers(
         product,
-        domain,
+        liveEdgeDomain,
         candidate,
         catalogBase,
         optionalLayers,
@@ -2753,6 +2911,7 @@ export function RadarViewer() {
     domain,
     effectiveRangeHours,
     isAnimating,
+    liveEdgeDomain,
     optionalLayers,
     product,
     speed,
@@ -2797,14 +2956,14 @@ export function RadarViewer() {
       </main>
     );
   }
-  if (!catalog || !product || !domain) return <main className="loading-page">Loading observational loops…</main>;
+  if (!catalog || !product || !domain || !liveEdgeDomain) return <main className="loading-page">Loading observational loops…</main>;
 
   const isLayerEnabled = (recipe: ProductLayer) =>
     isProductLayerEnabled(recipe, optionalLayers, product.layers);
   const composedLayers = anchor
     ? composeLayers(
         product,
-        domain,
+        liveEdgeDomain,
         anchor,
         catalogBase,
         optionalLayers,
@@ -2965,6 +3124,20 @@ export function RadarViewer() {
                 />
                 <span className="speed-value">{speed}×</span>
               </label>
+              <label className="quality-control">
+                <span>Decoder</span>
+                <select
+                  aria-label="Playback quality"
+                  value={playbackQuality}
+                  onChange={(event) => setPlaybackQuality(
+                    event.target.value as "auto" | "efficient" | "high",
+                  )}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="efficient">Power efficient</option>
+                  <option value="high">High quality</option>
+                </select>
+              </label>
               <div
                 className={`expanding-selector product-switcher${regionMenuOpen ? " is-open" : ""}`}
                 onMouseLeave={() => setRegionMenuOpen(false)}
@@ -3051,16 +3224,27 @@ export function RadarViewer() {
             className="map-stage"
             data-renderer={videoModeReady ? "video" : "images"}
             data-video-fallback={videoFallbackReason || undefined}
-            data-composite-preset={activeDefaultComposite?.id ?? "dynamic"}
-            data-composite-path={activeDefaultComposite?.media.path || undefined}
+            data-composite-preset={activeComposite?.id ?? "dynamic"}
+            data-composite-path={activeComposite?.media.path || undefined}
             data-composite-fallback={
-              candidateDefaultCompositeKey === failedDefaultComposite?.key
+              activeCompositeKey === failedDefaultComposite?.key
                 ? failedDefaultComposite.reason
                 : undefined
             }
             role="img"
             aria-label={`${product.title}${displayAnchor ? `, valid ${utcClock(displayAnchor.validTime)} UTC. ${sourceTimes}` : ", no frames available"}`}
           >
+            {pageVisible && pendingExactComposite?.manifest.media.mimeType.startsWith("video/mp4") && (
+              <video
+                className="pending-video-preload"
+                src={absoluteUrl(pendingExactComposite.manifest.media.path, catalogBase)}
+                crossOrigin="anonymous"
+                muted
+                playsInline
+                preload="auto"
+                aria-hidden="true"
+              />
+            )}
             {!anchor && <div className="map-loading">No frames are available for this product yet.</div>}
             {videoModeReady && playbackVideoManifest ? (
               <VideoCompositeStage
@@ -3070,13 +3254,14 @@ export function RadarViewer() {
                 requestedIndex={currentFrameIndex}
                 playing={isAnimating}
                 speed={speed}
-                satelliteFilter={activeDefaultComposite ? undefined : satelliteFilter}
-                compositePresetId={activeDefaultComposite?.id}
-                compositeMediaPath={activeDefaultComposite?.media.path}
+                satelliteFilter={activeComposite ? undefined : satelliteFilter}
+                compositePresetId={activeComposite?.id}
+                compositeMediaPath={activeComposite?.media.path}
+                nativeLoop={activeComposite?.nativeLoop}
                 onFramePresented={handleVideoFramePresented}
                 onFailure={handleActiveVideoFailure}
                 onLoopBoundary={handleVideoLoopBoundary}
-                key={`${product.id}-${playbackVideoManifest.layerId}-${playbackVideoManifest.track}-${effectiveRangeHours}h-${playbackVideoManifest.width}x${playbackVideoManifest.height}-${activeDefaultComposite ? `composite:${activeDefaultComposite.id}:${activeDefaultComposite.media.path}` : "dynamic"}`}
+                key={`${product.id}-${playbackVideoManifest.layerId}-${playbackVideoManifest.track}-${effectiveRangeHours}h-${playbackVideoManifest.width}x${playbackVideoManifest.height}-${activeComposite ? `composite:${activeComposite.id}:${activeComposite.media.path}` : "dynamic"}`}
               />
             ) : composedLayers.map((layer) => (
               <StableMapImage
@@ -3088,7 +3273,7 @@ export function RadarViewer() {
                   ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
                   opacity: layer.opacity,
                   filter: ["Overlay", "Broad"].includes(product.group)
-                    && ["ir", "daynight", "convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
+                    && ["convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
                     ? satelliteFilter
                     : undefined,
                 }}
@@ -3106,7 +3291,7 @@ export function RadarViewer() {
                       ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
                       opacity: layer.opacity,
                       filter: [
-                        "ir", "daynight", "convective", "snowfog", "eccc-geocolor",
+                        "convective", "snowfog", "eccc-geocolor",
                         "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir",
                       ].includes(layer.id) ? satelliteFilter : undefined,
                     }}

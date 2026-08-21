@@ -17,15 +17,21 @@ from urllib.parse import urlencode
 from PIL import Image
 
 from .catalog import build_catalog
-from .config import BROAD_VIEWPORTS, PRODUCTS, VIEWPORTS
+from .config import (
+    BROAD_VIEWPORTS,
+    PRODUCTS,
+    VIDEO_ARCHIVE_PRODUCTS,
+    VIDEO_COMPOSITE_PRESETS,
+    VIDEO_EXACT_RANGES,
+    VIEWPORTS,
+)
 
 
 UTC = dt.timezone.utc
-VIDEO_SCHEMA_VERSION = 1
-VIDEO_RENDER_VERSION = 16
+VIDEO_SCHEMA_VERSION = 2
+VIDEO_RENDER_VERSION = 17
 PROXY_RENDER_VERSION = 1
-COMPOSITE_RENDER_VERSION = 1
-DEFAULT_COMPOSITE_ID = "operational-default-v1"
+COMPOSITE_RENDER_VERSION = 2
 METEOROLOGICAL_MINUTE_SECONDS = 0.02
 FFCONCAT_TIMEBASE_FPS = 50
 # A 10-minute weather step lasts 0.2 media seconds, so 5 fps preserves every
@@ -34,8 +40,8 @@ FFCONCAT_TIMEBASE_FPS = 50
 VIDEO_FRAME_RATE = 5
 VIDEO_CLOCK_STRIP_HEIGHT = 16
 MPEGTS_TIMESTAMP_WRAP_SECONDS = (1 << 33) / 90_000
-LOCAL_GENERATIONS_TO_KEEP = 3
-LOCAL_ORPHAN_GRACE_HOURS = 1
+LOCAL_GENERATIONS_TO_KEEP = 2
+LOCAL_ORPHAN_GRACE_HOURS = 0.25
 
 
 class ProxySourceUnreadableError(OSError):
@@ -50,8 +56,6 @@ SATELLITE_LAYER_IDS = frozenset(
         "westwx-visir",
         "westwx-ir",
         "eccc-geocolor",
-        "daynight",
-        "ir",
         "convective",
         "snowfog",
     }
@@ -94,8 +98,6 @@ SOURCE_MEDIA_SIZES: Mapping[tuple[str, str], tuple[int, int]] = {
     ("bc", "raw-visir-5min"): (3840, 2944),
     ("bc", "raw-ir"): (1920, 1472),
     ("bc", "eccc-geocolor"): (3000, 2300),
-    ("bc", "daynight"): (1920, 1472),
-    ("bc", "ir"): (1920, 1472),
     ("bc", "convective"): (1920, 1472),
     ("bc", "snowfog"): (1920, 1472),
     ("north-america", "westwx-visir"): (1280, 960),
@@ -103,16 +105,6 @@ SOURCE_MEDIA_SIZES: Mapping[tuple[str, str], tuple[int, int]] = {
     ("north-pacific", "raw-visir"): (1600, 900),
     ("north-pacific", "raw-ir"): (1600, 900),
 }
-
-# Start with the two representative profiles used for browser/power testing.
-# Every other product retains the satellite-video + transparent-proxy path.
-DEFAULT_COMPOSITE_PILOTS = frozenset(
-    {
-        ("bc-large-overlay", "raw-visir"),
-        ("north-america-overlay", "westwx-visir"),
-    }
-)
-
 
 @dataclass(frozen=True)
 class ProfileSpec:
@@ -189,7 +181,7 @@ def _media_geometry(
         source_width = 2400
     if (
         domain_id == "bc"
-        and layer_id == "raw-visir"
+        and layer_id in {"raw-visir", "eccc-geocolor"}
         and track in {"live", "day"}
         and product_id in REGIONAL_PRODUCT_KEYS
     ):
@@ -215,7 +207,7 @@ def _media_geometry(
         )
     if (
         domain_id == "bc"
-        and layer_id == "raw-visir"
+        and layer_id in {"raw-visir", "eccc-geocolor"}
         and track in {"live", "day"}
         and product_id == "bc-large-overlay"
     ):
@@ -457,6 +449,8 @@ def _selected_satellite_frames(
     catalog: Mapping[str, Any],
     spec: ProfileSpec,
     hours: float,
+    *,
+    now: dt.datetime | None = None,
 ) -> list[SelectedFrame]:
     domain = catalog["domains"][spec.domain_id]
     layers = domain["layers"]
@@ -469,10 +463,16 @@ def _selected_satellite_frames(
     )
     anchor_layer = layers.get(selection_layer_id, {})
     anchor_frames = list(anchor_layer.get("frames", []))
-    if not anchor_frames:
-        return []
+    msc_first = spec.domain_id == "bc" and spec.layer_id == "eccc-geocolor"
     standard_frames = list(layers.get("raw-visir", {}).get("frames", []))
     native_frames = list(layers.get("raw-visir-native", {}).get("frames", []))
+    timeline_frames = (
+        [*anchor_frames, *standard_frames, *native_frames]
+        if msc_first
+        else anchor_frames
+    )
+    if not timeline_frames:
+        return []
     broad_max_age_value = anchor_layer.get("maxAgeMinutes")
     broad_max_age = (
         int(broad_max_age_value)
@@ -480,8 +480,29 @@ def _selected_satellite_frames(
         else None
     )
     selected: list[SelectedFrame] = []
-    for valid_time in _timeline(anchor_frames, spec.cadence_minutes, hours):
-        if (
+    reference_now = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    for valid_time in _timeline(timeline_frames, spec.cadence_minutes, hours):
+        if msc_first:
+            msc = _nearest(anchor_frames, valid_time, 2)
+            if msc is not None:
+                candidates = ((msc, "eccc-geocolor", 35),)
+            elif reference_now - valid_time >= dt.timedelta(minutes=35):
+                native = _nearest(native_frames, valid_time, 2)
+                standard = _nearest(standard_frames, valid_time, 2)
+                # NOAA is an exceptional, same-slot fill.  Prefer its native
+                # rendition when available, then the standard full-domain
+                # frame.  We never substitute an older NOAA scan merely to
+                # make the timeline appear complete.
+                candidates = (
+                    (native, "raw-visir-native", 2),
+                    (standard, "raw-visir", 2),
+                )
+            else:
+                # MSC is still inside its accepted real-time latency window.
+                # Keep the previous real observation as the live endpoint
+                # rather than inventing a held duplicate presentation frame.
+                continue
+        elif (
             spec.domain_id == "bc"
             and spec.layer_id == "raw-visir"
             and spec.track in {"live", "day"}
@@ -557,6 +578,12 @@ def _selected_satellite_frames(
             break
 
         if chosen is None:
+            # MSC playback is intentionally exact-slot only. If neither MSC
+            # nor the deadline-qualified NOAA fill exists for this slot, omit
+            # it instead of disguising an older satellite observation as a
+            # new frame. This matches the browser's live-edge selector.
+            if msc_first:
+                continue
             if not selected:
                 continue
             previous = selected[-1]
@@ -790,16 +817,14 @@ def _product(product_id: str) -> Mapping[str, Any]:
     return next(product for product in PRODUCTS if product["id"] == product_id)
 
 
-def _default_composite_layer_ids(spec: ProfileSpec) -> tuple[str, ...]:
-    """Return the exact recipe stack selected by a fresh viewer session."""
-    if (spec.product_id, spec.layer_id) not in DEFAULT_COMPOSITE_PILOTS:
-        return ()
+def _composite_layer_ids(
+    spec: ProfileSpec,
+    optional_layer_ids: Iterable[str],
+) -> tuple[str, ...]:
+    """Resolve an exact operational recipe stack from product configuration."""
     product = _product(spec.product_id)
     recipes = list(product.get("layers", []))
-    defaults = {
-        str(recipe.get("id", "")): bool(recipe.get("defaultEnabled", False))
-        for recipe in recipes
-    }
+    requested = set(optional_layer_ids)
     selected: list[str] = []
     for recipe in recipes:
         recipe_id = str(recipe.get("id", ""))
@@ -807,17 +832,38 @@ def _default_composite_layer_ids(spec: ProfileSpec) -> tuple[str, ...]:
             continue
         enabled_with = str(recipe.get("enabledWith", ""))
         if enabled_with:
-            if defaults.get(enabled_with, False):
+            if enabled_with in requested:
                 selected.append(recipe_id)
             continue
         if recipe_id in SATELLITE_LAYER_IDS:
             if recipe_id == spec.layer_id:
                 selected.append(recipe_id)
             continue
-        if recipe.get("optional") and not recipe.get("defaultEnabled", False):
+        if recipe.get("optional") and recipe_id not in requested:
             continue
         selected.append(recipe_id)
     return tuple(selected)
+
+
+def _composite_presets(spec: ProfileSpec) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    product = _product(spec.product_id)
+    if not any(
+        str(recipe.get("id", "")) == spec.layer_id
+        and bool(recipe.get("defaultEnabled", False))
+        for recipe in product.get("layers", [])
+    ):
+        return ()
+    values = VIDEO_COMPOSITE_PRESETS.get(spec.product_id, ())
+    return tuple(
+        (
+            str(value["id"]),
+            _composite_layer_ids(
+                spec,
+                tuple(str(item) for item in value.get("optionalLayers", ())),
+            ),
+        )
+        for value in values
+    )
 
 
 def _recipe_opacities(product_id: str) -> Mapping[str, float]:
@@ -1167,9 +1213,9 @@ def _prepare_composite_images(
             with Image.open(_safe_path(output_root, str(proxy["path"]))) as image:
                 overlay = image.convert("RGBA")
             if overlay.size != (spec.width, spec.height):
-                raise ValueError(
-                    f"Composite proxy {recipe_id!r} is {overlay.size}, expected "
-                    f"{(spec.width, spec.height)}"
+                overlay = overlay.resize(
+                    (spec.width, spec.height),
+                    Image.Resampling.LANCZOS,
                 )
             opacity = opacities.get(recipe_id, 1.0)
             if opacity < 1:
@@ -1297,6 +1343,165 @@ def _encode_mp4(
             raise RuntimeError(f"ffmpeg failed: {details[-2000:]}") from error
         finally:
             temporary.unlink(missing_ok=True)
+
+
+def _probe_vfr_packets(ffmpeg: str, path: Path) -> list[tuple[float, float]]:
+    ffprobe = str(Path(ffmpeg).with_name("ffprobe"))
+    if not Path(ffprobe).is_file():
+        discovered = shutil.which("ffprobe")
+        if not discovered:
+            raise RuntimeError("ffprobe is required to validate exact-range video")
+        ffprobe = discovered
+    command = [
+        ffprobe,
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "packet=pts_time,duration_time",
+        "-of",
+        "json",
+        str(path),
+    ]
+    result = subprocess.run(command, check=True, capture_output=True, text=True)
+    payload = json.loads(result.stdout)
+    packets = payload.get("packets")
+    if not isinstance(packets, list):
+        raise RuntimeError(f"ffprobe returned no video packets for {path}")
+    return [
+        (float(packet["pts_time"]), float(packet["duration_time"]))
+        for packet in packets
+    ]
+
+
+def _encode_vfr_mp4(
+    ffmpeg: str,
+    images: Sequence[Path],
+    durations: Sequence[float],
+    destination: Path,
+    spec: ProfileSpec,
+) -> None:
+    """Encode exactly one H.264 sample per meteorological frame.
+
+    ffconcat needs a sentinel image to materialize the final sample duration.
+    The first pass therefore contains one duplicate sentinel; a stream-copy
+    remux retains exactly the N real samples while preserving that duration.
+    """
+    if len(images) != len(durations) or not images:
+        raise ValueError("VFR encoding requires matching non-empty images and durations")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.encoded.mp4")
+    remuxed = destination.with_name(f".{destination.name}.{os.getpid()}.tmp.mp4")
+    with tempfile.TemporaryDirectory(prefix="radarsat-vfr-concat-") as directory:
+        concat = Path(directory) / "frames.ffconcat"
+        lines = ["ffconcat version 1.0"]
+        for image, duration in zip(images, durations, strict=True):
+            lines.extend(
+                (
+                    f"file '{_ffconcat_path(image)}'",
+                    f"option framerate {FFCONCAT_TIMEBASE_FPS}",
+                    f"duration {duration:.6f}",
+                )
+            )
+        lines.extend(
+            (
+                f"file '{_ffconcat_path(images[-1])}'",
+                f"option framerate {FFCONCAT_TIMEBASE_FPS}",
+            )
+        )
+        concat.write_text("\n".join(lines) + "\n")
+        keyint = max(1, len(images))
+        encode = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            spec.preset,
+            "-crf",
+            str(spec.crf),
+            "-profile:v",
+            "high",
+            "-bf",
+            "0",
+            "-pix_fmt",
+            "yuv420p",
+            "-fps_mode",
+            "vfr",
+            "-enc_time_base",
+            "1:1000",
+            "-x264-params",
+            (
+                f"keyint={keyint}:min-keyint={keyint}:scenecut=0:bframes=0:"
+                "force-cfr=0:colorprim=bt709:transfer=bt709:colormatrix=bt709"
+            ),
+            "-color_primaries",
+            "bt709",
+            "-color_trc",
+            "bt709",
+            "-colorspace",
+            "bt709",
+            "-color_range",
+            "tv",
+            "-video_track_timescale",
+            "1000",
+            "-y",
+            str(temporary),
+        ]
+        remux = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(temporary),
+            "-map",
+            "0:v:0",
+            "-c",
+            "copy",
+            "-frames:v",
+            str(len(images)),
+            "-movflags",
+            "+faststart",
+            "-y",
+            str(remuxed),
+        ]
+        try:
+            subprocess.run(encode, check=True, capture_output=True, text=True)
+            subprocess.run(remux, check=True, capture_output=True, text=True)
+            packets = _probe_vfr_packets(ffmpeg, remuxed)
+            if len(packets) != len(images):
+                raise RuntimeError(
+                    f"Exact video has {len(packets)} packets for {len(images)} frames"
+                )
+            expected_pts = 0.0
+            for index, ((pts, duration), expected_duration) in enumerate(
+                zip(packets, durations, strict=True)
+            ):
+                if abs(pts - expected_pts) > 0.002 or abs(duration - expected_duration) > 0.002:
+                    raise RuntimeError(
+                        "Exact video timing mismatch at packet "
+                        f"{index}: got ({pts:.3f}, {duration:.3f}), expected "
+                        f"({expected_pts:.3f}, {expected_duration:.3f})"
+                    )
+                expected_pts += expected_duration
+            remuxed.replace(destination)
+        except subprocess.CalledProcessError as error:
+            details = (error.stderr or error.stdout or "").strip()
+            raise RuntimeError(f"ffmpeg VFR encode failed: {details[-2000:]}") from error
+        finally:
+            temporary.unlink(missing_ok=True)
+            remuxed.unlink(missing_ok=True)
 
 
 def _encode_ts(
@@ -1574,6 +1779,245 @@ def _build_hls_media(
     return playlist_path, playlist_fingerprint, segment_entries, adjusted_durations
 
 
+def _range_frames(
+    selected: Sequence[SelectedFrame],
+    hours: int,
+) -> tuple[int, list[SelectedFrame]]:
+    if not selected:
+        return 0, []
+    cutoff = selected[-1].valid_time - dt.timedelta(hours=hours)
+    first = next(
+        (index for index, frame in enumerate(selected) if frame.valid_time >= cutoff),
+        len(selected) - 1,
+    )
+    return first, list(selected[first:])
+
+
+def _exact_renditions(spec: ProfileSpec) -> tuple[tuple[str, int, int], ...]:
+    if spec.width <= 1280:
+        return (("display", spec.width, spec.height),)
+    efficient_width = 1280
+    efficient_height = _even(spec.height * efficient_width / spec.width)
+    return (
+        ("efficient", efficient_width, efficient_height),
+        ("high", spec.width, spec.height),
+    )
+
+
+def _build_exact_composite_range(
+    source_root: Path,
+    output_root: Path,
+    spec: ProfileSpec,
+    selected: Sequence[SelectedFrame],
+    media_inputs: Sequence[Mapping[str, Any]],
+    hours: int,
+    preset_id: str,
+    layer_ids: Sequence[str],
+    filtered_proxy_layers: Mapping[dt.datetime, Sequence[Mapping[str, Any]]],
+    proxy_entries: Mapping[str, Mapping[str, Any]],
+    composite_variant: Mapping[str, Any],
+    *,
+    ffmpeg: str,
+    now: dt.datetime,
+) -> tuple[Mapping[str, Any], int]:
+    first_frame, range_frames = _range_frames(selected, hours)
+    if len(range_frames) < 2:
+        raise RuntimeError(
+            f"{spec.product_id} {hours}h composite has fewer than two frames"
+        )
+    nominal_duration = spec.cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS
+    durations = [nominal_duration] * len(range_frames)
+    durations[-1] = nominal_duration * 4
+    range_inputs = list(media_inputs[first_frame:])
+    range_overlay_inputs: list[list[Mapping[str, Any]]] = []
+    for frame in range_frames:
+        frame_inputs: list[Mapping[str, Any]] = []
+        for layer in filtered_proxy_layers.get(frame.valid_time, ()):
+            source_key = str(layer.get("sourceKey", ""))
+            proxy = proxy_entries.get(source_key)
+            if not isinstance(proxy, Mapping) or not proxy.get("path"):
+                continue
+            frame_inputs.append(
+                {
+                    "id": str(layer.get("id", "")),
+                    "renderId": str(layer.get("renderId", "")),
+                    "sourceKey": source_key,
+                    "sourceValidTime": layer.get("sourceValidTime"),
+                    # Proxy filenames are hashes of the rendered RGBA pixels.
+                    # Including the immutable path binds every exact MP4 to
+                    # the radar/lightning/fire/model snapshot it actually
+                    # contains without re-hashing hundreds of images here.
+                    "proxyPath": str(proxy["path"]),
+                    "proxyByteLength": int(proxy.get("byteLength", 0)),
+                }
+            )
+        range_overlay_inputs.append(frame_inputs)
+    renditions: list[Mapping[str, Any]] = []
+    total_bytes = 0
+    for rendition_id, width, height in _exact_renditions(spec):
+        rendition_spec = replace(
+            spec,
+            width=width,
+            height=height,
+            media_group="stage-composite-exact",
+            media_viewport=dict(spec.viewport),
+            media_width=width,
+            media_height=height,
+            crf=16 if spec.track in {"live", "day"} else 18,
+        )
+        payload = {
+            "videoRenderVersion": VIDEO_RENDER_VERSION,
+            "compositeRenderVersion": COMPOSITE_RENDER_VERSION,
+            "preset": dict(composite_variant),
+            "rangeHours": hours,
+            "rendition": rendition_id,
+            "width": width,
+            "height": height,
+            "frames": range_inputs,
+            "overlayInputs": range_overlay_inputs,
+            "durations": durations,
+        }
+        fingerprint = _hash_payload(payload)
+        end_stamp = range_frames[-1].valid_time.strftime("%Y%m%dT%H%MZ")
+        destination = (
+            output_root
+            / "videos"
+            / f"composite-{spec.product_id}"
+            / spec.layer_id
+            / spec.track
+            / f"exact-{hours}h"
+            / rendition_id
+            / f"{end_stamp}-{fingerprint}.mp4"
+        )
+        if not destination.is_file():
+            with tempfile.TemporaryDirectory(
+                prefix=f"radarsat-{spec.product_id}-{preset_id}-{hours}h-{rendition_id}-"
+            ) as temporary:
+                prepared = _prepare_composite_images(
+                    source_root,
+                    output_root,
+                    rendition_spec,
+                    range_frames,
+                    Path(temporary),
+                    layer_ids,
+                    filtered_proxy_layers,
+                    proxy_entries,
+                )
+                _encode_vfr_mp4(
+                    ffmpeg,
+                    prepared,
+                    durations,
+                    destination,
+                    rendition_spec,
+                )
+        media = {
+            "path": destination.relative_to(output_root).as_posix(),
+            "mimeType": "video/mp4",
+            "codec": "avc1",
+            "width": width,
+            "height": height + VIDEO_CLOCK_STRIP_HEIGHT,
+            "contentHeight": height,
+            "byteLength": destination.stat().st_size,
+            "sha256": _sha256_file(destination),
+        }
+        total_bytes += destination.stat().st_size
+        renditions.append({"id": rendition_id, "media": media})
+    return (
+        {
+            "hours": hours,
+            "builtAt": _format_time(now),
+            "startValidTime": _format_time(range_frames[0].valid_time),
+            "endValidTime": _format_time(range_frames[-1].valid_time),
+            "firstFrame": first_frame,
+            "frameCount": len(range_frames),
+            "durationsSeconds": [round(value, 6) for value in durations],
+            "boundaryIntervalMultiplier": 4,
+            "renditions": renditions,
+        },
+        total_bytes,
+    )
+
+
+def _reusable_exact_range(
+    output_root: Path,
+    previous_manifest: Mapping[str, Any] | None,
+    preset_id: str,
+    layer_ids: Sequence[str],
+    hours: int,
+    selected: Sequence[SelectedFrame],
+    now: dt.datetime,
+) -> Mapping[str, Any] | None:
+    if previous_manifest is None:
+        return None
+    # The source anchor itself advances on a ten-minute clock. A literal
+    # fifteen-minute rebuild gate would therefore update the six-hour asset
+    # only every second anchor (twenty minutes). Rebuilding it on each new
+    # ten-minute anchor is the only useful schedule that meets the requested
+    # <=15-minute freshness without rewriting an identical file at :15.
+    minimum_minutes = {3: 0, 6: 10, 12: 30, 24: 30}.get(hours, 0)
+    composites = previous_manifest.get("composites")
+    if not isinstance(composites, list):
+        return None
+    preset = next(
+        (
+            value for value in composites
+            if isinstance(value, Mapping)
+            and value.get("id") == preset_id
+            and value.get("layerIds") == list(layer_ids)
+        ),
+        None,
+    )
+    if not isinstance(preset, Mapping) or not isinstance(preset.get("ranges"), list):
+        return None
+    candidate = next(
+        (
+            value for value in preset["ranges"]
+            if isinstance(value, Mapping) and value.get("hours") == hours
+        ),
+        None,
+    )
+    if not isinstance(candidate, Mapping):
+        return None
+    built_at = _parse_time(candidate.get("builtAt"))
+    start = _parse_time(candidate.get("startValidTime"))
+    end = _parse_time(candidate.get("endValidTime"))
+    if (
+        built_at is None
+        or start is None
+        or end is None
+    ):
+        return None
+    if selected and end != selected[-1].valid_time:
+        if minimum_minutes <= 0 or now - built_at >= dt.timedelta(minutes=minimum_minutes):
+            return None
+    valid_times = [frame.valid_time for frame in selected]
+    try:
+        first = valid_times.index(start)
+        last = valid_times.index(end)
+    except ValueError:
+        return None
+    if last < first:
+        return None
+    reused = dict(candidate)
+    reused["firstFrame"] = first
+    reused["frameCount"] = last - first + 1
+    durations = reused.get("durationsSeconds")
+    if not isinstance(durations, list) or len(durations) != reused["frameCount"]:
+        return None
+    renditions = reused.get("renditions")
+    if not isinstance(renditions, list) or not renditions:
+        return None
+    for rendition in renditions:
+        if not isinstance(rendition, Mapping) or not isinstance(rendition.get("media"), Mapping):
+            return None
+        relative = str(rendition["media"].get("path", ""))
+        try:
+            _safe_path(output_root, relative)
+        except (ValueError, FileNotFoundError):
+            return None
+    return reused
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -1644,6 +2088,23 @@ def _manifest_dependencies(output_root: Path, manifests: Iterable[Path]) -> set[
         default_composite = manifest.get("defaultComposite")
         if isinstance(default_composite, Mapping):
             media_values.append(default_composite.get("media"))
+        composites = manifest.get("composites")
+        if isinstance(composites, list):
+            for composite in composites:
+                if not isinstance(composite, Mapping):
+                    continue
+                ranges = composite.get("ranges")
+                if not isinstance(ranges, list):
+                    continue
+                for range_value in ranges:
+                    if not isinstance(range_value, Mapping):
+                        continue
+                    renditions = range_value.get("renditions")
+                    if not isinstance(renditions, list):
+                        continue
+                    for rendition in renditions:
+                        if isinstance(rendition, Mapping):
+                            media_values.append(rendition.get("media"))
         for media in media_values:
             if not isinstance(media, Mapping) or not media.get("path"):
                 continue
@@ -1780,7 +2241,22 @@ def build_profile(
 ) -> Mapping[str, Any]:
     source_root = source_root.resolve()
     output_root = output_root.resolve()
-    selected = _selected_satellite_frames(catalog, spec, hours)
+    build_now = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    index_path = output_root / "video-index" / spec.product_id / f"{spec.layer_id}.json"
+    current_index = _load_index(index_path)
+    current_profile = current_index.get("profiles", {}).get(spec.track, {})
+    previous_manifest: Mapping[str, Any] | None = None
+    previous_manifest_value = current_profile.get("manifestPath")
+    if isinstance(previous_manifest_value, str):
+        try:
+            loaded_previous = json.loads(
+                _safe_path(output_root, previous_manifest_value).read_text()
+            )
+            if isinstance(loaded_previous, Mapping):
+                previous_manifest = loaded_previous
+        except (OSError, ValueError, json.JSONDecodeError):
+            previous_manifest = None
+    selected = _selected_satellite_frames(catalog, spec, hours, now=now)
     # Catalog construction and retention are independent workers. A frame can
     # legitimately age out between the catalog snapshot and this low-priority
     # video build, so omit vanished inputs instead of losing the whole profile.
@@ -1883,10 +2359,9 @@ def build_profile(
         for frame_selections in proxy_selections
     ]
 
-    default_composite: dict[str, Any] | None = None
+    composites: list[Mapping[str, Any]] = []
     composite_media_bytes = 0
-    composite_layer_ids = _default_composite_layer_ids(spec)
-    if composite_layer_ids:
+    for preset_id, composite_layer_ids in _composite_presets(spec):
         selected_layer_ids = set(composite_layer_ids)
         opacities = _recipe_opacities(spec.product_id)
         proxy_hashes: dict[str, str] = {}
@@ -1937,7 +2412,7 @@ def build_profile(
         )
         base_stat = base_path.stat()
         composite_variant = {
-            "id": DEFAULT_COMPOSITE_ID,
+            "id": preset_id,
             "compositeRenderVersion": COMPOSITE_RENDER_VERSION,
             "proxyRenderVersion": PROXY_RENDER_VERSION,
             "layerIds": list(composite_layer_ids),
@@ -1952,67 +2427,136 @@ def build_profile(
                 "sha256": _sha256_file(base_path),
             },
         }
-        composite_spec = replace(
-            spec,
-            media_group="stage-composite",
-            media_viewport=dict(spec.viewport),
-            media_width=spec.width,
-            media_height=spec.height,
-            crf=16 if spec.track == "live" else 18,
-        )
-
-        def prepare_composite(
-            group_frames: Sequence[SelectedFrame], temporary: Path
-        ) -> list[Path]:
-            return _prepare_composite_images(
-                source_root,
-                output_root,
-                composite_spec,
-                group_frames,
-                temporary,
-                composite_layer_ids,
-                filtered_proxy_layers,
-                proxy_entries,
+        ranges: list[Mapping[str, Any]] = []
+        exact_ranges = VIDEO_EXACT_RANGES.get(spec.product_id, ())
+        track_ranges = tuple(
+            range_hours
+            for range_hours in exact_ranges
+            if (
+                (spec.track == "live" and range_hours < 24)
+                or (spec.track == "day" and range_hours == 24)
             )
+        )
+        for range_hours in track_ranges:
+            exact_range = _reusable_exact_range(
+                output_root,
+                previous_manifest,
+                preset_id,
+                composite_layer_ids,
+                range_hours,
+                selected,
+                build_now,
+            )
+            exact_bytes = 0
+            if exact_range is None:
+                exact_range, exact_bytes = _build_exact_composite_range(
+                    source_root,
+                    output_root,
+                    spec,
+                    selected,
+                    media_inputs,
+                    range_hours,
+                    preset_id,
+                    composite_layer_ids,
+                    filtered_proxy_layers,
+                    proxy_entries,
+                    composite_variant,
+                    ffmpeg=ffmpeg,
+                    now=build_now,
+                )
+            ranges.append(exact_range)
+            composite_media_bytes += exact_bytes
 
-        (
-            composite_media_path,
-            composite_fingerprint,
-            composite_segments,
-            _,
-        ) = _build_hls_media(
-            source_root,
-            output_root,
-            composite_spec,
-            selected,
-            composite_inputs,
-            durations,
-            ffmpeg=ffmpeg,
-            owner=f"composite-{spec.product_id}",
-            variant=composite_variant,
-            prepare_images=prepare_composite,
-        )
-        composite_media_bytes = composite_media_path.stat().st_size + sum(
-            int(entry["byteLength"]) for entry in composite_segments
-        )
-        default_composite = {
-            "id": DEFAULT_COMPOSITE_ID,
+        if spec.track == "archive" and spec.product_id in VIDEO_ARCHIVE_PRODUCTS:
+            archive_renditions: list[Mapping[str, Any]] = []
+            archive_range_durations: list[float] | None = None
+            for rendition_id, width, height in _exact_renditions(spec):
+                composite_spec = replace(
+                    spec,
+                    width=width,
+                    height=height,
+                    media_group="stage-composite",
+                    media_viewport=dict(spec.viewport),
+                    media_width=width,
+                    media_height=height,
+                    crf=18,
+                )
+
+                def prepare_composite(
+                    group_frames: Sequence[SelectedFrame],
+                    temporary: Path,
+                    rendition_spec: ProfileSpec = composite_spec,
+                ) -> list[Path]:
+                    return _prepare_composite_images(
+                        source_root,
+                        output_root,
+                        rendition_spec,
+                        group_frames,
+                        temporary,
+                        composite_layer_ids,
+                        filtered_proxy_layers,
+                        proxy_entries,
+                    )
+
+                (
+                    composite_media_path,
+                    composite_fingerprint,
+                    composite_segments,
+                    composite_durations,
+                ) = _build_hls_media(
+                    source_root,
+                    output_root,
+                    composite_spec,
+                    selected,
+                    composite_inputs,
+                    durations,
+                    ffmpeg=ffmpeg,
+                    owner=f"composite-{spec.product_id}-{preset_id}",
+                    variant={**composite_variant, "rendition": rendition_id},
+                    prepare_images=prepare_composite,
+                )
+                composite_media_bytes += composite_media_path.stat().st_size + sum(
+                    int(entry["byteLength"]) for entry in composite_segments
+                )
+                archive_range_durations = list(composite_durations)
+                archive_renditions.append({
+                    "id": rendition_id,
+                    "media": {
+                        "path": composite_media_path.relative_to(output_root).as_posix(),
+                        "mimeType": "application/vnd.apple.mpegurl",
+                        "codec": "avc1",
+                        "width": width,
+                        "height": height + VIDEO_CLOCK_STRIP_HEIGHT,
+                        "contentHeight": height,
+                        "frameRate": VIDEO_FRAME_RATE,
+                        "byteLength": composite_media_path.stat().st_size,
+                        "sha256": _sha256_file(composite_media_path),
+                        "fingerprint": composite_fingerprint,
+                        "segments": composite_segments,
+                    },
+                })
+            assert archive_range_durations is not None
+            archive_range_durations[-1] *= 4
+            ranges.append(
+                {
+                    "hours": 168,
+                    "firstFrame": 0,
+                    "frameCount": len(selected),
+                    "durationsSeconds": [
+                        round(value, 6) for value in archive_range_durations
+                    ],
+                    "boundaryIntervalMultiplier": 4,
+                    "renditions": archive_renditions,
+                }
+            )
+        if not ranges:
+            continue
+        composites.append({
+            "id": preset_id,
             "layerIds": list(composite_layer_ids),
             "mediaViewport": dict(spec.viewport),
-            "media": {
-                "path": composite_media_path.relative_to(output_root).as_posix(),
-                "mimeType": "application/vnd.apple.mpegurl",
-                "codec": "avc1",
-                "width": spec.width,
-                "height": spec.height + VIDEO_CLOCK_STRIP_HEIGHT,
-                "contentHeight": spec.height,
-                "frameRate": VIDEO_FRAME_RATE,
-                "byteLength": composite_media_path.stat().st_size,
-                "sha256": _sha256_file(composite_media_path),
-                "fingerprint": composite_fingerprint,
-                "segments": composite_segments,
-            },
-        }
+            "ranges": ranges,
+        })
 
     generation_fingerprint = _hash_payload(
         {
@@ -2020,7 +2564,7 @@ def build_profile(
             "proxies": proxy_entries,
             "proxyLayers": proxy_layer_entries,
             "proxyRenderVersion": PROXY_RENDER_VERSION,
-            "defaultComposite": default_composite,
+            "composites": composites,
         }
     )
     generation = f"{end_stamp}-{generation_fingerprint}"
@@ -2032,9 +2576,6 @@ def build_profile(
         / spec.track
         / f"{generation}.json"
     )
-    index_path = output_root / "video-index" / spec.product_id / f"{spec.layer_id}.json"
-    current_index = _load_index(index_path)
-    current_profile = current_index.get("profiles", {}).get(spec.track, {})
     if (
         current_profile.get("generation") == generation
         and current_profile.get("manifestPath") == manifest_path.relative_to(output_root).as_posix()
@@ -2074,7 +2615,7 @@ def build_profile(
             }
         )
         pts += duration
-    generated_at = _format_time(now or dt.datetime.now(UTC))
+    generated_at = _format_time(build_now)
     manifest: dict[str, Any] = {
         "schemaVersion": VIDEO_SCHEMA_VERSION,
         "generation": generation,
@@ -2107,8 +2648,8 @@ def build_profile(
     }
     if proxy_warnings:
         manifest["proxyWarnings"] = proxy_warnings
-    if default_composite is not None:
-        manifest["defaultComposite"] = default_composite
+    if composites:
+        manifest["composites"] = composites
     if not manifest_path.is_file():
         _atomic_json(manifest_path, manifest)
 

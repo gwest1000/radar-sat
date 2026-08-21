@@ -11,7 +11,7 @@ from radarsat.r2 import R2Config
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Publish the small radar/lightning live-edge index.")
+    parser = argparse.ArgumentParser(description="Publish the small satellite/radar/lightning live-edge index.")
     parser.add_argument("--root", type=Path, default=default_output_root())
     parser.add_argument("--state-path", type=Path)
     parser.add_argument("--dry-run", action="store_true")

@@ -153,7 +153,6 @@ input:focus-visible {
   border-radius: 7px;
   background: rgba(9, 15, 19, 0.97);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
   opacity: 0;
   pointer-events: none;
   transform: translateX(-10px) scaleX(0);
@@ -314,7 +313,14 @@ input:focus-visible {
   max-height: none;
   object-fit: fill;
   pointer-events: none;
-  transform: translateZ(0);
+}
+
+.pending-video-preload {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .video-surface-layer {
@@ -486,7 +492,6 @@ input:focus-visible {
   border-radius: 5px;
   background: rgba(4, 9, 13, 0.80);
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(5px);
 }
 
 .valid-line {
@@ -599,8 +604,29 @@ input:focus-visible {
 }
 
 .speed-control {
-  grid-column: 1 / -1;
+  grid-column: 1;
   grid-row: 2;
+}
+
+.quality-control {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.quality-control select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .transport-actions {
@@ -1354,6 +1380,15 @@ input:focus-visible {
   .speed-control {
     width: 100%;
     grid-template-columns: auto minmax(100px, 1fr) 36px;
+    min-height: 44px;
+  }
+
+  .quality-control {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .quality-control select {
     min-height: 44px;
   }
 
