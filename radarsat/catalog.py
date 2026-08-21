@@ -192,7 +192,7 @@ def _valid_video_manifest_pointer(
         return None
     if not isinstance(payload, dict) or any(
         (
-            payload.get("schemaVersion") not in {1, 2},
+            payload.get("schemaVersion") != 2,
             payload.get("productId") != product_id,
             payload.get("layerId") != layer_id,
             payload.get("track") != track,
@@ -225,7 +225,11 @@ def read_video_profiles(root: Path) -> dict[str, Any]:
             payload = json.loads(index_path.read_bytes())
         except (OSError, json.JSONDecodeError):
             continue
-        if not isinstance(payload, dict) or payload.get("schemaVersion") not in {1, 2}:
+        # Schema-v1 pointers predate exact-range composites and may represent
+        # old secondary satellite experiments.  Once a layer becomes the
+        # operational default, admitting those pointers would briefly revive
+        # stale media during migration.  New encoders always publish v2.
+        if not isinstance(payload, dict) or payload.get("schemaVersion") != 2:
             continue
         product_id = payload.get("productId")
         layer_id = payload.get("layerId")

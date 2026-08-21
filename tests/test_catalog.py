@@ -29,7 +29,7 @@ class CatalogTests(unittest.TestCase):
         manifest = root / manifest_path
         manifest.parent.mkdir(parents=True, exist_ok=True)
         payload: dict[str, object] = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "generation": generation,
             "productId": "bc-northeast-overlay",
             "layerId": "eccc-geocolor",
@@ -40,7 +40,7 @@ class CatalogTests(unittest.TestCase):
         index = root / "video-index/bc-northeast-overlay/eccc-geocolor.json"
         index.parent.mkdir(parents=True, exist_ok=True)
         index.write_text(json.dumps({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "productId": "bc-northeast-overlay",
             "layerId": "eccc-geocolor",
             "profiles": {
@@ -297,6 +297,21 @@ class CatalogTests(unittest.TestCase):
                 },
             )
             self.assertNotIn("frames", json.dumps(catalog["videoProfiles"]))
+
+    def test_catalog_omits_legacy_default_video_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_video_pointer(root)
+            index = root / "video-index/bc-northeast-overlay/eccc-geocolor.json"
+            index_payload = json.loads(index.read_text())
+            index_payload["schemaVersion"] = 1
+            index.write_text(json.dumps(index_payload))
+            manifest = root / index_payload["profiles"]["live"]["manifestPath"]
+            manifest_payload = json.loads(manifest.read_text())
+            manifest_payload["schemaVersion"] = 1
+            manifest.write_text(json.dumps(manifest_payload))
+
+            self.assertNotIn("videoProfiles", build_catalog(root))
 
     def test_catalog_omits_obsolete_secondary_video_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
