@@ -608,25 +608,6 @@ input:focus-visible {
   grid-row: 2;
 }
 
-.quality-control {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  color: var(--muted);
-  font-size: 0.74rem;
-}
-
-.quality-control select {
-  min-width: 0;
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface);
-  color: var(--text);
-}
-
 .transport-actions {
   display: flex;
   justify-content: stretch;
@@ -871,7 +852,8 @@ input:focus-visible {
   display: none;
 }
 
-.layer-selector {
+.layer-selector,
+.decoder-selector {
   flex: 0 0 auto;
   min-width: 0;
 }
@@ -886,32 +868,6 @@ input:focus-visible {
 
 .layer-toolbar.decoder-only {
   grid-template-columns: 1fr;
-}
-
-.sidebar-quality-control {
-  grid-template-columns: 1fr;
-  align-content: center;
-  gap: 2px;
-  min-height: 42px;
-  padding: 4px 5px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--surface-raised);
-}
-
-.sidebar-quality-control > span {
-  color: var(--faint);
-  font-size: 0.58rem;
-  font-weight: 650;
-  letter-spacing: 0.07em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.sidebar-quality-control select {
-  height: 22px;
-  padding: 1px 3px;
-  font-size: 0.66rem;
 }
 
 .playback-build-indicator {
@@ -1033,7 +989,10 @@ input:focus-visible {
 
 .layer-selector:hover .layers-popover,
 .layer-selector:focus-within .layers-popover,
-.layer-selector.is-open .layers-popover {
+.layer-selector.is-open .layers-popover,
+.decoder-selector:hover .decoder-popover,
+.decoder-selector:focus-within .decoder-popover,
+.decoder-selector.is-open .decoder-popover {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0) scale(1);
@@ -1043,7 +1002,10 @@ input:focus-visible {
 
 .layer-selector:hover .layers-chevron,
 .layer-selector:focus-within .layers-chevron,
-.layer-selector.is-open .layers-chevron {
+.layer-selector.is-open .layers-chevron,
+.decoder-selector:hover .layers-chevron,
+.decoder-selector:focus-within .layers-chevron,
+.decoder-selector.is-open .layers-chevron {
   transform: translateY(-50%) rotate(180deg);
 }
 
@@ -1064,6 +1026,32 @@ input:focus-visible {
   color: var(--accent);
   font-size: 0.62rem;
   letter-spacing: 0;
+}
+
+.decoder-options {
+  display: grid;
+  gap: 5px;
+}
+
+.decoder-choice {
+  min-height: 40px;
+}
+
+.decoder-choice label {
+  display: grid;
+  gap: 2px;
+}
+
+.decoder-choice label > span {
+  color: inherit;
+  font-weight: 650;
+}
+
+.decoder-choice small {
+  color: var(--faint);
+  font-size: 0.62rem;
+  font-weight: 450;
+  line-height: 1.25;
 }
 
 .legend-title {
@@ -1472,15 +1460,6 @@ input:focus-visible {
   .speed-control {
     width: 100%;
     grid-template-columns: auto minmax(100px, 1fr) 36px;
-    min-height: 44px;
-  }
-
-  .quality-control {
-    width: 100%;
-    min-height: 44px;
-  }
-
-  .quality-control select {
     min-height: 44px;
   }
 

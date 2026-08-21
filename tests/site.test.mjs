@@ -149,8 +149,14 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /label: "Loading prebuilt"/);
   assert.match(viewer, /label: "Dynamic layers"/);
   assert.match(viewer, /data-playback-build={playbackBuildStatus\.mode}/);
-  assert.match(viewer, /className="quality-control sidebar-quality-control"/);
+  assert.match(viewer, /className={`decoder-selector\$\{decoderMenuOpen \? " is-open" : ""\}`}/);
+  assert.match(viewer, /className="layers-summary decoder-summary"/);
+  assert.match(viewer, /className="layers-popover decoder-popover"/);
+  assert.match(viewer, /role="radiogroup" aria-label="Playback quality"/);
+  assert.match(viewer, /name="playback-quality"/);
   assert.match(styles, /\.layer-toolbar\s*\{/);
+  assert.match(styles, /\.decoder-selector:hover \.decoder-popover/);
+  assert.match(styles, /\.decoder-options\s*\{/);
   assert.match(styles, /\.playback-build-indicator\.is-prebuilt/);
   assert.match(styles, /\.playback-build-indicator\.is-dynamic/);
   assert.match(viewer, /navigator\.mediaCapabilities/);

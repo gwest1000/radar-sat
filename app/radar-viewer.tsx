@@ -74,13 +74,15 @@ type FireMarker = {
   count: number;
 };
 
+type PlaybackQuality = "auto" | "efficient" | "high";
+
 type ViewerPreferences = {
   productId: string;
   speedIndex: number;
   rangeHours: number;
   optionalLayers: Record<string, boolean>;
   playing: boolean;
-  playbackQuality?: "auto" | "efficient" | "high";
+  playbackQuality?: PlaybackQuality;
 };
 
 type DynamicLayer = {
@@ -246,6 +248,16 @@ const MARKER_CACHE_LIMIT = 96;
 const IMAGE_LOAD_TIMEOUT_MS = 10_000;
 const PLAYBACK_IMAGE_RETRIES = 2;
 const PLAYBACK_IMAGE_RETRY_DELAY_MS = 240;
+const PLAYBACK_QUALITY_OPTIONS: ReadonlyArray<{
+  id: PlaybackQuality;
+  label: string;
+  shortLabel: string;
+  description: string;
+}> = [
+  { id: "auto", label: "Auto", shortLabel: "Auto", description: "Match the display and decoder capabilities." },
+  { id: "efficient", label: "Power efficient", shortLabel: "Efficient", description: "Use the lighter 1280-pixel rendition when available." },
+  { id: "high", label: "High quality", shortLabel: "High", description: "Prefer the highest-resolution prebuilt rendition." },
+];
 const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA GOES-18": "Calibrated ABI satellite imagery, GLM total lightning and smoke-detection products.",
   "NOAA Open Data": "Public cloud distribution for GOES ABI Level-2 satellite source files.",
@@ -1709,7 +1721,7 @@ export function RadarViewer() {
   const [speedIndex, setSpeedIndex] = useState(3);
   const [rangeHours, setRangeHours] = useState(3);
   const [optionalLayers, setOptionalLayers] = useState<Record<string, boolean>>({});
-  const [playbackQuality, setPlaybackQuality] = useState<"auto" | "efficient" | "high">("auto");
+  const [playbackQuality, setPlaybackQuality] = useState<PlaybackQuality>("auto");
   const [stageCssWidth, setStageCssWidth] = useState(0);
   const [highRenditionPowerEfficient, setHighRenditionPowerEfficient] = useState<boolean | null>(null);
   const [lightningMarkers, setLightningMarkers] = useState<LightningMarker[]>([]);
@@ -1718,6 +1730,7 @@ export function RadarViewer() {
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [decoderMenuOpen, setDecoderMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
   const [loadedVideoManifest, setLoadedVideoManifest] = useState<VideoLoopManifest | null>(null);
@@ -1858,7 +1871,7 @@ export function RadarViewer() {
                 setFrameIndex(NEWEST_FRAME);
                 setPlaybackQuality(
                   ["auto", "efficient", "high"].includes(String(stored.playbackQuality))
-                    ? stored.playbackQuality as "auto" | "efficient" | "high"
+                    ? stored.playbackQuality as PlaybackQuality
                     : "auto",
                 );
                 setPlaying(
@@ -3048,6 +3061,9 @@ export function RadarViewer() {
   const activeLayerLabels = optional
     .filter(isLayerEnabled)
     .map((layer) => layerControlLabel(layer.id));
+  const playbackQualityOption = PLAYBACK_QUALITY_OPTIONS.find(
+    (option) => option.id === playbackQuality,
+  ) ?? PLAYBACK_QUALITY_OPTIONS[0];
   const playbackBuildStatus = activeComposite
     ? videoModeReady
       ? {
@@ -3360,7 +3376,10 @@ export function RadarViewer() {
                   className="layers-summary"
                   type="button"
                   aria-expanded={layersMenuOpen}
-                  onClick={() => setLayersMenuOpen((open) => !open)}
+                  onClick={() => {
+                    setDecoderMenuOpen(false);
+                    setLayersMenuOpen((open) => !open);
+                  }}
                 >
                   <span className="layers-summary-heading">
                     <span className="selector-label">Layers</span>
@@ -3416,20 +3435,61 @@ export function RadarViewer() {
                 </div>
               </div>
             )}
-            <label className="quality-control sidebar-quality-control">
-              <span>Decoder</span>
-              <select
-                aria-label="Playback quality"
-                value={playbackQuality}
-                onChange={(event) => setPlaybackQuality(
-                  event.target.value as "auto" | "efficient" | "high",
-                )}
+            <div
+              className={`decoder-selector${decoderMenuOpen ? " is-open" : ""}`}
+              onMouseLeave={(event) => {
+                setDecoderMenuOpen(false);
+                const focused = document.activeElement;
+                if (focused instanceof HTMLElement && event.currentTarget.contains(focused)) {
+                  focused.blur();
+                }
+              }}
+            >
+              <button
+                className="layers-summary decoder-summary"
+                type="button"
+                aria-label={`Decoder: ${playbackQualityOption.label}`}
+                aria-expanded={decoderMenuOpen}
+                onClick={() => {
+                  setLayersMenuOpen(false);
+                  setDecoderMenuOpen((open) => !open);
+                }}
               >
-                <option value="auto">Auto</option>
-                <option value="efficient">Power efficient</option>
-                <option value="high">High quality</option>
-              </select>
-            </label>
+                <span className="layers-summary-heading">
+                  <span className="selector-label">Decoder</span>
+                  <span className="layers-count">{playbackQualityOption.shortLabel}</span>
+                </span>
+                <span className="layers-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div className="layers-popover decoder-popover" role="radiogroup" aria-label="Playback quality">
+                <div className="layers-popover-heading">
+                  <span>Decoder</span>
+                  <span>{playbackQualityOption.label}</span>
+                </div>
+                <div className="decoder-options">
+                  {PLAYBACK_QUALITY_OPTIONS.map((option) => (
+                    <div className="field-select decoder-choice" key={option.id}>
+                      <input
+                        type="radio"
+                        name="playback-quality"
+                        id={`decoder-${option.id}`}
+                        value={option.id}
+                        checked={playbackQuality === option.id}
+                        onChange={(event) => {
+                          setPlaybackQuality(option.id);
+                          setDecoderMenuOpen(false);
+                          event.currentTarget.blur();
+                        }}
+                      />
+                      <label htmlFor={`decoder-${option.id}`}>
+                        <span>{option.label}</span>
+                        <small>{option.description}</small>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
             <div
               className={`playback-build-indicator is-${playbackBuildStatus.mode}`}
               data-playback-build={playbackBuildStatus.mode}
