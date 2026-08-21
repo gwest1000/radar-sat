@@ -1718,14 +1718,19 @@ const PlaybackStatusLines = memo(forwardRef<PlaybackStatusLinesHandle, {
 }>(function PlaybackStatusLines({ initialValidTime, initialSourceTimes }, ref) {
   const validRef = useRef<HTMLParagraphElement>(null);
   const sourcesRef = useRef<HTMLParagraphElement>(null);
-  useImperativeHandle(ref, () => ({
-    update(validTime, sourceTimes) {
-      if (validRef.current) {
-        validRef.current.textContent = `VALID ${utcClock(validTime)} UTC · ${localClock(validTime)}`;
-      }
-      if (sourcesRef.current) sourcesRef.current.textContent = sourceTimes;
-    },
-  }), []);
+  const update = useCallback((validTime: string, sourceTimes: string) => {
+    if (validRef.current) {
+      validRef.current.textContent = `VALID ${utcClock(validTime)} UTC · ${localClock(validTime)}`;
+    }
+    if (sourcesRef.current) sourcesRef.current.textContent = sourceTimes;
+  }, []);
+  useImperativeHandle(ref, () => ({ update }), [update]);
+  // Playback updates these lines imperatively to avoid rerendering the whole
+  // viewer. A paused slider/arrow change does rerender, so reconcile the DOM
+  // with those props as well instead of leaving the last animated timestamp.
+  useEffect(() => {
+    update(initialValidTime, initialSourceTimes);
+  }, [initialSourceTimes, initialValidTime, update]);
   return (
     <>
       <p ref={validRef} className="valid-line">VALID {utcClock(initialValidTime)} UTC · {localClock(initialValidTime)}</p>

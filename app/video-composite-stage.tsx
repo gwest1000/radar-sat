@@ -670,6 +670,11 @@ export function VideoCompositeStage({
         stage.dataset.surfaceCacheMegabytes = String(Math.round(surfaceBudgetBytes / 1024 / 1024));
       }
       onFramePresented(index);
+      // A paused page may have only MP4 metadata buffered. In that case a
+      // manual seek briefly starts the muted decoder so it fetches and submits
+      // the requested sample. Stop it on that first committed frame; the
+      // user's paused state remains authoritative.
+      if (!playingRef.current) video.pause();
       if (!fullyComposited) {
         const lookahead = playbackLookahead(speedRef.current);
         for (let offset = 1; offset <= lookahead; offset += 1) {
@@ -756,7 +761,10 @@ export function VideoCompositeStage({
         seekedListenerRef.current = undefined;
         seekingRef.current = false;
         requestFrameRef.current();
-        if (playingRef.current) playVideo(video);
+        if (
+          playingRef.current
+          || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+        ) playVideo(video);
       };
       if (Math.abs(video.currentTime - target) < 0.0005) {
         finishSeek();
