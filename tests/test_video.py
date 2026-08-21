@@ -23,11 +23,19 @@ from radarsat.composite_video import (
     prune_composite_sidecar_manifests,
 )
 from radarsat.catalog import build_catalog
-from radarsat.config import PRODUCTS, VIDEO_COMPOSITE_PRESETS, VIDEO_TRACKS_BY_PRODUCT
+from radarsat.config import (
+    PRODUCTS,
+    VIDEO_COMPOSITE_PRESETS,
+    VIDEO_TRACKS_BY_PRODUCT,
+    video_composite_kind,
+    video_composite_layer_ids,
+    video_composite_overlay_layer_ids,
+)
 from radarsat.video import (
     ProfileSpec,
     VIDEO_FRAME_RATE,
     VIDEO_PROFILES,
+    _exact_renditions,
     _render_proxy,
     _selected_satellite_frames,
     _update_profile_index,
@@ -517,6 +525,28 @@ class VideoSelectionTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is required")
 class VideoBuildTests(unittest.TestCase):
+    def test_composite_renditions_are_high_only_for_bc_and_display_only_for_broad(self) -> None:
+        bc = ProfileSpec(
+            "bc-large-overlay",
+            "bc",
+            "eccc-geocolor",
+            {"left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0},
+            1920,
+            1472,
+            10,
+        )
+        broad = ProfileSpec(
+            "north-america-overlay",
+            "north-america",
+            "westwx-visir",
+            {"left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0},
+            1200,
+            816,
+            20,
+        )
+        self.assertEqual(_exact_renditions(bc), (("high", 1920, 1472),))
+        self.assertEqual(_exact_renditions(broad), (("display", 1200, 816),))
+
     def test_operational_default_presets_match_fresh_session_controls(self) -> None:
         products = {str(product["id"]): product for product in PRODUCTS}
         for product_id, presets in VIDEO_COMPOSITE_PRESETS.items():
@@ -531,7 +561,46 @@ class VideoBuildTests(unittest.TestCase):
             }
             self.assertEqual(presets[0]["id"], "operational-default-v1")
             self.assertEqual(set(presets[0]["optionalLayers"]), expected)
-            self.assertEqual(len(presets), 2)
+            self.assertEqual(
+                len(presets),
+                3 if product_id in {
+                    "bc-large-overlay",
+                    "bc-northeast-overlay",
+                    "north-america-overlay",
+                } else 2,
+            )
+
+    def test_smoke_core_pilots_are_strict_recipe_prefixes(self) -> None:
+        products = {str(product["id"]): product for product in PRODUCTS}
+        for product_id, satellite_layer_id in (
+            ("bc-large-overlay", "eccc-geocolor"),
+            ("bc-northeast-overlay", "eccc-geocolor"),
+            ("north-america-overlay", "westwx-visir"),
+        ):
+            preset_id = "weather-smoke-core-v1"
+            self.assertEqual(
+                video_composite_kind(product_id, preset_id),
+                "hybrid-prefix",
+            )
+            baked = video_composite_layer_ids(
+                product_id,
+                satellite_layer_id,
+                preset_id,
+            )
+            upper = video_composite_overlay_layer_ids(
+                product_id,
+                satellite_layer_id,
+                preset_id,
+            )
+            recipe_order = [
+                str(recipe["id"])
+                for recipe in products[product_id]["layers"]
+                if str(recipe["id"]) in {*baked, *upper}
+            ]
+            self.assertEqual(list((*baked, *upper)), recipe_order)
+            self.assertIn("smoke", baked)
+            self.assertIn("radar-rain", baked)
+            self.assertEqual(upper[-2:], ("model-mslp", "model-hgt500"))
 
     def make_source(self, root: Path) -> tuple[dict[str, object], ProfileSpec]:
         source = root / "source"
@@ -773,13 +842,13 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual([item["hours"] for item in composite["ranges"]], [3, 6, 12])
             exact_range = composite["ranges"][0]
             rendition = exact_range["renditions"][0]
-            self.assertEqual(rendition["id"], "display")
+            self.assertEqual(rendition["id"], "high")
             self.assertEqual(rendition["media"]["width"], 64)
             self.assertEqual(rendition["media"]["contentHeight"], 48)
             self.assertEqual(exact_range["durationsSeconds"], [0.2, 0.2, 0.8])
             self.assertEqual(exact_range["boundaryIntervalMultiplier"], 4)
             self.assertIn(
-                "videos/composite-bc-large-overlay/eccc-geocolor/live/exact-3h/display/",
+                "videos/composite-bc-large-overlay/eccc-geocolor/live/exact-3h/high/",
                 rendition["media"]["path"],
             )
             exact_media = output / rendition["media"]["path"]
@@ -865,6 +934,7 @@ class VideoBuildTests(unittest.TestCase):
                     spec,
                     ffmpeg=str(shutil.which("ffmpeg")),
                     ranges=(3,),
+                    preset_ids=("operational-default-v1", "operational-core-v1"),
                     now=now,
                 )
                 self.assertEqual(render.call_count, 6)
@@ -882,6 +952,7 @@ class VideoBuildTests(unittest.TestCase):
                     "track",
                     "presetId",
                     "layerIds",
+                    "renditionPolicy",
                     "rangeHours",
                     "generation",
                     "manifestPath",
@@ -990,6 +1061,7 @@ class VideoBuildTests(unittest.TestCase):
                     spec,
                     ffmpeg=str(shutil.which("ffmpeg")),
                     ranges=(3,),
+                    preset_ids=("operational-default-v1", "operational-core-v1"),
                     now=now + dt.timedelta(minutes=1),
                 )
                 self.assertEqual(render.call_count, 0)
@@ -1021,6 +1093,7 @@ class VideoBuildTests(unittest.TestCase):
                 spec,
                 ffmpeg=str(shutil.which("ffmpeg")),
                 ranges=(3,),
+                preset_ids=("operational-default-v1", "operational-core-v1"),
                 now=dt.datetime(2026, 8, 1, 1, tzinfo=UTC),
             )
             pointers = {
@@ -1043,6 +1116,7 @@ class VideoBuildTests(unittest.TestCase):
                     spec,
                     ffmpeg=str(shutil.which("ffmpeg")),
                     ranges=(3,),
+                    preset_ids=("operational-default-v1", "operational-core-v1"),
                     now=dt.datetime(2026, 8, 1, 1, 10, tzinfo=UTC),
                 )
 
@@ -1050,6 +1124,115 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(len(failed["failures"]), 2)
             for relative, previous in pointers.items():
                 self.assertEqual((output / relative).read_bytes(), previous)
+
+    def test_weather_smoke_core_freezes_upper_proxies_and_combines_models(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, original_spec = self.make_source(root)
+            source = root / "source"
+            layers = catalog["domains"]["bc"]["layers"]
+            layers["eccc-geocolor"] = layers.pop("raw-visir")
+            static_layers = catalog["domains"]["bc"]["staticLayers"]
+            write_rgba(
+                source / "static/bc/transmission-lines.png",
+                (0, 0, 0, 0),
+                (64, 48),
+            )
+            static_layers["transmission-lines"] = {
+                "path": "static/bc/transmission-lines.png",
+                "revision": "1",
+            }
+            base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
+            rendered_layers = {
+                "smoke": (105, 75, 45, 90),
+                "radar-coverage": (255, 255, 255, 20),
+                "radar-rain": (0, 180, 255, 100),
+                "lightning-trail": (255, 255, 255, 150),
+                "hotspots": (255, 90, 60, 180),
+                "hrdps-mslp": (210, 40, 180, 150),
+                "hrdps-hgt500": (220, 95, 35, 150),
+            }
+            for layer_id, colour in rendered_layers.items():
+                relative = f"frames/bc/{layer_id}/0000.png"
+                write_rgba(source / relative, colour, (64, 48))
+                layers[layer_id] = {
+                    "maxAgeMinutes": 180,
+                    "frames": [frame(relative, base)],
+                }
+            spec = replace(
+                original_spec,
+                product_id="bc-large-overlay",
+                layer_id="eccc-geocolor",
+            )
+            output = root / "output"
+            result = build_composite_profile(
+                source,
+                output,
+                catalog,
+                spec,
+                ffmpeg=str(shutil.which("ffmpeg")),
+                ranges=(3,),
+                preset_ids=("weather-smoke-core-v1",),
+                now=dt.datetime(2026, 8, 1, 1, tzinfo=UTC),
+            )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(len(result["profiles"]), 1)
+            pointer = json.loads(
+                (output / result["profiles"][0]["pointerPath"]).read_text()
+            )
+            self.assertEqual(pointer["schemaVersion"], 2)
+            self.assertEqual(pointer["compositeKind"], "hybrid-prefix")
+            self.assertEqual(pointer["bakedLayerIds"], pointer["layerIds"])
+            self.assertEqual(
+                pointer["eligibleOverlayLayerIds"],
+                ["lightning-trail", "hotspots", "model-mslp", "model-hgt500"],
+            )
+            manifest = json.loads((output / pointer["manifestPath"]).read_text())
+            self.assertEqual(manifest["schemaVersion"], 2)
+            self.assertEqual(manifest["renditionPolicy"], "high-only")
+            self.assertEqual(
+                [value["id"] for value in manifest["renditions"]],
+                ["high"],
+            )
+            first_frame = manifest["frames"][0]
+            self.assertEqual(
+                {value["id"] for value in first_frame["proxyLayers"]},
+                {
+                    "lightning-trail",
+                    "hotspots",
+                    "model-mslp",
+                    "model-hgt500",
+                    "model-contours",
+                },
+            )
+            combined = next(
+                value
+                for value in first_frame["proxyLayers"]
+                if value["id"] == "model-contours"
+            )
+            self.assertEqual(combined["ids"], ["model-mslp", "model-hgt500"])
+            self.assertEqual(
+                set(combined["sourceValidTimes"]),
+                {"model-mslp", "model-hgt500"},
+            )
+            self.assertEqual(
+                len(
+                    {
+                        proxy_layer["sourceKey"]
+                        for loop_frame in manifest["frames"]
+                        for proxy_layer in loop_frame["proxyLayers"]
+                        if proxy_layer["id"] == "model-contours"
+                    }
+                ),
+                1,
+            )
+            for key, descriptor in manifest["proxies"].items():
+                self.assertEqual(key, descriptor["path"])
+                self.assertTrue((output / descriptor["path"]).is_file())
+                self.assertEqual(len(descriptor["sha256"]), 64)
+                self.assertEqual(descriptor["width"], 64)
+                self.assertEqual(descriptor["height"], 48)
 
     def test_composite_prune_retires_an_unconfigured_preset_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1279,6 +1462,111 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertFalse(segment.exists())
             self.assertEqual(final["removedDependencies"], 1)
+
+    def test_local_prune_protects_current_hybrid_proxy_and_removes_orphan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            product = "bc-northeast-overlay"
+            proxy_root = output / "video-proxies" / product / "lightning-trail"
+            protected = proxy_root / "1111111111111111.webp"
+            orphan = proxy_root / "2222222222222222.webp"
+            protected.parent.mkdir(parents=True)
+            protected.write_bytes(b"current hybrid proxy")
+            orphan.write_bytes(b"unreferenced proxy")
+            relative = protected.relative_to(output).as_posix()
+            manifest = (
+                output
+                / "composite-manifests"
+                / product
+                / "eccc-geocolor"
+                / "live"
+                / "weather-smoke-core-v1"
+                / "3"
+                / "20260801T1000Z-abcdef012345.json"
+            )
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({
+                "schemaVersion": 2,
+                "proxies": {relative: {"path": relative}},
+            }))
+            now = dt.datetime(2026, 8, 1, 12, tzinfo=UTC)
+            old = (now - dt.timedelta(hours=2)).timestamp()
+            os.utime(protected, (old, old))
+            os.utime(orphan, (old, old))
+
+            result = prune_local_video_orphans(
+                output,
+                product,
+                now=now,
+                _prune_shared=False,
+            )
+
+            self.assertTrue(protected.is_file())
+            self.assertFalse(orphan.exists())
+            self.assertEqual(result["removedDependencies"], 1)
+
+    def test_shared_proxy_prune_fails_closed_on_ambiguous_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            proxy = (
+                output
+                / "video-proxies"
+                / "bc-northeast-overlay"
+                / "lightning-trail"
+                / "3333333333333333.webp"
+            )
+            proxy.parent.mkdir(parents=True)
+            proxy.write_bytes(b"old orphan")
+            ambiguous = (
+                output
+                / "composite-manifests"
+                / "bc-northeast-overlay"
+                / "eccc-geocolor"
+                / "live"
+                / "weather-smoke-core-v1"
+                / "3"
+                / "20260801T1000Z-abcdef012345.json"
+            )
+            ambiguous.parent.mkdir(parents=True)
+            ambiguous.write_text("{not-json")
+            now = dt.datetime(2026, 8, 1, 12, tzinfo=UTC)
+            old = (now - dt.timedelta(hours=2)).timestamp()
+            os.utime(proxy, (old, old))
+
+            self.assertEqual(prune_shared_video_orphans(output, now=now), 0)
+            self.assertTrue(proxy.is_file())
+
+    def test_shared_prune_removes_only_unreferenced_aged_proxies(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            proxy_root = (
+                output
+                / "video-proxies"
+                / "bc-northeast-overlay"
+                / "lightning-trail"
+            )
+            protected = proxy_root / "4444444444444444.webp"
+            orphan = proxy_root / "5555555555555555.webp"
+            recent = proxy_root / "6666666666666666.webp"
+            protected.parent.mkdir(parents=True)
+            for path in (protected, orphan, recent):
+                path.write_bytes(path.name.encode())
+            relative = protected.relative_to(output).as_posix()
+            manifest = output / "composite-manifests/current.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({
+                "schemaVersion": 2,
+                "proxies": {relative: {"path": relative}},
+            }))
+            now = dt.datetime(2026, 8, 1, 12, tzinfo=UTC)
+            old = (now - dt.timedelta(hours=2)).timestamp()
+            os.utime(protected, (old, old))
+            os.utime(orphan, (old, old))
+
+            self.assertEqual(prune_shared_video_orphans(output, now=now), 1)
+            self.assertTrue(protected.is_file())
+            self.assertFalse(orphan.exists())
+            self.assertTrue(recent.is_file())
 
     def test_prune_retires_unoffered_track_pointer_and_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

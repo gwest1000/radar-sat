@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import OrderedDict
 import datetime as dt
 from dataclasses import dataclass, replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,9 +17,12 @@ from .config import (
     VIDEO_COMPOSITE_PRESETS,
     VIDEO_EXACT_RANGES,
     VIDEO_TRACKS_BY_PRODUCT,
+    video_composite_kind,
+    video_composite_overlay_layer_ids,
 )
 from .video import (
     METEOROLOGICAL_MINUTE_SECONDS,
+    PROXY_RENDER_VERSION,
     UTC,
     VIDEO_CLOCK_STRIP_HEIGHT,
     VIDEO_PROFILES,
@@ -36,6 +40,7 @@ from .video import (
     _proxy_selections,
     _range_frames,
     _recipe_opacities,
+    _render_proxy,
     _safe_path,
     _selected_satellite_frames,
     _sha256_file,
@@ -44,6 +49,7 @@ from .video import (
 
 
 COMPOSITE_SIDECAR_SCHEMA_VERSION = 1
+HYBRID_COMPOSITE_SIDECAR_SCHEMA_VERSION = 2
 COMPOSITE_FRAME_CACHE_VERSION = 1
 COMPOSITE_FRAME_CACHE_MAX_AGE_HOURS = 36.0
 COMPOSITE_LOCAL_GENERATIONS_TO_KEEP = 2
@@ -150,6 +156,200 @@ def _atomic_png(path: Path, image: Image.Image) -> None:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _proxy_descriptor(
+    output_root: Path,
+    entry: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    relative = str(entry["path"])
+    path = _safe_path(output_root, relative)
+    return {
+        "path": relative,
+        "width": int(entry["width"]),
+        "height": int(entry["height"]),
+        "byteLength": path.stat().st_size,
+        "sha256": _sha256_file(path),
+    }
+
+
+def _combined_model_proxy(
+    output_root: Path,
+    spec: ProfileSpec,
+    members: Sequence[tuple[str, Mapping[str, Any], float]],
+) -> Mapping[str, Any]:
+    """Combine MSLP then H500 into one lossless display-sized RGBA proxy."""
+    composed = Image.new("RGBA", (spec.width, spec.height), (0, 0, 0, 0))
+    try:
+        for _recipe_id, descriptor, opacity in members:
+            with Image.open(
+                _safe_path(output_root, str(descriptor["path"]))
+            ) as source:
+                overlay = source.convert("RGBA")
+            try:
+                if overlay.size != (spec.width, spec.height):
+                    resized = overlay.resize(
+                        (spec.width, spec.height),
+                        Image.Resampling.LANCZOS,
+                    )
+                    overlay.close()
+                    overlay = resized
+                if opacity < 1:
+                    overlay.putalpha(
+                        overlay.getchannel("A").point(
+                            lambda value, factor=opacity: round(value * factor)
+                        )
+                    )
+                composed.alpha_composite(overlay)
+            finally:
+                overlay.close()
+        content_hash = hashlib.sha256(
+            b"radarsat-model-contours-v1\0"
+            + spec.width.to_bytes(4, "big")
+            + spec.height.to_bytes(4, "big")
+            + composed.tobytes()
+        ).hexdigest()[:16]
+        destination = (
+            output_root
+            / "video-proxies"
+            / spec.product_id
+            / "model-contours"
+            / f"{content_hash}.webp"
+        )
+        if not destination.is_file():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_name(
+                f".{destination.name}.{os.getpid()}.tmp.webp"
+            )
+            try:
+                composed.save(
+                    temporary,
+                    "WEBP",
+                    lossless=True,
+                    quality=100,
+                    method=2,
+                    exact=True,
+                )
+                temporary.replace(destination)
+            finally:
+                temporary.unlink(missing_ok=True)
+    finally:
+        composed.close()
+    return _proxy_descriptor(
+        output_root,
+        {
+            "path": destination.relative_to(output_root).as_posix(),
+            "width": spec.width,
+            "height": spec.height,
+        },
+    )
+
+
+def _hybrid_overlay_bundle(
+    source_root: Path,
+    output_root: Path,
+    spec: ProfileSpec,
+    frame_selections: Sequence[Sequence[ProxyLayerSelection]],
+    eligible_layer_ids: Sequence[str],
+    opacities: Mapping[str, float],
+) -> tuple[Mapping[str, Mapping[str, Any]], list[list[Mapping[str, Any]]]]:
+    """Freeze one sidecar generation's upper-layer proxy dependencies.
+
+    Proxy keys are their immutable content-addressed paths rather than mutable
+    catalog URLs. This lets the sidecar remain atomic and independently
+    publishable even while the ordinary dynamic video manifest is rebuilding.
+    """
+    eligible = set(eligible_layer_ids)
+    rendered: dict[tuple[str, str, bool], Mapping[str, Any]] = {}
+    combined_models: dict[tuple[tuple[str, str, float], ...], Mapping[str, Any]] = {}
+    proxies: dict[str, Mapping[str, Any]] = {}
+    frames: list[list[Mapping[str, Any]]] = []
+    for selections in frame_selections:
+        entries: list[Mapping[str, Any]] = []
+        by_recipe: dict[str, tuple[Mapping[str, Any], ProxyLayerSelection]] = {}
+        for selection in selections:
+            if selection.recipe_id not in eligible:
+                continue
+            cache_key = (
+                selection.source_key,
+                selection.rendered_layer_id,
+                selection.stage_aligned,
+            )
+            descriptor = rendered.get(cache_key)
+            if descriptor is None:
+                descriptor = _proxy_descriptor(
+                    output_root,
+                    _render_proxy(
+                        source_root,
+                        output_root,
+                        spec,
+                        selection.rendered_layer_id,
+                        selection.source_key,
+                        selection.source_path,
+                        stage_aligned=selection.stage_aligned,
+                    ),
+                )
+                rendered[cache_key] = descriptor
+            source_key = str(descriptor["path"])
+            proxies[source_key] = descriptor
+            entry = {
+                **selection.manifest_entry(),
+                "sourceKey": source_key,
+            }
+            entries.append(entry)
+            by_recipe[selection.recipe_id] = (descriptor, selection)
+
+        model_ids = ("model-mslp", "model-hgt500")
+        if all(recipe_id in by_recipe for recipe_id in model_ids):
+            members = [
+                (
+                    recipe_id,
+                    by_recipe[recipe_id][0],
+                    opacities.get(recipe_id, 1.0),
+                )
+                for recipe_id in model_ids
+            ]
+            combined_cache_key = tuple(
+                (
+                    str(descriptor["path"]),
+                    str(descriptor["sha256"]),
+                    opacity,
+                )
+                for _recipe_id, descriptor, opacity in members
+            )
+            combined = combined_models.get(combined_cache_key)
+            if combined is None:
+                combined = _combined_model_proxy(output_root, spec, members)
+                combined_models[combined_cache_key] = combined
+            combined_key = str(combined["path"])
+            proxies[combined_key] = combined
+            source_times = {
+                recipe_id: (
+                    _format_time(by_recipe[recipe_id][1].source_valid_time)
+                    if by_recipe[recipe_id][1].source_valid_time is not None
+                    else None
+                )
+                for recipe_id in model_ids
+            }
+            parsed_times = [
+                by_recipe[recipe_id][1].source_valid_time
+                for recipe_id in model_ids
+                if by_recipe[recipe_id][1].source_valid_time is not None
+            ]
+            entries.append(
+                {
+                    "id": "model-contours",
+                    "renderId": "model-contours",
+                    "sourceKey": combined_key,
+                    "sourceValidTime": (
+                        _format_time(max(parsed_times)) if parsed_times else None
+                    ),
+                    "ids": list(model_ids),
+                    "sourceValidTimes": source_times,
+                }
+            )
+        frames.append(entries)
+    return proxies, frames
 
 
 def _asset_fingerprint(root: Path, relative: str) -> Mapping[str, Any]:
@@ -404,14 +604,23 @@ def _pointer_payload(
     generated_at: str,
     end_valid_time: str,
     end_source_time: str,
+    *,
+    composite_kind: str = "exact",
+    eligible_overlay_layer_ids: Sequence[str] = (),
 ) -> Mapping[str, Any]:
-    return {
-        "schemaVersion": COMPOSITE_SIDECAR_SCHEMA_VERSION,
+    schema_version = (
+        HYBRID_COMPOSITE_SIDECAR_SCHEMA_VERSION
+        if composite_kind == "hybrid-prefix"
+        else COMPOSITE_SIDECAR_SCHEMA_VERSION
+    )
+    payload: dict[str, Any] = {
+        "schemaVersion": schema_version,
         "productId": spec.product_id,
         "layerId": spec.layer_id,
         "track": spec.track,
         "presetId": preset_id,
         "layerIds": list(layer_ids),
+        "renditionPolicy": "high-only",
         "rangeHours": hours,
         "generation": generation,
         "manifestPath": manifest_path.relative_to(output_root).as_posix(),
@@ -419,6 +628,15 @@ def _pointer_payload(
         "endValidTime": end_valid_time,
         "endSourceTime": end_source_time,
     }
+    if composite_kind == "hybrid-prefix":
+        payload.update(
+            {
+                "compositeKind": composite_kind,
+                "bakedLayerIds": list(layer_ids),
+                "eligibleOverlayLayerIds": list(eligible_overlay_layer_ids),
+            }
+        )
+    return payload
 
 
 def _requested_ranges(spec: ProfileSpec, ranges: Iterable[int] | None) -> tuple[int, ...]:
@@ -445,12 +663,17 @@ def _build_range_sidecar(
     frame_plans: Sequence[CompositeFrame],
     rendition_paths: Mapping[str, Sequence[Path]],
     rendition_fingerprints: Mapping[str, Sequence[str]],
+    composite_kind: str,
+    eligible_overlay_layer_ids: Sequence[str],
+    overlay_proxies: Mapping[str, Mapping[str, Any]],
+    frame_overlay_layers: Sequence[Sequence[Mapping[str, Any]]],
     *,
     ffmpeg: str,
     generated_at: str,
 ) -> Mapping[str, Any]:
     first, range_frames = _range_frames(selected, hours)
     range_plans = list(frame_plans[first:])
+    range_overlay_layers = list(frame_overlay_layers[first:])
     if len(range_frames) < 2 or len(range_plans) != len(range_frames):
         raise RuntimeError(
             f"{spec.product_id} {preset_id} {hours}h has fewer than two frames"
@@ -526,8 +749,15 @@ def _build_range_sidecar(
             }
         )
 
-    frames = [
-        {
+    frames: list[Mapping[str, Any]] = []
+    referenced_proxy_keys: set[str] = set()
+    for plan, duration, overlay_layers in zip(
+        range_plans,
+        durations,
+        range_overlay_layers,
+        strict=True,
+    ):
+        frame_value: dict[str, Any] = {
             "validTime": _format_time(plan.frame.valid_time),
             "sourceValidTime": _format_time(plan.frame.source_valid_time),
             **(
@@ -543,12 +773,22 @@ def _build_range_sidecar(
             ),
             "durationSeconds": round(duration, 6),
         }
-        for plan, duration in zip(range_plans, durations, strict=True)
-    ]
+        if composite_kind == "hybrid-prefix":
+            frozen_layers = [dict(value) for value in overlay_layers]
+            frame_value["proxyLayers"] = frozen_layers
+            referenced_proxy_keys.update(
+                str(value.get("sourceKey", "")) for value in frozen_layers
+            )
+        frames.append(frame_value)
     end_valid_time = _format_time(range_frames[-1].valid_time)
     end_source_time = _format_time(range_frames[-1].source_valid_time)
+    schema_version = (
+        HYBRID_COMPOSITE_SIDECAR_SCHEMA_VERSION
+        if composite_kind == "hybrid-prefix"
+        else COMPOSITE_SIDECAR_SCHEMA_VERSION
+    )
     manifest_basis = {
-        "schemaVersion": COMPOSITE_SIDECAR_SCHEMA_VERSION,
+        "schemaVersion": schema_version,
         "productId": spec.product_id,
         "domainId": spec.domain_id,
         "layerId": spec.layer_id,
@@ -562,9 +802,24 @@ def _build_range_sidecar(
         "endValidTime": end_valid_time,
         "endSourceTime": end_source_time,
         "boundaryIntervalMultiplier": 4,
+        "renditionPolicy": "high-only",
         "frames": frames,
         "renditions": renditions,
     }
+    if composite_kind == "hybrid-prefix":
+        manifest_basis.update(
+            {
+                "compositeKind": composite_kind,
+                "bakedLayerIds": list(layer_ids),
+                "eligibleOverlayLayerIds": list(eligible_overlay_layer_ids),
+                "proxyRenderVersion": PROXY_RENDER_VERSION,
+                "proxies": {
+                    key: dict(overlay_proxies[key])
+                    for key in sorted(referenced_proxy_keys)
+                    if key in overlay_proxies
+                },
+            }
+        )
     generation = f"{range_frames[-1].valid_time.strftime('%Y%m%dT%H%MZ')}-{_hash_payload(manifest_basis)}"
     manifest_path = _sidecar_manifest_path(
         output_root,
@@ -574,7 +829,7 @@ def _build_range_sidecar(
         generation,
     )
     manifest = {
-        "schemaVersion": COMPOSITE_SIDECAR_SCHEMA_VERSION,
+        "schemaVersion": schema_version,
         "generation": generation,
         "generatedAt": generated_at,
         **{key: value for key, value in manifest_basis.items() if key != "schemaVersion"},
@@ -598,6 +853,8 @@ def _build_range_sidecar(
         generated_at,
         end_valid_time,
         end_source_time,
+        composite_kind=composite_kind,
+        eligible_overlay_layer_ids=eligible_overlay_layer_ids,
     )
     previous: Mapping[str, Any] = {}
     try:
@@ -633,6 +890,7 @@ def build_composite_profile(
     *,
     ffmpeg: str,
     ranges: Iterable[int] | None = None,
+    preset_ids: Iterable[str] | None = None,
     now: dt.datetime | None = None,
 ) -> Mapping[str, Any]:
     source_root = source_root.resolve()
@@ -641,7 +899,14 @@ def build_composite_profile(
     requested_ranges = _requested_ranges(spec, ranges)
     if not requested_ranges:
         return {"status": "skipped", "profiles": [], "failures": []}
-    presets = _composite_presets(spec)
+    # Preserve the existing exact-only default. Reusable cores are an explicit
+    # lower-priority lane selected with ``preset_ids``/``--preset`` so their
+    # proxy preparation can never delay an operational exact commit.
+    presets = _composite_presets(
+        spec,
+        preset_ids,
+        include_hybrid=preset_ids is not None,
+    )
     if not presets:
         raise ValueError(
             f"{spec.product_id}/{spec.layer_id} is not an operational default composite"
@@ -682,8 +947,33 @@ def build_composite_profile(
 
     plans_by_preset: dict[str, list[CompositeFrame]] = {}
     layers_by_preset: dict[str, tuple[str, ...]] = {}
+    kind_by_preset: dict[str, str] = {}
+    eligible_layers_by_preset: dict[str, tuple[str, ...]] = {}
+    proxies_by_preset: dict[str, Mapping[str, Mapping[str, Any]]] = {}
+    overlay_frames_by_preset: dict[
+        str, list[list[Mapping[str, Any]]]
+    ] = {}
     failures: list[Mapping[str, Any]] = []
     for preset_id, layer_ids in presets:
+        composite_kind = video_composite_kind(spec.product_id, preset_id)
+        eligible_overlay_layer_ids = video_composite_overlay_layer_ids(
+            spec.product_id,
+            spec.layer_id,
+            preset_id,
+        )
+        if composite_kind == "hybrid-prefix" and not eligible_overlay_layer_ids:
+            failures.extend(
+                {
+                    "productId": spec.product_id,
+                    "layerId": spec.layer_id,
+                    "track": spec.track,
+                    "presetId": preset_id,
+                    "rangeHours": hours,
+                    "error": "ValueError: hybrid composite is not a strict recipe prefix",
+                }
+                for hours in requested_ranges
+            )
+            continue
         selected_ids = set(layer_ids)
         plans: list[CompositeFrame] = []
         try:
@@ -731,6 +1021,42 @@ def build_composite_profile(
             continue
         plans_by_preset[preset_id] = plans
         layers_by_preset[preset_id] = tuple(layer_ids)
+        kind_by_preset[preset_id] = composite_kind
+        eligible_layers_by_preset[preset_id] = eligible_overlay_layer_ids
+        if composite_kind == "hybrid-prefix":
+            try:
+                proxies, overlay_frames = _hybrid_overlay_bundle(
+                    source_root,
+                    output_root,
+                    spec,
+                    all_selections,
+                    eligible_overlay_layer_ids,
+                    opacities,
+                )
+            except Exception as error:
+                failures.extend(
+                    {
+                        "productId": spec.product_id,
+                        "layerId": spec.layer_id,
+                        "track": spec.track,
+                        "presetId": preset_id,
+                        "rangeHours": hours,
+                        "error": f"{type(error).__name__}: {error}",
+                    }
+                    for hours in requested_ranges
+                )
+                plans_by_preset.pop(preset_id, None)
+                layers_by_preset.pop(preset_id, None)
+                kind_by_preset.pop(preset_id, None)
+                eligible_layers_by_preset.pop(preset_id, None)
+                continue
+            proxies_by_preset[preset_id] = proxies
+            overlay_frames_by_preset[preset_id] = overlay_frames
+        else:
+            proxies_by_preset[preset_id] = {}
+            overlay_frames_by_preset[preset_id] = [
+                [] for _frame in selected
+            ]
 
     # Fill missing high-resolution cache entries frame-by-frame. This ordering
     # lets the two common presets share the currently decoded satellite and
@@ -837,6 +1163,10 @@ def build_composite_profile(
                         plans,
                         rendition_paths,
                         rendition_fingerprints,
+                        kind_by_preset[preset_id],
+                        eligible_layers_by_preset[preset_id],
+                        proxies_by_preset[preset_id],
+                        overlay_frames_by_preset[preset_id],
                         ffmpeg=ffmpeg,
                         generated_at=generated_at,
                     )
@@ -1027,6 +1357,7 @@ def build_composite_videos(
     layer_ids: Iterable[str] | None = None,
     track_names: Iterable[str] | None = None,
     ranges: Iterable[int] | None = None,
+    preset_ids: Iterable[str] | None = None,
     ffmpeg: str | None = None,
     now: dt.datetime | None = None,
     prune_cache: bool = True,
@@ -1041,6 +1372,17 @@ def build_composite_videos(
     )
     requested_layers = set(layer_ids or (spec.layer_id for spec in VIDEO_PROFILES))
     requested_tracks = set(track_names or ("live", "day"))
+    configured_preset_ids = {
+        str(value.get("id"))
+        for values in VIDEO_COMPOSITE_PRESETS.values()
+        for value in values
+        if isinstance(value, Mapping) and isinstance(value.get("id"), str)
+    }
+    requested_presets = set(preset_ids) if preset_ids is not None else None
+    if requested_presets is not None:
+        unknown_presets = requested_presets.difference(configured_preset_ids)
+        if unknown_presets:
+            raise ValueError(f"Unsupported composite presets: {sorted(unknown_presets)}")
     if not requested_tracks.issubset({"live", "day"}):
         raise ValueError("Composite sidecars support only live and day tracks")
     if ranges is not None:
@@ -1056,7 +1398,11 @@ def build_composite_videos(
         if spec.product_id in requested_products
         and spec.layer_id in requested_layers
         and spec.track in requested_tracks
-        and _composite_presets(spec)
+        and _composite_presets(
+            spec,
+            requested_presets,
+            include_hybrid=requested_presets is not None,
+        )
         and _requested_ranges(spec, requested_ranges)
     ]
     catalog = build_catalog(source_root)
@@ -1071,6 +1417,7 @@ def build_composite_videos(
                 spec,
                 ffmpeg=executable,
                 ranges=requested_ranges,
+                preset_ids=requested_presets,
                 now=now,
             )
             results.extend(result["profiles"])

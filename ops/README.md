@@ -55,10 +55,11 @@ five-minute publisher timeout.
 
 ## Display-resolution H.264 loops
 
-The optional video path accelerates the default satellite background in every loop domain. It does not encode
-radar, precipitation type, lightning, fires, model contours, or line work into
-the lossy video. Those layers are cropped to the same display grid and the
-browser swaps their prepared transparent surfaces over the hardware-decoded satellite.
+The video path uses exact, fully composited H.264 loops for the two common
+operational stacks. A reusable pilot core can instead bake the expensive lower
+part of the stack and add a small number of immutable transparent overlays in
+the browser. Unsupported combinations retain the satellite-video/proxy or
+lossless-image fallback.
 
 Install ffmpeg with libx264, then enable the video renderer without reinstalling the
 LaunchAgent:
@@ -73,19 +74,30 @@ RADARSAT_VIDEO_ARCHIVE_HOURS=168
 For the two configured operational layer stacks, the 3-, 6-, 12- and 24-hour
 loops are exact-range progressive MP4s with one variable-duration H.264 sample
 per weather frame. The browser uses native looping and performs no JavaScript
-seek at the boundary. BC products publish efficient 1280-pixel and high
-1920-pixel renditions; broad products publish only their useful display-scale
-rendition. Seven-day and uncommon layer combinations retain the HLS plus
-lossless-proxy fallback until the later CMAF migration.
+seek at the boundary. BC products publish only their full-quality,
+approximately 1920-pixel rendition; broad products publish only their useful
+display-scale rendition. New high-only generations let the duplicate
+1280-pixel BC assets age out under normal retention.
 
-The independent live, day and archive jobs cannot block one another. The live
-job runs every five minutes and builds four product groups in parallel on the
-Mac. It refreshes MSC GeoColor for the BC family, NOAA VIS/IR for North America,
-and NOAA VIS/IR for the two Pacific products. A separate one-minute MSC edge
-job renders and publishes only the newest Datamart GeoColor frame, so the live
-edge is not held behind video encoding. ECCC DayVis/NightIR and standalone
-NightIR are no longer subscribed, rendered or exposed; NOAA remains the IR-only
-choice.
+BC XL, Northeast BC and North America also pilot a reusable
+`weather-smoke-core-v1` prefix. It bakes satellite, enhanced smoke, radar and
+static geography into H.264, then draws lightning, fires and the combined
+MSLP/500-hPa contour overlay from the same immutable generation. Exact full-loop
+matches always take priority. The hybrid core is built explicitly in a
+lower-priority scheduler lane and therefore cannot delay exact operational
+loops. Seven-day and unsupported layer combinations retain the HLS or lossless
+image fallback until the later CMAF and hybrid-core expansion.
+
+One bounded video scheduler serializes live, day and archive media work so the
+jobs cannot contend for the same source tree or delete one another's inputs. It
+builds exact ranges first, using at most two product workers in parallel on the
+Mac, publishes each urgent range batch, then considers one lower-priority
+hybrid or archive unit. It refreshes MSC GeoColor for the BC family, NOAA VIS/IR
+for North America, and NOAA VIS/IR for the two Pacific products. A separate
+one-minute MSC edge job renders and publishes only the newest Datamart GeoColor
+frame, so the live edge is not held behind video encoding. ECCC DayVis/NightIR
+and standalone NightIR are no longer subscribed, rendered or exposed; NOAA
+remains the IR-only choice.
 
 The browser intentionally buffers complete live tracks because a 24-hour
 weather loop is only about 25–33 seconds of encoded playback and must remain

@@ -25,7 +25,9 @@ from .config import (
     VIDEO_ARCHIVE_PRODUCTS,
     VIDEO_COMPOSITE_PRESETS,
     VIDEO_EXACT_RANGES,
+    video_composite_kind,
     video_composite_layer_ids,
+    video_composite_overlay_layer_ids,
 )
 from .geomet import format_utc
 from .pipeline import write_status
@@ -1117,10 +1119,12 @@ def _composite_pointer_from_manifest(
         for key in required_times
     ):
         return None
+    schema_version = payload.get("schemaVersion")
     layer_ids = payload.get("layerIds")
-    if not isinstance(layer_ids, list):
+    if schema_version not in {1, 2} or not isinstance(layer_ids, list):
         return None
-    return {
+    pointer: dict[str, object] = {
+        "schemaVersion": schema_version,
         "presetId": payload.get("presetId"),
         "layerIds": list(layer_ids),
         "rangeHours": payload.get("rangeHours"),
@@ -1130,6 +1134,49 @@ def _composite_pointer_from_manifest(
         "endValidTime": payload.get("endValidTime"),
         "endSourceTime": payload.get("endSourceTime"),
     }
+    if payload.get("renditionPolicy") is not None:
+        pointer["renditionPolicy"] = payload.get("renditionPolicy")
+    if payload.get("compositeKind") == "hybrid-prefix":
+        baked_layer_ids = payload.get("bakedLayerIds")
+        eligible_overlay_layer_ids = payload.get("eligibleOverlayLayerIds")
+        if not isinstance(baked_layer_ids, list) or not isinstance(
+            eligible_overlay_layer_ids, list
+        ):
+            return None
+        pointer.update(
+            {
+                "compositeKind": "hybrid-prefix",
+                "bakedLayerIds": list(baked_layer_ids),
+                "eligibleOverlayLayerIds": list(eligible_overlay_layer_ids),
+            }
+        )
+    return pointer
+
+
+def _expected_single_rendition_id(product_id: str) -> str | None:
+    product = next(
+        (
+            value
+            for value in PRODUCTS
+            if isinstance(value, Mapping) and value.get("id") == product_id
+        ),
+        None,
+    )
+    if product is None:
+        return None
+    return "high" if product.get("domain") == "bc" else "display"
+
+
+def _valid_optional_source_time(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    try:
+        dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
 
 
 def _composite_sidecar_paths(
@@ -1143,7 +1190,13 @@ def _composite_sidecar_paths(
     if components is None:
         return None
     generation, preset_id, range_hours, manifest_relative = components
+    expected_kind = video_composite_kind(product_id, preset_id)
     expected_layer_ids = video_composite_layer_ids(
+        product_id,
+        layer_id,
+        preset_id,
+    )
+    expected_overlay_layer_ids = video_composite_overlay_layer_ids(
         product_id,
         layer_id,
         preset_id,
@@ -1157,6 +1210,7 @@ def _composite_sidecar_paths(
             and not (range_hours == 168 and product_id in VIDEO_ARCHIVE_PRODUCTS)
         )
         or preset_id not in _configured_composite_ids(product_id)
+        or expected_kind not in {"exact", "hybrid-prefix"}
         or not _video_asset_available(root, manifest_relative)
     ):
         return None
@@ -1164,9 +1218,12 @@ def _composite_sidecar_paths(
         payload = json.loads((root / manifest_relative).read_bytes())
     except (OSError, json.JSONDecodeError):
         return None
+    schema_version = payload.get("schemaVersion") if isinstance(payload, Mapping) else None
+    is_hybrid = expected_kind == "hybrid-prefix"
     if (
         not isinstance(payload, Mapping)
-        or payload.get("schemaVersion") != 1
+        or schema_version not in {1, 2}
+        or (is_hybrid and schema_version != 2)
         or payload.get("generation") != generation
         or payload.get("productId") != product_id
         or payload.get("layerId") != layer_id
@@ -1175,6 +1232,17 @@ def _composite_sidecar_paths(
         or payload.get("rangeHours") != range_hours
         or payload.get("boundaryIntervalMultiplier") != 4
     ):
+        return None
+    if is_hybrid:
+        if (
+            payload.get("compositeKind") != "hybrid-prefix"
+            or payload.get("bakedLayerIds") != payload.get("layerIds")
+            or payload.get("eligibleOverlayLayerIds")
+            != list(expected_overlay_layer_ids)
+            or not expected_overlay_layer_ids
+        ):
+            return None
+    elif payload.get("compositeKind") not in {None, "exact"}:
         return None
     known_layers = _known_product_layer_ids().get(product_id, set())
     layer_ids = payload.get("layerIds")
@@ -1190,6 +1258,11 @@ def _composite_sidecar_paths(
     if not isinstance(frames, list) or len(frames) < 2:
         return None
     previous_valid = ""
+    referenced_proxy_keys: set[str] = set()
+    proxy_entries = payload.get("proxies") if is_hybrid else None
+    if is_hybrid and not isinstance(proxy_entries, Mapping):
+        return None
+    eligible_overlay_set = set(expected_overlay_layer_ids)
     for frame in frames:
         if not isinstance(frame, Mapping):
             return None
@@ -1211,17 +1284,78 @@ def _composite_sidecar_paths(
             )
         ):
             return None
+        if is_hybrid:
+            selections = frame.get("proxyLayers")
+            if not isinstance(selections, list):
+                return None
+            ordinary_ids: set[str] = set()
+            for selection in selections:
+                if not isinstance(selection, Mapping):
+                    return None
+                recipe_id = selection.get("id")
+                render_id = selection.get("renderId")
+                source_key = selection.get("sourceKey")
+                covered_ids = selection.get("ids")
+                if (
+                    not isinstance(recipe_id, str)
+                    or not isinstance(render_id, str)
+                    or re.fullmatch(r"[a-z0-9][a-z0-9-]*", render_id) is None
+                    or not isinstance(source_key, str)
+                    or source_key not in proxy_entries
+                    or not _valid_optional_source_time(
+                        selection.get("sourceValidTime")
+                    )
+                ):
+                    return None
+                if covered_ids is None:
+                    if recipe_id not in eligible_overlay_set or recipe_id in ordinary_ids:
+                        return None
+                    ordinary_ids.add(recipe_id)
+                else:
+                    if (
+                        recipe_id != "model-contours"
+                        or covered_ids != ["model-mslp", "model-hgt500"]
+                        or not set(covered_ids).issubset(eligible_overlay_set)
+                    ):
+                        return None
+                    source_valid_times = selection.get("sourceValidTimes")
+                    if (
+                        not isinstance(source_valid_times, Mapping)
+                        or set(source_valid_times) != set(covered_ids)
+                        or any(
+                            not _valid_optional_source_time(value)
+                            for value in source_valid_times.values()
+                        )
+                    ):
+                        return None
+                descriptor = proxy_entries.get(source_key)
+                descriptor_path = (
+                    _safe_relative_value(descriptor.get("path"))
+                    if isinstance(descriptor, Mapping)
+                    else None
+                )
+                if (
+                    descriptor_path is None
+                    or source_key != descriptor_path
+                    or len(Path(descriptor_path).parts) != 4
+                    or Path(descriptor_path).parts[2] != render_id
+                ):
+                    return None
+                referenced_proxy_keys.add(source_key)
         previous_valid = valid_time
     if (
         payload.get("endValidTime") != frames[-1].get("validTime")
         or not isinstance(payload.get("endSourceTime"), str)
     ):
         return None
+    if is_hybrid and referenced_proxy_keys != set(proxy_entries):
+        return None
     renditions = payload.get("renditions")
     if not isinstance(renditions, list) or not renditions:
         return None
     paths = [manifest_relative]
     rendition_ids: set[str] = set()
+    content_sizes: set[tuple[int, int]] = set()
     for rendition in renditions:
         if not isinstance(rendition, Mapping):
             return None
@@ -1237,6 +1371,9 @@ def _composite_sidecar_paths(
         media_relative = _safe_relative_value(media.get("path"))
         media_parts = Path(media_relative).parts if media_relative else ()
         mime = media.get("mimeType")
+        media_width = media.get("width")
+        media_height = media.get("height")
+        content_height = media.get("contentHeight")
         if range_hours <= 24:
             expected_prefix = (
                 "videos",
@@ -1265,11 +1402,22 @@ def _composite_sidecar_paths(
         if (
             not valid_shape
             or media_relative is None
+            or not isinstance(media_width, int)
+            or isinstance(media_width, bool)
+            or media_width <= 0
+            or not isinstance(media_height, int)
+            or isinstance(media_height, bool)
+            or media_height <= 0
+            or not isinstance(content_height, int)
+            or isinstance(content_height, bool)
+            or content_height <= 0
+            or content_height > media_height
             or not isinstance(media.get("sha256"), str)
             or re.fullmatch(r"[0-9a-f]{64}", str(media.get("sha256"))) is None
             or not _video_asset_available(root, media_relative, media.get("byteLength"))
         ):
             return None
+        content_sizes.add((media_width, content_height))
         paths.append(media_relative)
         if mime == "application/vnd.apple.mpegurl":
             segments = media.get("segments")
@@ -1298,6 +1446,38 @@ def _composite_sidecar_paths(
             if referenced != segment_paths:
                 return None
             paths.extend(segment_paths)
+    rendition_policy = payload.get("renditionPolicy")
+    if is_hybrid and rendition_policy != "high-only":
+        return None
+    if rendition_policy is not None:
+        expected_rendition_id = _expected_single_rendition_id(product_id)
+        if (
+            rendition_policy != "high-only"
+            or expected_rendition_id is None
+            or rendition_ids != {expected_rendition_id}
+        ):
+            return None
+    if is_hybrid:
+        proxy_paths = _proxy_paths(root, product_id, proxy_entries)
+        if proxy_paths is None or len(content_sizes) != 1:
+            return None
+        expected_proxy_size = next(iter(content_sizes))
+        assert isinstance(proxy_entries, Mapping)
+        for source_key, descriptor in proxy_entries.items():
+            if not isinstance(source_key, str) or not isinstance(descriptor, Mapping):
+                return None
+            relative = _safe_relative_value(descriptor.get("path"))
+            declared_sha = descriptor.get("sha256")
+            if (
+                relative != source_key
+                or descriptor.get("width") != expected_proxy_size[0]
+                or descriptor.get("height") != expected_proxy_size[1]
+                or not isinstance(declared_sha, str)
+                or re.fullmatch(r"[0-9a-f]{64}", declared_sha) is None
+                or sha256_file(root / relative) != declared_sha
+            ):
+                return None
+        paths.extend(proxy_paths)
     sanitized = _composite_pointer_from_manifest(manifest_relative, payload)
     if sanitized is None:
         return None
@@ -2348,10 +2528,19 @@ def safe_precommit_composite_keys(
         if validated is None:
             continue
         dependencies = set(validated[0])
+        # Hybrid sidecars also own content-addressed proxy dependencies that
+        # may be shared with the current generation.  They are intentionally
+        # left for post-commit/full reconciliation; only the unreachable
+        # manifest and immutable MP4 can be removed before the next upload.
+        generation_owned = {
+            value
+            for value in dependencies
+            if value == manifest_relative or _is_exact_composite_media(value)
+        }
         # Never broaden a precommit deletion beyond the prospective cleanup's
         # independently established unreachable set.
-        if dependencies.issubset(candidates):
-            safe.update(dependencies)
+        if generation_owned and generation_owned.issubset(candidates):
+            safe.update(generation_owned)
     return sorted(safe)
 
 

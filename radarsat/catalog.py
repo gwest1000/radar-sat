@@ -18,7 +18,9 @@ from .config import (
     VIDEO_EXACT_RANGES,
     VIDEO_TRACKS_BY_PRODUCT,
     VIEWPORTS,
+    video_composite_kind,
     video_composite_layer_ids,
+    video_composite_overlay_layer_ids,
 )
 
 
@@ -302,19 +304,31 @@ def _valid_composite_manifest_pointer(
     range_hours: int,
     pointer: object,
 ) -> dict[str, Any] | None:
-    """Validate one independently publishable exact-composite pointer."""
+    """Validate one independently publishable exact or hybrid pointer."""
     if not isinstance(pointer, dict):
         return None
+    schema_version = pointer.get("schemaVersion")
     generation = pointer.get("generation")
     manifest_value = pointer.get("manifestPath")
     layer_ids = pointer.get("layerIds")
+    rendition_policy = pointer.get("renditionPolicy")
+    expected_kind = video_composite_kind(product_id, preset_id)
     expected_layer_ids = video_composite_layer_ids(
         product_id,
         layer_id,
         preset_id,
     )
+    expected_overlay_layer_ids = video_composite_overlay_layer_ids(
+        product_id,
+        layer_id,
+        preset_id,
+    )
+    is_hybrid = expected_kind == "hybrid-prefix"
     if (
-        not isinstance(generation, str)
+        schema_version not in {1, 2}
+        or not expected_kind
+        or (is_hybrid and schema_version != 2)
+        or not isinstance(generation, str)
         or not VIDEO_GENERATION_RE.fullmatch(generation)
         or not isinstance(manifest_value, str)
         or pointer.get("presetId") != preset_id
@@ -324,7 +338,19 @@ def _valid_composite_manifest_pointer(
         or any(not isinstance(value, str) or not value for value in layer_ids)
         or len(set(layer_ids)) != len(layer_ids)
         or tuple(layer_ids) != expected_layer_ids
+        or rendition_policy not in {None, "high-only"}
     ):
+        return None
+    if is_hybrid:
+        if (
+            pointer.get("compositeKind") != "hybrid-prefix"
+            or pointer.get("bakedLayerIds") != layer_ids
+            or pointer.get("eligibleOverlayLayerIds")
+            != list(expected_overlay_layer_ids)
+            or not expected_overlay_layer_ids
+        ):
+            return None
+    elif pointer.get("compositeKind") not in {None, "exact"}:
         return None
     relative = Path(manifest_value)
     expected_parts = (
@@ -355,8 +381,8 @@ def _valid_composite_manifest_pointer(
         payload = json.loads(manifest.read_bytes())
     except (OSError, json.JSONDecodeError):
         return None
-    header_fields = (
-        ("schemaVersion", 1),
+    header_fields: tuple[tuple[str, object], ...] = (
+        ("schemaVersion", schema_version),
         ("generation", generation),
         ("productId", product_id),
         ("layerId", layer_id),
@@ -365,6 +391,14 @@ def _valid_composite_manifest_pointer(
         ("rangeHours", range_hours),
         ("layerIds", layer_ids),
     )
+    if is_hybrid:
+        header_fields += (
+            ("compositeKind", "hybrid-prefix"),
+            ("bakedLayerIds", layer_ids),
+            ("eligibleOverlayLayerIds", list(expected_overlay_layer_ids)),
+        )
+    if rendition_policy is not None:
+        header_fields += (("renditionPolicy", rendition_policy),)
     if not isinstance(payload, dict) or any(
         payload.get(key) != expected for key, expected in header_fields
     ):
@@ -375,9 +409,16 @@ def _valid_composite_manifest_pointer(
     if any(
         _parse_frame_time(value) is None
         for value in (generated_at, end_valid_time, end_source_time)
+    ) or any(
+        payload.get(key) != value
+        for key, value in (
+            ("generatedAt", generated_at),
+            ("endValidTime", end_valid_time),
+            ("endSourceTime", end_source_time),
+        )
     ):
         return None
-    return {
+    validated = {
         "presetId": preset_id,
         "layerIds": list(layer_ids),
         "rangeHours": range_hours,
@@ -387,6 +428,17 @@ def _valid_composite_manifest_pointer(
         "endValidTime": str(end_valid_time),
         "endSourceTime": str(end_source_time),
     }
+    if is_hybrid:
+        validated.update(
+            {
+                "compositeKind": "hybrid-prefix",
+                "bakedLayerIds": list(layer_ids),
+                "eligibleOverlayLayerIds": list(expected_overlay_layer_ids),
+            }
+        )
+    if rendition_policy is not None:
+        validated["renditionPolicy"] = rendition_policy
+    return validated
 
 
 def read_composite_profiles(root: Path) -> dict[str, Any]:
@@ -408,7 +460,10 @@ def read_composite_profiles(root: Path) -> dict[str, Any]:
             pointer = json.loads(index_path.read_bytes())
         except (OSError, json.JSONDecodeError):
             continue
-        if not isinstance(pointer, dict) or pointer.get("schemaVersion") != 1:
+        if (
+            not isinstance(pointer, dict)
+            or pointer.get("schemaVersion") not in {1, 2}
+        ):
             continue
         product_id = pointer.get("productId")
         layer_id = pointer.get("layerId")
@@ -489,7 +544,11 @@ def _retire_replaced_legacy_profiles(
     ceiling. Archive HLS remains the seven-day playback path.
     """
     for product_id, layers in list(video_profiles.items()):
-        configured = _configured_composite_presets(product_id)
+        configured = {
+            preset_id
+            for preset_id in _configured_composite_presets(product_id)
+            if video_composite_kind(product_id, preset_id) == "exact"
+        }
         for layer_id, tracks in list(layers.items()):
             composite_tracks = (
                 composite_profiles.get(product_id, {}).get(layer_id, {})

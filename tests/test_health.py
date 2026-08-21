@@ -78,10 +78,21 @@ class HealthTests(unittest.TestCase):
             for preset in (
                 "operational-default-v1",
                 "operational-core-v1",
+                "weather-smoke-core-v1",
             ):
                 manifest = root / "composite-manifests" / f"{preset}.json"
                 manifest.parent.mkdir(parents=True, exist_ok=True)
                 manifest.write_text(json.dumps({
+                    **(
+                        {
+                            "compositeKind": "hybrid-prefix",
+                            "renditionPolicy": "high-only",
+                            "renditions": [{"id": "high"}],
+                            "proxies": {},
+                        }
+                        if preset == "weather-smoke-core-v1"
+                        else {}
+                    ),
                     "frames": [
                         {"sourceValidTime": "2026-08-20T22:40:00Z"},
                         {"sourceValidTime": "2026-08-20T23:00:00Z"},
@@ -106,6 +117,8 @@ class HealthTests(unittest.TestCase):
         exact = result["videoCoverage"]["bc-large-overlay"]["exact"]["3h"]
         self.assertEqual(exact["operational-default-v1"]["frames"], 2)
         self.assertEqual(exact["operational-core-v1"]["frames"], 2)
+        hybrid = result["videoCoverage"]["bc-large-overlay"]["hybrid"]["3h"]
+        self.assertEqual(hybrid["weather-smoke-core-v1"]["frames"], 2)
         self.assertFalse(any(
             "bc-large-overlay/3h" in warning for warning in result["warnings"]
         ))

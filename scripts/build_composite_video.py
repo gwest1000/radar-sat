@@ -11,7 +11,7 @@ from radarsat.composite_video import (
     prune_composite_frame_cache,
     prune_composite_sidecar_manifests,
 )
-from radarsat.config import VIDEO_EXACT_RANGES
+from radarsat.config import VIDEO_COMPOSITE_PRESETS, VIDEO_EXACT_RANGES
 from radarsat.paths import output_root as default_output_root
 from radarsat.video import VIDEO_PROFILES, _composite_presets
 
@@ -68,6 +68,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Exact range to build; repeat to select several.",
     )
     parser.add_argument(
+        "--preset",
+        action="append",
+        choices=sorted(
+            {
+                str(value["id"])
+                for values in VIDEO_COMPOSITE_PRESETS.values()
+                for value in values
+            }
+        ),
+        help=(
+            "Composite preset to build; repeat to select several. This lets "
+            "the scheduler publish exact loops before lower-priority hybrids."
+        ),
+    )
+    parser.add_argument(
         "--ffmpeg",
         help="Explicit ffmpeg executable; defaults to PATH discovery.",
     )
@@ -117,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         layer_ids=args.layer,
         track_names=args.track,
         ranges=args.range_hours,
+        preset_ids=args.preset,
         ffmpeg=args.ffmpeg,
         prune_cache=not args.defer_cache_prune,
     )

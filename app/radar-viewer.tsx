@@ -17,6 +17,7 @@ import {
   VideoCanvasProxyLayer,
   VideoCompositeFramePlan,
   VideoCompositeStage,
+  prewarmVideoCompositeSurfaces,
 } from "./video-composite-stage";
 import {
   CompositeLoopManifest,
@@ -26,12 +27,24 @@ import {
   loadCompositeLoopManifest,
   loadVideoLoopManifest,
   matchingCompositeProfile,
+  matchingHybridCompositeProfile,
   selectVideoFrames,
   sourceCacheKey,
   supportsVideoLoop,
+  videoFrameSourceTimeMap,
   VideoLoopManifest,
   VideoProfilePointer,
+  VideoProxyLayerSelection,
 } from "./video-loop";
+import {
+  canRetainLoadedComposite,
+  pendingMediaFailureTransition,
+  preferredCompositeProfile,
+  rememberCompositeMediaFailure,
+  rememberFailedKey,
+  requiresPendingMediaPreload,
+  shouldQueueCompositeHandoff,
+} from "./video-selection-policy";
 
 type Frame = {
   validTime: string;
@@ -79,7 +92,7 @@ type FireMarker = {
   count: number;
 };
 
-type PlaybackQuality = "auto" | "efficient" | "high";
+type PlaybackQuality = "high";
 
 type ViewerPreferences = {
   productId: string;
@@ -271,9 +284,7 @@ const PLAYBACK_QUALITY_OPTIONS: ReadonlyArray<{
   shortLabel: string;
   description: string;
 }> = [
-  { id: "auto", label: "Auto", shortLabel: "Auto", description: "Match the display and decoder capabilities." },
-  { id: "efficient", label: "Power efficient", shortLabel: "Efficient", description: "Use the lighter 1280-pixel rendition when available." },
-  { id: "high", label: "High quality", shortLabel: "High", description: "Prefer the highest-resolution prebuilt rendition." },
+  { id: "high", label: "High quality", shortLabel: "High", description: "Use the full-quality prebuilt video rendition; broad views use their display-resolution video." },
 ];
 const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA GOES-18": "Calibrated ABI satellite imagery, GLM total lightning and smoke-detection products.",
@@ -947,6 +958,106 @@ function sameLayerSet(left: readonly string[], right: readonly string[]): boolea
     && left.every((id) => expected.has(id));
 }
 
+function sameLayerOrder(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length
+    && left.every((id, index) => id === right[index]);
+}
+
+function hybridCompositeCompatible(
+  manifest: Pick<CompositeLoopManifest, "compositeKind" | "layerIds" | "bakedLayerIds" | "eligibleOverlayLayerIds">,
+  orderedLayerIds: readonly string[],
+): boolean {
+  if (manifest.compositeKind !== "hybrid-prefix") return false;
+  const baked = manifest.bakedLayerIds ?? manifest.layerIds;
+  const eligible = new Set(manifest.eligibleOverlayLayerIds ?? []);
+  return baked.length <= orderedLayerIds.length
+    && baked.every((id, index) => orderedLayerIds[index] === id)
+    && orderedLayerIds.slice(baked.length).every((id) => eligible.has(id));
+}
+
+function selectedProxyLayers(
+  selections: readonly VideoProxyLayerSelection[],
+  enabledLayerIds: ReadonlySet<string>,
+): VideoProxyLayerSelection[] {
+  const coveredIds = new Set<string>();
+  const selected: VideoProxyLayerSelection[] = [];
+  const ordered = [...selections].sort((left, right) => (
+    (right.ids?.length ?? 1) - (left.ids?.length ?? 1)
+  ));
+  for (const selection of ordered) {
+    const componentIds = selection.ids ?? [selection.id];
+    if (
+      !componentIds.every((id) => enabledLayerIds.has(id))
+      || componentIds.some((id) => coveredIds.has(id))
+    ) continue;
+    selected.push(selection);
+    componentIds.forEach((id) => coveredIds.add(id));
+  }
+  return selected;
+}
+
+function hybridVideoFramePlans(
+  manifest: VideoLoopManifest,
+  product: Product,
+  videoLayerId: string,
+  enabledLayerIds: readonly string[],
+  optionalLayers: Record<string, boolean>,
+  catalogBase: string,
+): VideoCompositeFramePlan[] {
+  const satelliteRecipeIndex = product.layers.findIndex((recipe) => recipe.id === videoLayerId);
+  if (satelliteRecipeIndex < 0) return [];
+  const enabledIds = new Set(enabledLayerIds);
+  const recipeById = new Map(product.layers.map((recipe, index) => [
+    recipe.id,
+    { recipe, index },
+  ]));
+  const plans: VideoCompositeFramePlan[] = [];
+  for (const frame of manifest.frames) {
+    const overlays: VideoCanvasProxyLayer[] = [];
+    const selected = selectedProxyLayers(frame.proxyLayers, enabledIds).flatMap((selection) => {
+      const configuredComponents = (selection.ids ?? [selection.id]).flatMap((id) => {
+        const configured = recipeById.get(id);
+        return configured ? [configured] : [];
+      });
+      if (configuredComponents.length !== (selection.ids?.length ?? 1)) return [];
+      const configured = configuredComponents.reduce((earliest, candidate) => (
+        candidate.index < earliest.index ? candidate : earliest
+      ));
+      return [{ selection, configured, configuredComponents }];
+    // Compound proxies win selection before their individual members, then
+    // return to canonical recipe order for drawing so model contours remain
+    // above lightning and fire.
+    }).sort((left, right) => left.configured.index - right.configured.index);
+    for (const { selection, configured, configuredComponents } of selected) {
+      if (
+        configured.index <= satelliteRecipeIndex
+        || !configuredComponents.every(({ recipe }) => (
+          isProductLayerEnabled(recipe, optionalLayers, product.layers)
+        ))
+      ) return [];
+      const proxy = manifest.proxies[selection.sourceKey];
+      if (
+        !proxy
+        || proxy.width !== manifest.width
+        || proxy.height !== manifest.height
+      ) return [];
+      overlays.push({
+        url: absoluteUrl(proxy.path, catalogBase),
+        opacity: selection.ids ? 1 : configured.recipe.opacity,
+        width: proxy.width,
+        height: proxy.height,
+      });
+    }
+    plans.push({
+      frame,
+      cacheKey: overlays.map((layer) => `o:${layer.url}:${layer.opacity}`).join("|"),
+      underlays: [],
+      overlays,
+    });
+  }
+  return plans;
+}
+
 function exactCompositeSelectionKey(
   source: "sidecar" | "legacy",
   selection: NonNullable<ReturnType<typeof compositeLoopVideoManifest>>,
@@ -955,12 +1066,60 @@ function exactCompositeSelectionKey(
     + `/${selection.renditionId}/${selection.manifest.media.path}`;
 }
 
+function videoProfileFailureKey(
+  productId: string,
+  layerId: string,
+  track: string,
+  generation: string,
+): string {
+  return `${productId}/${layerId}/${track}/${generation}`;
+}
+
+function compositeProfileFailureKey(
+  productId: string,
+  layerId: string,
+  track: string,
+  presetId: string,
+  rangeHours: number,
+  generation: string,
+): string {
+  return `${productId}/${layerId}/${track}/${presetId}/${rangeHours}h/${generation}`;
+}
+
 function normalizeLayerChoices(
   current: Record<string, boolean>,
   product: Product,
   products: Product[],
 ): Record<string, boolean> {
   let next = current;
+  const sharedControls = new Map<string, ProductLayer[]>();
+  for (const recipe of products.flatMap((item) => item.layers)) {
+    const controlId = recipe.controlId;
+    // Most shared control IDs are aliases for one logical source across
+    // different products (for example the NOAA satellite controls). They must
+    // not synchronize their underlying recipe IDs globally. The model pair is
+    // the sole compound control: both fields are intentionally toggled as one.
+    if (controlId !== "model-contours") continue;
+    const peers = sharedControls.get(controlId) ?? [];
+    peers.push(recipe);
+    sharedControls.set(controlId, peers);
+  }
+  for (const [controlId, peers] of sharedControls) {
+    const memberIds = [...new Set(peers.map((recipe) => recipe.id))];
+    if (memberIds.length < 2) continue;
+    const stored = memberIds.flatMap((id) => (
+      current[id] === undefined ? [] : [current[id]]
+    ));
+    const explicitControl = current[controlId];
+    if (explicitControl === undefined && !stored.length) continue;
+    // Preserve an older user's visible model display if the former separate
+    // controls disagree, then rewrite both underlying recipes through their
+    // new shared logical control. An explicit current control always wins.
+    const enabled = explicitControl ?? stored.some(Boolean);
+    if (next === current) next = { ...current };
+    next[controlId] = enabled;
+    for (const id of memberIds) next[id] = enabled;
+  }
   const choiceGroups = new Set(
     product.layers.flatMap((recipe) => recipe.choiceGroup ? [recipe.choiceGroup] : []),
   );
@@ -1165,6 +1324,25 @@ function actualSourceTime(layerId: string, frame: Frame): string {
   return frame.validTime;
 }
 
+function compositeProfileFreshEnough(
+  pointer: CompositeProfilePointer | null | undefined,
+  fallbackFrames: readonly Frame[],
+  anchorLayerId: string,
+  rangeHours: number,
+): boolean {
+  if (!pointer || !fallbackFrames.length) return Boolean(pointer);
+  const newestFallback = fallbackFrames[fallbackFrames.length - 1];
+  const imageNewest = newestFallback
+    ? Date.parse(actualSourceTime(anchorLayerId, newestFallback))
+    : NaN;
+  const compositeNewest = Date.parse(pointer.endSourceTime);
+  if (!Number.isFinite(imageNewest) || !Number.isFinite(compositeNewest)) return false;
+  const allowanceMinutes = COMPOSITE_FRESHNESS_MINUTES[rangeHours]
+    ?? Math.max(20, Math.ceil(rangeHours / 24) * 10);
+  return imageNewest - compositeNewest
+    <= allowanceMinutes * 60_000 + SAME_SLOT_TOLERANCE_MS;
+}
+
 function atOrBefore(frames: Frame[], target: string, maxAgeMinutes?: number): Frame | undefined {
   const targetTime = Date.parse(target);
   if (!Number.isFinite(targetTime)) return undefined;
@@ -1312,8 +1490,9 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "radar-coverage") return "Radar coverage";
   if (layerId === "ptype-coverage") return "Precipitation-type coverage";
   if (layerId === "ptype") return "Precip type";
-  if (layerId === "model-hgt500") return "500 hPa Height";
-  if (layerId === "model-mslp") return "MSLP";
+  if (["model-hgt500", "model-mslp", "model-contours"].includes(layerId)) {
+    return "MSLP + 500 hPa";
+  }
   if (layerId === "lightning-trail") return "Lightning";
   if (layerId === "lightning") return "Flash density";
   if (layerId === "glm-lightning-trail") return "Lightning";
@@ -1751,9 +1930,7 @@ export function RadarViewer() {
   const [speedIndex, setSpeedIndex] = useState(3);
   const [rangeHours, setRangeHours] = useState(3);
   const [optionalLayers, setOptionalLayers] = useState<Record<string, boolean>>({});
-  const [playbackQuality, setPlaybackQuality] = useState<PlaybackQuality>("auto");
-  const [stageCssWidth, setStageCssWidth] = useState(0);
-  const [highRenditionPowerEfficient, setHighRenditionPowerEfficient] = useState<boolean | null>(null);
+  const playbackQuality: PlaybackQuality = "high";
   const [lightningMarkers, setLightningMarkers] = useState<LightningMarker[]>([]);
   const [ecccFallbackLightningMarkers, setEcccFallbackLightningMarkers] = useState<LightningMarker[]>([]);
   const [fireMarkers, setFireMarkers] = useState<FireMarker[]>([]);
@@ -1767,14 +1944,11 @@ export function RadarViewer() {
   const [pendingVideoManifest, setPendingVideoManifest] = useState<VideoLoopManifest | null>(null);
   const [loadedCompositeManifest, setLoadedCompositeManifest] = useState<CompositeLoopManifest | null>(null);
   const [pendingCompositeManifest, setPendingCompositeManifest] = useState<CompositeLoopManifest | null>(null);
-  const [failedVideoGeneration, setFailedVideoGeneration] = useState("");
-  const [failedCompositeGeneration, setFailedCompositeGeneration] = useState("");
+  const [failedVideoProfiles, setFailedVideoProfiles] = useState<string[]>([]);
+  const [failedCompositeProfiles, setFailedCompositeProfiles] = useState<string[]>([]);
   const [acceptedCompositeGeneration, setAcceptedCompositeGeneration] = useState("");
   const [videoFallbackReason, setVideoFallbackReason] = useState("");
-  const [failedDefaultComposite, setFailedDefaultComposite] = useState<{
-    key: string;
-    reason: string;
-  } | null>(null);
+  const [failedCompositeMedia, setFailedCompositeMedia] = useState<Record<string, string>>({});
   const presentedVideoIndexRef = useRef(NEWEST_FRAME);
   const lastVideoHudUpdateAtRef = useRef(0);
   const frameCountRef = useRef<HTMLSpanElement>(null);
@@ -1786,7 +1960,9 @@ export function RadarViewer() {
   const pendingVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const loadedCompositeManifestRef = useRef<CompositeLoopManifest | null>(null);
   const pendingCompositeManifestRef = useRef<CompositeLoopManifest | null>(null);
+  const acceptedCompositeGenerationRef = useRef("");
   const pendingMediaReadyKeyRef = useRef("");
+  const pendingOverlayReadyKeyRef = useRef("");
   const fullCatalogLoadRef = useRef("");
   const preferencesRef = useRef<ViewerPreferences>({
     productId: "bc-large-overlay",
@@ -1794,7 +1970,7 @@ export function RadarViewer() {
     rangeHours: 3,
     optionalLayers: {},
     playing: true,
-    playbackQuality: "auto",
+    playbackQuality: "high",
   });
   const preferencesLoadedRef = useRef(false);
 
@@ -1906,11 +2082,6 @@ export function RadarViewer() {
                   ));
                 }
                 setFrameIndex(NEWEST_FRAME);
-                setPlaybackQuality(
-                  ["auto", "efficient", "high"].includes(String(stored.playbackQuality))
-                    ? stored.playbackQuality as PlaybackQuality
-                    : "auto",
-                );
                 setPlaying(
                   typeof stored.playing === "boolean"
                     ? stored.playing
@@ -1998,22 +2169,16 @@ export function RadarViewer() {
   }, [optionalLayers, playbackQuality, playing, productId, rangeHours, speedIndex]);
 
   useEffect(() => {
-    const stage = mapStageRef.current;
-    if (!stage || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => {
-      setStageCssWidth(Math.round(entry.contentRect.width));
-    });
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, [productId]);
-
-  useEffect(() => {
     loadedVideoManifestRef.current = loadedVideoManifest;
   }, [loadedVideoManifest]);
 
   useEffect(() => {
     loadedCompositeManifestRef.current = loadedCompositeManifest;
   }, [loadedCompositeManifest]);
+
+  useEffect(() => {
+    acceptedCompositeGenerationRef.current = acceptedCompositeGeneration;
+  }, [acceptedCompositeGeneration]);
 
   useEffect(() => {
     // A visible loop keeps playing on a second monitor even while another
@@ -2082,13 +2247,87 @@ export function RadarViewer() {
   const enabledVideoLayerIds = useMemo(() => product?.layers
     .filter((recipe) => isProductLayerEnabled(recipe, optionalLayers, product.layers))
     .map((recipe) => recipe.id) ?? [], [optionalLayers, product]);
-  const compositePointer = product && videoLayerId
+  const fallbackAnchorFrames = useMemo(() => {
+    if (!liveEdgeDomain || !product) return [];
+    const frames = activeAnchorId === "raw-visir-5min"
+      ? mergedFrames(
+          liveEdgeDomain.layers["raw-visir"]?.frames ?? [],
+          liveEdgeDomain.layers["raw-visir-5min"]?.frames ?? [],
+        )
+      : liveEdgeDomain.layers[activeAnchorId]?.frames ?? [];
+    if (!frames.length) return [];
+    return playbackFrames(
+      frames,
+      effectiveRangeHours,
+      product.frameIntervalMinutes,
+      product.dayFrameIntervalMinutes,
+      product.archiveFrameIntervalMinutes,
+    );
+  }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, product]);
+  const compositeProfilePointers = product && videoLayerId
+    ? catalog?.compositeProfiles?.[product.id]?.[videoLayerId]?.[videoTrack] ?? []
+    : [];
+  const exactCompositePointerCandidate = product && videoLayerId
     ? matchingCompositeProfile(
-        catalog?.compositeProfiles?.[product.id]?.[videoLayerId]?.[videoTrack] ?? [],
+        compositeProfilePointers,
         enabledVideoLayerIds,
         effectiveRangeHours,
       )
     : null;
+  const hybridCompositePointerCandidate = product && videoLayerId
+    ? matchingHybridCompositeProfile(
+        compositeProfilePointers,
+        enabledVideoLayerIds,
+        effectiveRangeHours,
+      )
+    : null;
+  const exactCompositeProfileKey = exactCompositePointerCandidate && product && videoLayerId
+    ? compositeProfileFailureKey(
+        product.id,
+        videoLayerId,
+        videoTrack,
+        exactCompositePointerCandidate.presetId,
+        effectiveRangeHours,
+        exactCompositePointerCandidate.generation,
+      )
+    : "";
+  const hybridCompositeProfileKey = hybridCompositePointerCandidate && product && videoLayerId
+    ? compositeProfileFailureKey(
+        product.id,
+        videoLayerId,
+        videoTrack,
+        hybridCompositePointerCandidate.presetId,
+        effectiveRangeHours,
+        hybridCompositePointerCandidate.generation,
+      )
+    : "";
+  // A viable exact match wins. A stale, malformed, missing, or failed exact
+  // profile must not suppress a compatible immutable core profile.
+  const selectedCompositeProfile = preferredCompositeProfile(
+    exactCompositePointerCandidate ? {
+      pointer: exactCompositePointerCandidate,
+      failureKey: exactCompositeProfileKey,
+      fresh: compositeProfileFreshEnough(
+        exactCompositePointerCandidate,
+        fallbackAnchorFrames,
+        activeAnchorId,
+        effectiveRangeHours,
+      ),
+    } : null,
+    hybridCompositePointerCandidate ? {
+      pointer: hybridCompositePointerCandidate,
+      failureKey: hybridCompositeProfileKey,
+      fresh: compositeProfileFreshEnough(
+        hybridCompositePointerCandidate,
+        fallbackAnchorFrames,
+        activeAnchorId,
+        effectiveRangeHours,
+      ),
+    } : null,
+    failedCompositeProfiles,
+  );
+  const compositePointer = selectedCompositeProfile?.pointer ?? null;
+  const compositeProfileKey = selectedCompositeProfile?.failureKey ?? "";
   const compositePointerKey = compositePointer
     ? `${product?.id}/${videoLayerId}/${videoTrack}/${compositePointer.presetId}/${effectiveRangeHours}h/${compositePointer.generation}/${compositePointer.manifestPath}`
     : "";
@@ -2098,10 +2337,18 @@ export function RadarViewer() {
   const videoPointerKey = videoPointer
     ? `${product?.id}/${videoLayerId}/${videoTrack}/${videoPointer.generation}/${videoPointer.manifestPath}`
     : "";
+  const videoProfileKey = videoPointer && product && videoLayerId
+    ? videoProfileFailureKey(product.id, videoLayerId, videoTrack, videoPointer.generation)
+    : "";
 
   useEffect(() => {
     let cancelled = false;
-    if (!videoPointer || !videoLayerId || !product || failedVideoGeneration === videoPointer.generation) {
+    if (
+      !videoPointer
+      || !videoLayerId
+      || !product
+      || failedVideoProfiles.includes(videoProfileKey)
+    ) {
       return;
     }
     const manifestUrl = absoluteUrl(videoPointer.manifestPath, catalogBase);
@@ -2131,16 +2378,24 @@ export function RadarViewer() {
         setPendingVideoManifest(null);
         setLoadedVideoManifest(manifest);
       }
-      setFailedVideoGeneration("");
       setVideoFallbackReason("");
     }).catch((reason) => {
       if (!cancelled) {
-        setFailedVideoGeneration(videoPointer.generation);
+        setFailedVideoProfiles((current) => rememberFailedKey(current, videoProfileKey));
         setVideoFallbackReason(reason instanceof Error ? reason.message : "Video manifest failed.");
       }
     });
     return () => { cancelled = true; };
-  }, [catalogBase, failedVideoGeneration, product, videoLayerId, videoPointer, videoPointerKey, videoTrack]);
+  }, [
+    catalogBase,
+    failedVideoProfiles,
+    product,
+    videoLayerId,
+    videoPointer,
+    videoPointerKey,
+    videoProfileKey,
+    videoTrack,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2148,7 +2403,7 @@ export function RadarViewer() {
       !compositePointer
       || !videoLayerId
       || !product
-      || failedCompositeGeneration === compositePointer.generation
+      || failedCompositeProfiles.includes(compositeProfileKey)
     ) return;
     const manifestUrl = absoluteUrl(compositePointer.manifestPath, catalogBase);
     void loadCompositeLoopManifest(manifestUrl).then((manifest) => {
@@ -2161,6 +2416,21 @@ export function RadarViewer() {
         || manifest.presetId !== compositePointer.presetId
         || manifest.rangeHours !== effectiveRangeHours
         || !sameLayerSet(manifest.layerIds, compositePointer.layerIds)
+        || (manifest.compositeKind ?? "exact") !== (compositePointer.compositeKind ?? "exact")
+        || (
+          manifest.compositeKind === "hybrid-prefix"
+          && (
+            !sameLayerOrder(
+              manifest.bakedLayerIds ?? manifest.layerIds,
+              compositePointer.bakedLayerIds ?? compositePointer.layerIds,
+            )
+            || !sameLayerOrder(
+              manifest.eligibleOverlayLayerIds ?? [],
+              compositePointer.eligibleOverlayLayerIds ?? [],
+            )
+            || !hybridCompositeCompatible(manifest, enabledVideoLayerIds)
+          )
+        )
         || Date.parse(manifest.generatedAt) !== Date.parse(compositePointer.generatedAt)
         || Date.parse(manifest.endValidTime) !== Date.parse(compositePointer.endValidTime)
         || Date.parse(manifest.endSourceTime) !== Date.parse(compositePointer.endSourceTime)
@@ -2169,15 +2439,17 @@ export function RadarViewer() {
         throw new Error("Composite profile does not match the selected loop.");
       }
       const active = loadedCompositeManifestRef.current;
-      if (
-        active
-        && active.productId === manifest.productId
-        && active.layerId === manifest.layerId
-        && active.track === manifest.track
-        && active.presetId === manifest.presetId
-        && active.rangeHours === manifest.rangeHours
-        && active.generation !== manifest.generation
-      ) {
+      const activeMatchesSelection = Boolean(active && (
+        active.compositeKind === "hybrid-prefix"
+          ? hybridCompositeCompatible(active, enabledVideoLayerIds)
+          : sameLayerSet(active.layerIds, enabledVideoLayerIds)
+      ));
+      if (shouldQueueCompositeHandoff(
+        active,
+        manifest,
+        acceptedCompositeGenerationRef.current,
+        activeMatchesSelection,
+      )) {
         pendingCompositeManifestRef.current = manifest;
         setPendingCompositeManifest(manifest);
       } else {
@@ -2185,11 +2457,12 @@ export function RadarViewer() {
         setPendingCompositeManifest(null);
         setLoadedCompositeManifest(manifest);
       }
-      setFailedCompositeGeneration("");
       setVideoFallbackReason("");
     }).catch((reason) => {
       if (!cancelled) {
-        setFailedCompositeGeneration(compositePointer.generation);
+        setFailedCompositeProfiles((current) => (
+          rememberFailedKey(current, compositeProfileKey)
+        ));
         setVideoFallbackReason(
           reason instanceof Error ? reason.message : "Composite manifest failed.",
         );
@@ -2200,8 +2473,10 @@ export function RadarViewer() {
     catalogBase,
     compositePointer,
     compositePointerKey,
+    compositeProfileKey,
     effectiveRangeHours,
-    failedCompositeGeneration,
+    enabledVideoLayerIds,
+    failedCompositeProfiles,
     product,
     videoLayerId,
     videoTrack,
@@ -2223,36 +2498,12 @@ export function RadarViewer() {
     setPendingCompositeManifest(null);
   }, [compositePointer, compositePointerKey, effectiveRangeHours, product?.id, videoLayerId, videoTrack]);
 
-  const fallbackAnchorFrames = useMemo(() => {
-    if (!liveEdgeDomain || !product) return [];
-    const frames = activeAnchorId === "raw-visir-5min"
-      ? mergedFrames(
-          liveEdgeDomain.layers["raw-visir"]?.frames ?? [],
-          liveEdgeDomain.layers["raw-visir-5min"]?.frames ?? [],
-        )
-      : liveEdgeDomain.layers[activeAnchorId]?.frames ?? [];
-    if (!frames.length) return [];
-    return playbackFrames(
-      frames,
-      effectiveRangeHours,
-      product.frameIntervalMinutes,
-      product.dayFrameIntervalMinutes,
-      product.archiveFrameIntervalMinutes,
-    );
-  }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, product]);
-
-  const compositePointerFreshEnough = useMemo(() => {
-    if (!compositePointer || !fallbackAnchorFrames.length) return Boolean(compositePointer);
-    const newestFallback = fallbackAnchorFrames[fallbackAnchorFrames.length - 1];
-    const imageNewest = newestFallback
-      ? Date.parse(actualSourceTime(activeAnchorId, newestFallback))
-      : NaN;
-    const compositeNewest = Date.parse(compositePointer.endSourceTime);
-    if (!Number.isFinite(imageNewest) || !Number.isFinite(compositeNewest)) return false;
-    const allowanceMinutes = COMPOSITE_FRESHNESS_MINUTES[effectiveRangeHours]
-      ?? Math.max(20, Math.ceil(effectiveRangeHours / 24) * 10);
-    return imageNewest - compositeNewest <= allowanceMinutes * 60_000 + SAME_SLOT_TOLERANCE_MS;
-  }, [activeAnchorId, compositePointer, effectiveRangeHours, fallbackAnchorFrames]);
+  const compositePointerFreshEnough = compositeProfileFreshEnough(
+    compositePointer,
+    fallbackAnchorFrames,
+    activeAnchorId,
+    effectiveRangeHours,
+  );
 
   const videoFreshEnough = useMemo(() => {
     if (!loadedVideoManifest || !fallbackAnchorFrames.length || !product) return true;
@@ -2290,20 +2541,46 @@ export function RadarViewer() {
     return imageNewest - compositeNewest <= allowanceMinutes * 60_000 + SAME_SLOT_TOLERANCE_MS;
   }, [activeAnchorId, effectiveRangeHours, fallbackAnchorFrames, loadedCompositeManifest]);
 
+  const loadedCompositeProfileKey = loadedCompositeManifest
+    ? compositeProfileFailureKey(
+        loadedCompositeManifest.productId,
+        loadedCompositeManifest.layerId,
+        loadedCompositeManifest.track,
+        loadedCompositeManifest.presetId,
+        loadedCompositeManifest.rangeHours,
+        loadedCompositeManifest.generation,
+      )
+    : "";
+  const loadedVideoProfileKey = loadedVideoManifest
+    ? videoProfileFailureKey(
+        loadedVideoManifest.productId,
+        loadedVideoManifest.layerId,
+        loadedVideoManifest.track,
+        loadedVideoManifest.generation,
+      )
+    : "";
+
   const candidateCompositeManifest = useMemo(() => (
     loadedCompositeManifest
-      && compositePointer
       && loadedCompositeManifest.productId === product?.id
       && loadedCompositeManifest.layerId === videoLayerId
       && loadedCompositeManifest.track === videoTrack
-      && loadedCompositeManifest.presetId === compositePointer.presetId
       && loadedCompositeManifest.rangeHours === effectiveRangeHours
-      && sameLayerSet(loadedCompositeManifest.layerIds, enabledVideoLayerIds)
+      && canRetainLoadedComposite(
+        loadedCompositeManifest,
+        compositePointer,
+        acceptedCompositeGeneration,
+      )
+      && (
+        loadedCompositeManifest.compositeKind === "hybrid-prefix"
+          ? hybridCompositeCompatible(loadedCompositeManifest, enabledVideoLayerIds)
+          : sameLayerSet(loadedCompositeManifest.layerIds, enabledVideoLayerIds)
+      )
       && (
         compositeFreshEnough
         || acceptedCompositeGeneration === loadedCompositeManifest.generation
       )
-      && failedCompositeGeneration !== loadedCompositeManifest.generation
+      && !failedCompositeProfiles.includes(loadedCompositeProfileKey)
       ? loadedCompositeManifest
       : null
   ), [
@@ -2312,7 +2589,8 @@ export function RadarViewer() {
     compositePointer,
     enabledVideoLayerIds,
     effectiveRangeHours,
-    failedCompositeGeneration,
+    failedCompositeProfiles,
+    loadedCompositeProfileKey,
     loadedCompositeManifest,
     product?.id,
     videoLayerId,
@@ -2327,57 +2605,20 @@ export function RadarViewer() {
       && loadedVideoManifest.layerId === videoLayerId
       && loadedVideoManifest.track === videoTrack
       && videoFreshEnough
-      && failedVideoGeneration !== loadedVideoManifest.generation
+      && !failedVideoProfiles.includes(loadedVideoProfileKey)
       ? loadedVideoManifest
       : null
-  ), [failedVideoGeneration, loadedVideoManifest, product?.id, videoFreshEnough, videoLayerId, videoPointer, videoTrack]);
-  const highExactComposite = useMemo(() => candidateCompositeManifest
-    ? compositeLoopVideoManifest(candidateCompositeManifest, "high")
-    : candidateVideoManifest
-      ? exactCompositeManifest(
-          candidateVideoManifest,
-          enabledVideoLayerIds,
-          effectiveRangeHours,
-          "high",
-        )
-      : null, [candidateCompositeManifest, candidateVideoManifest, effectiveRangeHours, enabledVideoLayerIds]);
-  useEffect(() => {
-    let cancelled = false;
-    const media = highExactComposite?.manifest.media;
-    const capabilities = navigator.mediaCapabilities;
-    if (!media || !capabilities?.decodingInfo || !media.mimeType.startsWith("video/mp4")) {
-      return;
-    }
-    const duration = highExactComposite.manifest.frames.reduce(
-      (total, frame) => total + frame.durationSeconds,
-      0,
-    );
-    void capabilities.decodingInfo({
-      type: "file",
-      video: {
-        contentType: 'video/mp4; codecs="avc1.640028"',
-        width: media.width,
-        height: media.height,
-        bitrate: Math.max(1, Math.round(media.byteLength * 8 / Math.max(duration, 0.1))),
-        framerate: 20,
-      },
-    }).then((info) => {
-      if (!cancelled) setHighRenditionPowerEfficient(info.supported && info.smooth && info.powerEfficient);
-    }).catch(() => {
-      if (!cancelled) setHighRenditionPowerEfficient(null);
-    });
-    return () => { cancelled = true; };
-  }, [highExactComposite]);
-  const automaticRendition = highRenditionPowerEfficient === false
-    || (stageCssWidth > 0 && stageCssWidth * Math.min(
-      typeof window === "undefined" ? 1 : window.devicePixelRatio || 1,
-      1.5,
-    ) <= 1360)
-    ? "efficient"
-    : "high";
-  const requestedRendition = playbackQuality === "auto"
-    ? automaticRendition
-    : playbackQuality;
+  ), [
+    failedVideoProfiles,
+    loadedVideoManifest,
+    loadedVideoProfileKey,
+    product?.id,
+    videoFreshEnough,
+    videoLayerId,
+    videoPointer,
+    videoTrack,
+  ]);
+  const requestedRendition = playbackQuality;
   const sidecarExactComposite = useMemo(() => candidateCompositeManifest
     ? compositeLoopVideoManifest(candidateCompositeManifest, requestedRendition)
     : null, [candidateCompositeManifest, requestedRendition]);
@@ -2395,13 +2636,17 @@ export function RadarViewer() {
   const legacyExactCompositeKey = legacyExactComposite
     ? `legacy/${legacyExactComposite.manifest.generation}/${legacyExactComposite.presetId}/${legacyExactComposite.renditionId}/${legacyExactComposite.manifest.media.path}`
     : "";
-  const exactComposite = sidecarExactComposite
-    && sidecarExactCompositeKey !== failedDefaultComposite?.key
+  const usableSidecarComposite = sidecarExactComposite
+    && !failedCompositeMedia[sidecarExactCompositeKey]
     ? sidecarExactComposite
-    : legacyExactComposite
-      && legacyExactCompositeKey !== failedDefaultComposite?.key
-      ? legacyExactComposite
-      : null;
+    : null;
+  const usableLegacyExactComposite = legacyExactComposite
+    && !failedCompositeMedia[legacyExactCompositeKey]
+    ? legacyExactComposite
+    : null;
+  const exactComposite = candidateCompositeManifest?.compositeKind === "hybrid-prefix"
+    ? usableLegacyExactComposite ?? usableSidecarComposite
+    : usableSidecarComposite ?? usableLegacyExactComposite;
   const exactCompositeKey = exactComposite === sidecarExactComposite
     ? sidecarExactCompositeKey
     : exactComposite === legacyExactComposite
@@ -2410,7 +2655,10 @@ export function RadarViewer() {
   const pendingSidecarExactComposite = useMemo(() => pendingCompositeManifest
     ? compositeLoopVideoManifest(pendingCompositeManifest, requestedRendition)
     : null, [pendingCompositeManifest, requestedRendition]);
-  const pendingLegacyExactComposite = pendingVideoManifest
+  const pendingSidecarExactCompositeKey = pendingSidecarExactComposite
+    ? exactCompositeSelectionKey("sidecar", pendingSidecarExactComposite)
+    : "";
+  const pendingLegacyExactCompositeCandidate = pendingVideoManifest
     ? exactCompositeManifest(
         pendingVideoManifest,
         enabledVideoLayerIds,
@@ -2418,40 +2666,174 @@ export function RadarViewer() {
         requestedRendition,
       )
     : null;
-  const pendingExactComposite = pendingSidecarExactComposite ?? pendingLegacyExactComposite;
-  const pendingExactCompositeKey = pendingExactComposite
-    ? exactCompositeSelectionKey(
-        pendingExactComposite === pendingSidecarExactComposite ? "sidecar" : "legacy",
-        pendingExactComposite,
-      )
+  const pendingLegacyExactCompositeKey = pendingLegacyExactCompositeCandidate
+    ? exactCompositeSelectionKey("legacy", pendingLegacyExactCompositeCandidate)
     : "";
+  const usablePendingSidecarExactComposite = pendingSidecarExactComposite
+    && !failedCompositeMedia[pendingSidecarExactCompositeKey]
+    ? pendingSidecarExactComposite
+    : null;
+  const pendingLegacyExactComposite = pendingLegacyExactCompositeCandidate
+    && !failedCompositeMedia[pendingLegacyExactCompositeKey]
+    ? pendingLegacyExactCompositeCandidate
+    : null;
+  const pendingExactComposite = usablePendingSidecarExactComposite
+    ?? pendingLegacyExactComposite;
+  const pendingExactCompositeKey = pendingExactComposite === usablePendingSidecarExactComposite
+    ? pendingSidecarExactCompositeKey
+    : pendingExactComposite === pendingLegacyExactComposite
+      ? pendingLegacyExactCompositeKey
+      : "";
+  const rejectPendingSelection = useCallback((
+    source: "sidecar" | "legacy",
+    mediaKey: string,
+    message: string,
+  ) => {
+    let profileKey = "";
+    if (source === "sidecar") {
+      const pending = pendingCompositeManifestRef.current;
+      const selection = pending
+        ? compositeLoopVideoManifest(pending, requestedRendition)
+        : null;
+      if (!pending || !selection || exactCompositeSelectionKey("sidecar", selection) !== mediaKey) {
+        return;
+      }
+      profileKey = compositeProfileFailureKey(
+        pending.productId,
+        pending.layerId,
+        pending.track,
+        pending.presetId,
+        pending.rangeHours,
+        pending.generation,
+      );
+    } else {
+      const pending = pendingVideoManifestRef.current;
+      const selection = pending
+        ? exactCompositeManifest(
+            pending,
+            enabledVideoLayerIds,
+            effectiveRangeHours,
+            requestedRendition,
+          )
+        : null;
+      if (!pending || !selection || exactCompositeSelectionKey("legacy", selection) !== mediaKey) {
+        return;
+      }
+    }
+    const transition = pendingMediaFailureTransition(source, mediaKey, profileKey);
+    pendingMediaReadyKeyRef.current = "";
+    pendingOverlayReadyKeyRef.current = "";
+    if (transition.discardPendingComposite) {
+      pendingCompositeManifestRef.current = null;
+      setPendingCompositeManifest(null);
+    }
+    if (transition.discardPendingVideo) {
+      pendingVideoManifestRef.current = null;
+      setPendingVideoManifest(null);
+    }
+    if (transition.failedProfileKey) {
+      setFailedCompositeProfiles((current) => (
+        rememberFailedKey(current, transition.failedProfileKey)
+      ));
+    }
+    if (transition.failedMediaKey) {
+      setFailedCompositeMedia((current) => rememberCompositeMediaFailure(
+        current,
+        transition.failedMediaKey,
+        message,
+      ));
+    }
+    setVideoFallbackReason(message);
+  }, [effectiveRangeHours, enabledVideoLayerIds, requestedRendition]);
   useEffect(() => {
     // A new source/rendition must prove that it can produce a future frame of
     // video before it is eligible for an atomic loop-boundary handoff. Hidden
     // tabs discard this proof and establish it again when their preloader is
     // mounted on return.
     pendingMediaReadyKeyRef.current = "";
+    pendingOverlayReadyKeyRef.current = "";
   }, [pageVisible, pendingExactCompositeKey]);
+  useEffect(() => {
+    let cancelled = false;
+    if (
+      !usablePendingSidecarExactComposite
+      || !pendingSidecarExactCompositeKey
+      || !pageVisible
+    ) return;
+    if (pendingCompositeManifest?.compositeKind !== "hybrid-prefix") {
+      pendingOverlayReadyKeyRef.current = pendingSidecarExactCompositeKey;
+      return;
+    }
+    if (!product || !videoLayerId) return;
+    const plans = hybridVideoFramePlans(
+      usablePendingSidecarExactComposite.manifest,
+      product,
+      videoLayerId,
+      enabledVideoLayerIds,
+      optionalLayers,
+      catalogBase,
+    );
+    if (plans.length !== usablePendingSidecarExactComposite.manifest.frames.length) {
+      rejectPendingSelection(
+        "sidecar",
+        pendingSidecarExactCompositeKey,
+        "Pending composite overlays do not match the selected loop.",
+      );
+      return;
+    }
+    void prewarmVideoCompositeSurfaces(
+      plans,
+      usablePendingSidecarExactComposite.manifest.width,
+      usablePendingSidecarExactComposite.manifest.height,
+      1,
+    ).then(() => {
+      if (!cancelled) pendingOverlayReadyKeyRef.current = pendingSidecarExactCompositeKey;
+    }).catch((reason) => {
+      if (!cancelled) {
+        rejectPendingSelection(
+          "sidecar",
+          pendingSidecarExactCompositeKey,
+          reason instanceof Error ? reason.message : "Pending composite overlays failed.",
+        );
+      }
+    });
+    return () => { cancelled = true; };
+  }, [
+    catalogBase,
+    enabledVideoLayerIds,
+    optionalLayers,
+    pageVisible,
+    pendingCompositeManifest?.compositeKind,
+    pendingSidecarExactCompositeKey,
+    product,
+    rejectPendingSelection,
+    usablePendingSidecarExactComposite,
+    videoLayerId,
+  ]);
   const candidateDefaultComposite = candidateVideoManifest?.defaultComposite;
   const candidateDefaultCompositeKey = candidateDefaultComposite && candidateVideoManifest
     ? `${candidateVideoManifest.generation}/${candidateDefaultComposite.id}/${candidateDefaultComposite.media.path}`
     : "";
   const legacyDefaultComposite = candidateDefaultComposite
-    && candidateDefaultCompositeKey !== failedDefaultComposite?.key
+    && !failedCompositeMedia[candidateDefaultCompositeKey]
     && sameLayerSet(enabledVideoLayerIds, candidateDefaultComposite.layerIds)
     ? candidateDefaultComposite
     : undefined;
   const activeExactComposite = exactComposite;
+  const activeCompositeKind = activeExactComposite === usableSidecarComposite
+    ? candidateCompositeManifest?.compositeKind ?? "exact"
+    : "exact";
   const activeComposite = useMemo(() => activeExactComposite
     ? {
         id: `${activeExactComposite.presetId}:${activeExactComposite.renditionId}`,
         media: activeExactComposite.manifest.media,
         mediaViewport: activeExactComposite.manifest.mediaViewport ?? FULL_VIEWPORT,
         nativeLoop: activeExactComposite.manifest.transport === "progressive-mp4",
+        compositeKind: activeCompositeKind,
       }
     : legacyDefaultComposite
-      ? { ...legacyDefaultComposite, nativeLoop: false }
-      : undefined, [activeExactComposite, legacyDefaultComposite]);
+      ? { ...legacyDefaultComposite, nativeLoop: false, compositeKind: "exact" as const }
+      : undefined, [activeCompositeKind, activeExactComposite, legacyDefaultComposite]);
   const activeCompositeKey = activeExactComposite ? exactCompositeKey : candidateDefaultCompositeKey;
   const playbackVideoManifest = useMemo<VideoLoopManifest | null>(() => (
     activeExactComposite?.manifest
@@ -2493,6 +2875,16 @@ export function RadarViewer() {
       || !videoLayerId
       || videoAnchorFrames.length !== videoManifestFrames.length
     ) return [];
+    if (activeComposite?.compositeKind === "hybrid-prefix") {
+      return hybridVideoFramePlans(
+        playbackVideoManifest,
+        product,
+        videoLayerId,
+        enabledVideoLayerIds,
+        optionalLayers,
+        catalogBase,
+      );
+    }
     const satelliteRecipeIndex = product.layers.findIndex((recipe) => recipe.id === videoLayerId);
     if (satelliteRecipeIndex < 0) return [];
     const recipeById = new Map(product.layers.map((recipe, index) => [recipe.id, { recipe, index }]));
@@ -2546,6 +2938,7 @@ export function RadarViewer() {
   }, [
     activeComposite,
     catalogBase,
+    enabledVideoLayerIds,
     optionalLayers,
     playbackVideoManifest,
     videoLayerId,
@@ -2559,21 +2952,24 @@ export function RadarViewer() {
     && videoPlans.length === videoAnchorFrames.length,
   );
   const videoHudSourceTimes = useMemo(() => videoPlans.map((plan) => (
-    plan.frame.proxyLayers.filter((selection) => {
-      const recipe = product?.layers.find((candidate) => candidate.id === selection.id);
-      return Boolean(recipe && product && isProductLayerEnabled(recipe, optionalLayers, product.layers));
-    }).flatMap((selection): { label: string; validTime: string }[] => {
-      const label = sourceLabel(selection.id);
-      return label && selection.sourceValidTime
-        ? [{ label, validTime: selection.sourceValidTime }]
-        : [];
-    }).concat([{ label: "SAT", validTime: plan.frame.sourceValidTime }])
+    selectedProxyLayers(plan.frame.proxyLayers, new Set(enabledVideoLayerIds))
+      .flatMap((selection): { label: string; validTime: string }[] => (
+        (selection.ids ?? [selection.id]).flatMap((id) => {
+          const recipe = product?.layers.find((candidate) => candidate.id === id);
+          if (!recipe || !product || !isProductLayerEnabled(recipe, optionalLayers, product.layers)) {
+            return [];
+          }
+          const label = sourceLabel(id);
+          const validTime = selection.sourceValidTimes?.[id] ?? selection.sourceValidTime;
+          return label && validTime ? [{ label, validTime }] : [];
+        })
+      )).concat([{ label: "SAT", validTime: plan.frame.sourceValidTime }])
       .filter((item, index, all) => all.findIndex((candidate) => (
         candidate.label === item.label && candidate.validTime === item.validTime
       )) === index)
       .map((item) => `${item.label} ${shortClock(item.validTime)}`)
       .join(" · ")
-  )), [optionalLayers, product, videoPlans]);
+  )), [enabledVideoLayerIds, optionalLayers, product, videoPlans]);
 
   useEffect(() => {
     if (catalog?.catalogMode !== "index" || !catalog.fullCatalogPath || !product) return;
@@ -2596,10 +2992,10 @@ export function RadarViewer() {
       && loadedCompositeManifest.rangeHours === effectiveRangeHours
     );
     const compositeUnavailable = !compositePointer
-      || failedCompositeGeneration === compositePointer.generation
+      || failedCompositeProfiles.includes(compositeProfileKey)
       || (selectedCompositeManifestLoaded && (!compositeFreshEnough || !videoModeReady));
     const legacyUnavailable = !videoPointer
-      || failedVideoGeneration === videoPointer.generation
+      || failedVideoProfiles.includes(videoProfileKey)
       || (selectedManifestLoaded && (!videoFreshEnough || !videoModeReady));
     const needsFullCatalog = compositeUnavailable && legacyUnavailable;
     if (!needsFullCatalog) return;
@@ -2636,9 +3032,10 @@ export function RadarViewer() {
     catalogBase,
     compositeFreshEnough,
     compositePointer,
+    compositeProfileKey,
     effectiveRangeHours,
-    failedCompositeGeneration,
-    failedVideoGeneration,
+    failedCompositeProfiles,
+    failedVideoProfiles,
     loadedCompositeManifest,
     loadedVideoManifest,
     product,
@@ -2646,6 +3043,7 @@ export function RadarViewer() {
     videoLayerId,
     videoModeReady,
     videoPointer,
+    videoProfileKey,
     videoTrack,
   ]);
   const anchorFrames = videoModeReady ? videoAnchorFrames : fallbackAnchorFrames;
@@ -2655,27 +3053,28 @@ export function RadarViewer() {
       return { active: false, anchor: undefined, layers: [] as ComposedLayer[] };
     }
     const lastPlan = videoPlans[videoPlans.length - 1];
-    const videoSourceTimes = new Map(lastPlan.frame.proxyLayers.map((selection) => [
-      selection.id,
-      Date.parse(selection.sourceValidTime ?? ""),
-    ]));
-    videoSourceTimes.set("satellite", Date.parse(lastPlan.frame.sourceValidTime));
+    const videoSourceTimes = videoFrameSourceTimeMap(lastPlan.frame);
     const enabledRecipes = product.layers.filter((recipe) => (
       isProductLayerEnabled(recipe, optionalLayers, product.layers)
     ));
-    const candidateIds = new Set<string>();
+    const candidateIds = new Map<string, string>();
     for (const recipe of enabledRecipes) {
-      candidateIds.add(rasterLayerId(recipe.id, product, liveEdgeDomain, false));
+      const renderedLayerId = rasterLayerId(recipe.id, product, liveEdgeDomain, false);
+      candidateIds.set(
+        renderedLayerId,
+        SATELLITE_LAYERS.has(renderedLayerId) ? "satellite" : recipe.id,
+      );
       if (recipe.id === "glm-lightning-trail" || recipe.id === "lightning-trail") {
         const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
-        candidateIds.add(regionKey
-          ? `glm-lightning-live-region-${regionKey}`
-          : "glm-lightning-live");
+        candidateIds.set(
+          regionKey ? `glm-lightning-live-region-${regionKey}` : "glm-lightning-live",
+          "glm-lightning-trail",
+        );
       }
     }
     let targetTime = Date.parse(lastPlan.frame.validTime);
     let fresher = false;
-    for (const layerId of candidateIds) {
+    for (const [layerId, comparisonId] of candidateIds) {
       const layer = liveEdgeDomain.layers[layerId];
       const frames = layer?.frames ?? [];
       const frame = frames[frames.length - 1];
@@ -2683,13 +3082,6 @@ export function RadarViewer() {
       const sourceTime = Date.parse(actualSourceTime(layerId, frame));
       if (!Number.isFinite(sourceTime)) continue;
       targetTime = Math.max(targetTime, Date.parse(frame.validTime), sourceTime);
-      const comparisonId = layerId.startsWith("glm-lightning-live")
-        ? "glm-lightning-trail"
-        : SATELLITE_LAYERS.has(layerId)
-          ? "satellite"
-        : layerId.includes("lightning-trail-region-")
-          ? "lightning-trail"
-          : layerId;
       const previous = videoSourceTimes.get(comparisonId) ?? -Infinity;
       if (sourceTime > previous + 1_000) fresher = true;
     }
@@ -2886,6 +3278,7 @@ export function RadarViewer() {
       && sidecarExactComposite
       && acceptedCompositeGeneration !== sidecarExactComposite.manifest.generation
     ) {
+      acceptedCompositeGenerationRef.current = sidecarExactComposite.manifest.generation;
       setAcceptedCompositeGeneration(sidecarExactComposite.manifest.generation);
     }
     presentedVideoIndexRef.current = index;
@@ -2948,14 +3341,34 @@ export function RadarViewer() {
     setPlaying((value) => !value);
   }, [anchorFrames.length, isAnimating, videoModeReady]);
 
-  const handleVideoFailure = useCallback((generation: string) => {
-    setFailedVideoGeneration(generation);
-  }, []);
-
   const activeVideoGeneration = playbackVideoManifest?.generation ?? "";
   const handleActiveVideoFailure = useCallback((message: string) => {
+    if (activeComposite && activeCompositeKey) {
+      setFailedCompositeMedia((current) => (
+        rememberCompositeMediaFailure(current, activeCompositeKey, message)
+      ));
+      if (activeExactComposite === usableSidecarComposite && loadedCompositeProfileKey) {
+        setFailedCompositeProfiles((current) => (
+          rememberFailedKey(current, loadedCompositeProfileKey)
+        ));
+        loadedCompositeManifestRef.current = null;
+        setLoadedCompositeManifest(null);
+      }
+    } else if (activeVideoGeneration && loadedVideoProfileKey) {
+      setFailedVideoProfiles((current) => (
+        rememberFailedKey(current, loadedVideoProfileKey)
+      ));
+      loadedVideoManifestRef.current = null;
+      setLoadedVideoManifest(null);
+    }
+    setVideoFallbackReason(message);
+
+    // Once the active decoder has failed there is no old circuit left to
+    // protect. Promote an already validated pending manifest immediately;
+    // otherwise the normal pointer selection proceeds to the next exact,
+    // hybrid-core, or dynamic source without resurrecting a failed key.
     const pendingComposite = pendingCompositeManifestRef.current;
-    if (pendingComposite && pendingComposite.generation !== activeVideoGeneration) {
+    if (pendingComposite) {
       pendingCompositeManifestRef.current = null;
       setPendingCompositeManifest(null);
       loadedCompositeManifestRef.current = pendingComposite;
@@ -2963,27 +3376,20 @@ export function RadarViewer() {
       return;
     }
     const pending = pendingVideoManifestRef.current;
-    if (pending && pending.generation !== activeVideoGeneration) {
+    if (pending) {
       pendingVideoManifestRef.current = null;
       setPendingVideoManifest(null);
       loadedVideoManifestRef.current = pending;
       setLoadedVideoManifest(pending);
-      return;
-    }
-    if (activeComposite && activeCompositeKey) {
-      setFailedDefaultComposite({ key: activeCompositeKey, reason: message });
-      setVideoFallbackReason("");
-      return;
-    }
-    if (activeVideoGeneration) {
-      setVideoFallbackReason(message);
-      handleVideoFailure(activeVideoGeneration);
     }
   }, [
     activeComposite,
     activeCompositeKey,
+    activeExactComposite,
     activeVideoGeneration,
-    handleVideoFailure,
+    loadedCompositeProfileKey,
+    loadedVideoProfileKey,
+    usableSidecarComposite,
   ]);
 
   const handleVideoLoopBoundary = useCallback(() => {
@@ -2993,9 +3399,17 @@ export function RadarViewer() {
       const readyKey = selection ? exactCompositeSelectionKey("sidecar", selection) : "";
       if (
         !selection
-        || pendingMediaReadyKeyRef.current !== readyKey
+        || (
+          requiresPendingMediaPreload(selection)
+          && pendingMediaReadyKeyRef.current !== readyKey
+        )
+        || (
+          pendingComposite.compositeKind === "hybrid-prefix"
+          && pendingOverlayReadyKeyRef.current !== readyKey
+        )
       ) return;
       pendingMediaReadyKeyRef.current = "";
+      pendingOverlayReadyKeyRef.current = "";
       pendingCompositeManifestRef.current = null;
       setPendingCompositeManifest(null);
       loadedCompositeManifestRef.current = pendingComposite;
@@ -3004,7 +3418,7 @@ export function RadarViewer() {
       return;
     }
     const pending = pendingVideoManifestRef.current;
-    const pendingSelection = pending
+    const pendingSelectionCandidate = pending
       ? exactCompositeManifest(
           pending,
           enabledVideoLayerIds,
@@ -3012,10 +3426,17 @@ export function RadarViewer() {
           requestedRendition,
         )
       : null;
+    const pendingSelectionKey = pendingSelectionCandidate
+      ? exactCompositeSelectionKey("legacy", pendingSelectionCandidate)
+      : "";
+    const pendingSelection = pendingSelectionCandidate
+      && !failedCompositeMedia[pendingSelectionKey]
+      ? pendingSelectionCandidate
+      : null;
     if (
       pendingSelection
-      && pendingMediaReadyKeyRef.current
-        !== exactCompositeSelectionKey("legacy", pendingSelection)
+      && requiresPendingMediaPreload(pendingSelection)
+      && pendingMediaReadyKeyRef.current !== pendingSelectionKey
     ) return;
     let retiredStaleComposite = false;
     const activeCompositeManifest = loadedCompositeManifestRef.current;
@@ -3024,6 +3445,7 @@ export function RadarViewer() {
       && acceptedCompositeGeneration === activeCompositeManifest.generation
       && !compositeFreshEnough
     ) {
+      acceptedCompositeGenerationRef.current = "";
       setAcceptedCompositeGeneration("");
       loadedCompositeManifestRef.current = null;
       setLoadedCompositeManifest(null);
@@ -3034,6 +3456,7 @@ export function RadarViewer() {
       return;
     }
     pendingMediaReadyKeyRef.current = "";
+    pendingOverlayReadyKeyRef.current = "";
     pendingVideoManifestRef.current = null;
     setPendingVideoManifest(null);
     loadedVideoManifestRef.current = pending;
@@ -3044,6 +3467,7 @@ export function RadarViewer() {
     compositeFreshEnough,
     effectiveRangeHours,
     enabledVideoLayerIds,
+    failedCompositeMedia,
     requestedRendition,
   ]);
 
@@ -3318,10 +3742,10 @@ export function RadarViewer() {
       )
     : [];
   const activeVideoProxyLayers = videoModeReady && videoPlans[currentFrameIndex]
-    ? videoPlans[currentFrameIndex].frame.proxyLayers.filter((selection) => {
-        const recipe = product.layers.find((candidate) => candidate.id === selection.id);
-        return Boolean(recipe && isLayerEnabled(recipe));
-      })
+    ? selectedProxyLayers(
+        videoPlans[currentFrameIndex].frame.proxyLayers,
+        new Set(enabledVideoLayerIds),
+      )
     : [];
   const pointSourceTimes = (videoModeReady ? [] : [
     lightningPointReferences.length || ecccFallbackPointReferences.length
@@ -3346,10 +3770,11 @@ export function RadarViewer() {
   ]).filter((item): item is { label: string; validTime: string } => Boolean(item));
   const sourceTimes = showLiveEdge && liveEdgeSourceTimes ? liveEdgeSourceTimes : (videoModeReady
     ? activeVideoProxyLayers.flatMap((selection): { label: string; validTime: string }[] => {
-        const label = sourceLabel(selection.id);
-        return label && selection.sourceValidTime
-          ? [{ label, validTime: selection.sourceValidTime }]
-          : [];
+        return (selection.ids ?? [selection.id]).flatMap((id) => {
+          const label = sourceLabel(id);
+          const validTime = selection.sourceValidTimes?.[id] ?? selection.sourceValidTime;
+          return label && validTime ? [{ label, validTime }] : [];
+        });
       })
     : composedLayers
         .filter((item): item is typeof item & { frame: Frame } => "frame" in item && Boolean(item.frame))
@@ -3366,7 +3791,16 @@ export function RadarViewer() {
     .join(" · ");
   const composedLayerIds = new Set(
     videoModeReady
-      ? ["base-dark", videoLayerId, ...activeVideoProxyLayers.map((layer) => layer.id)]
+      ? [
+          "base-dark",
+          videoLayerId,
+          ...(
+            activeCompositeKind === "hybrid-prefix"
+              ? candidateCompositeManifest?.bakedLayerIds ?? candidateCompositeManifest?.layerIds ?? []
+              : []
+          ),
+          ...activeVideoProxyLayers.flatMap((layer) => layer.ids ?? [layer.id]),
+        ]
       : composedLayers.map((layer) => layer.id),
   );
   if (!videoModeReady && lightningController && (lightningPointReferences.length || ecccFallbackPointReferences.length)) {
@@ -3390,11 +3824,16 @@ export function RadarViewer() {
     .filter((label, index, all) => all.indexOf(label) === index);
   const hasCoverage = [...composedLayerIds].some((layerId) => layerId.includes("coverage"));
   const optional = product.layers.filter((layer) => layer.optional);
-  const commonOptional = optional.filter((layer) => layer.controlSection !== "regional-satellite");
+  const commonOptional = optional
+    .filter((layer) => layer.controlSection !== "regional-satellite")
+    .filter((layer, index, all) => all.findIndex((candidate) => (
+      (candidate.controlId ?? candidate.id) === (layer.controlId ?? layer.id)
+    )) === index);
   const regionalSatelliteOptional = optional.filter((layer) => layer.controlSection === "regional-satellite");
-  const activeLayerLabels = optional
+  const activeLayerLabels = [...commonOptional, ...regionalSatelliteOptional]
     .filter(isLayerEnabled)
-    .map((layer) => layerControlLabel(layer.id));
+    .map((layer) => layerControlLabel(layer.controlId ?? layer.id))
+    .filter((label, index, all) => all.indexOf(label) === index);
   const playbackQualityOption = PLAYBACK_QUALITY_OPTIONS.find(
     (option) => option.id === playbackQuality,
   ) ?? PLAYBACK_QUALITY_OPTIONS[0];
@@ -3403,20 +3842,28 @@ export function RadarViewer() {
     || (
       compositePointer
       && compositePointerFreshEnough
-      && failedCompositeGeneration !== compositePointer.generation
-      && sidecarExactCompositeKey !== failedDefaultComposite?.key
+      && !failedCompositeProfiles.includes(compositeProfileKey)
+      && !failedCompositeMedia[sidecarExactCompositeKey]
     ),
   );
   const playbackBuildStatus = prebuiltSelectionOffered
     ? videoModeReady
-      ? {
-          mode: "prebuilt",
-          label: "Prebuilt loop",
-          description: "The selected satellite and overlay combination is playing as one pre-rendered video.",
-        }
+      ? activeCompositeKind === "hybrid-prefix"
+        ? {
+            mode: "hybrid",
+            label: "Prebuilt core + layers",
+            description: "Satellite, smoke, radar and static geography are playing as one video; the selected upper layers are synchronized from the same immutable generation.",
+          }
+        : {
+            mode: "prebuilt",
+            label: "Prebuilt loop",
+            description: "The selected satellite and overlay combination is playing as one pre-rendered video.",
+          }
       : {
           mode: "loading",
-          label: "Loading prebuilt",
+          label: compositePointer?.compositeKind === "hybrid-prefix"
+            ? "Loading prebuilt core"
+            : "Loading prebuilt",
           description: "A pre-rendered loop is available and is being prepared; image layers are shown until it is ready.",
         }
     : {
@@ -3590,15 +4037,12 @@ export function RadarViewer() {
             data-video-fallback={videoFallbackReason || undefined}
             data-composite-preset={activeComposite?.id ?? "dynamic"}
             data-composite-path={activeComposite?.media.path || undefined}
-            data-composite-fallback={
-              activeCompositeKey === failedDefaultComposite?.key
-                ? failedDefaultComposite.reason
-                : undefined
-            }
+            data-composite-fallback={failedCompositeMedia[activeCompositeKey]}
             role="img"
             aria-label={`${product.title}${displayAnchor ? `, valid ${utcClock(displayAnchor.validTime)} UTC. ${sourceTimes}` : ", no frames available"}`}
           >
-            {pageVisible && pendingExactComposite?.manifest.media.mimeType.startsWith("video/mp4") && (
+            {pageVisible && pendingExactComposite
+              && requiresPendingMediaPreload(pendingExactComposite) && (
               <video
                 key={pendingExactCompositeKey}
                 className="pending-video-preload"
@@ -3617,9 +4061,16 @@ export function RadarViewer() {
                 }}
                 onError={(event) => {
                   const key = event.currentTarget.dataset.pendingMediaKey ?? "";
-                  if (pendingMediaReadyKeyRef.current === key) {
-                    pendingMediaReadyKeyRef.current = "";
-                  }
+                  const source = key === pendingSidecarExactCompositeKey
+                    ? "sidecar"
+                    : key === pendingLegacyExactCompositeKey
+                      ? "legacy"
+                      : null;
+                  if (source) rejectPendingSelection(
+                    source,
+                    key,
+                    "Pending H.264 media could not be decoded.",
+                  );
                 }}
                 aria-hidden="true"
               />
@@ -3819,32 +4270,16 @@ export function RadarViewer() {
                 </span>
                 <span className="layers-chevron" aria-hidden="true">⌄</span>
               </button>
-              <div className="layers-popover decoder-popover" role="radiogroup" aria-label="Playback quality">
+              <div className="layers-popover decoder-popover" role="group" aria-label="Playback decoder">
                 <div className="layers-popover-heading">
                   <span>Decoder</span>
                   <span>{playbackQualityOption.label}</span>
                 </div>
                 <div className="decoder-options">
-                  {PLAYBACK_QUALITY_OPTIONS.map((option) => (
-                    <div className="field-select decoder-choice" key={option.id}>
-                      <input
-                        type="radio"
-                        name="playback-quality"
-                        id={`decoder-${option.id}`}
-                        value={option.id}
-                        checked={playbackQuality === option.id}
-                        onChange={(event) => {
-                          setPlaybackQuality(option.id);
-                          setDecoderMenuOpen(false);
-                          event.currentTarget.blur();
-                        }}
-                      />
-                      <label htmlFor={`decoder-${option.id}`}>
-                        <span>{option.label}</span>
-                        <small>{option.description}</small>
-                      </label>
-                    </div>
-                  ))}
+                  <div className="decoder-choice decoder-information">
+                    <span>{playbackQualityOption.label}</span>
+                    <small>{playbackQualityOption.description}</small>
+                  </div>
                 </div>
               </div>
             </div>

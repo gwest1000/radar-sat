@@ -26,6 +26,7 @@ from .config import (
     VIDEO_EXACT_RANGES,
     VIDEO_TRACKS_BY_PRODUCT,
     VIEWPORTS,
+    video_composite_kind,
     video_composite_layer_ids,
 )
 
@@ -916,7 +917,12 @@ def _composite_layer_ids(
     return video_composite_layer_ids(spec.product_id, spec.layer_id, preset_id)
 
 
-def _composite_presets(spec: ProfileSpec) -> tuple[tuple[str, tuple[str, ...]], ...]:
+def _composite_presets(
+    spec: ProfileSpec,
+    preset_ids: Iterable[str] | None = None,
+    *,
+    include_hybrid: bool = False,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
     product = _product(spec.product_id)
     if not any(
         str(recipe.get("id", "")) == spec.layer_id
@@ -925,6 +931,7 @@ def _composite_presets(spec: ProfileSpec) -> tuple[tuple[str, tuple[str, ...]], 
     ):
         return ()
     values = VIDEO_COMPOSITE_PRESETS.get(spec.product_id, ())
+    requested = set(preset_ids) if preset_ids is not None else None
     return tuple(
         (
             str(value["id"]),
@@ -934,6 +941,9 @@ def _composite_presets(spec: ProfileSpec) -> tuple[tuple[str, tuple[str, ...]], 
             ),
         )
         for value in values
+        if requested is None or str(value["id"]) in requested
+        if include_hybrid
+        or video_composite_kind(spec.product_id, str(value["id"])) == "exact"
     )
 
 
@@ -1865,6 +1875,12 @@ def _range_frames(
 
 
 def _exact_renditions(spec: ProfileSpec) -> tuple[tuple[str, int, int], ...]:
+    # BC-family composite playback is now high-only. Hardware H.264 decoding
+    # makes the 1920 px rendition inexpensive in the browser, while retiring
+    # the duplicate 1280 px MP4/cache tree saves material R2 space. Broad
+    # products already render to their display-limited 1200 px grid.
+    if spec.domain_id == "bc":
+        return (("high", spec.width, spec.height),)
     if spec.width <= 1280:
         return (("display", spec.width, spec.height),)
     efficient_width = 1280
@@ -2213,6 +2229,54 @@ def _manifest_dependencies(output_root: Path, manifests: Iterable[Path]) -> set[
     return dependencies
 
 
+def _manifest_proxy_dependencies(
+    output_root: Path,
+    manifests: Iterable[Path],
+) -> set[Path] | None:
+    """Resolve every proxy reference, or fail closed on an ambiguous manifest.
+
+    Shared proxy pruning is broader than the older media cleanup, so silently
+    skipping one unreadable sidecar could delete a live hybrid overlay. Paths
+    need not currently exist (a partially restored local tree is still safe to
+    inspect), but every declared proxy and its path must be structurally safe.
+    """
+    resolved_root = output_root.resolve()
+    dependencies: set[Path] = set()
+    for manifest_path in manifests:
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(manifest, Mapping):
+            return None
+        if "proxies" not in manifest:
+            continue
+        proxies = manifest.get("proxies")
+        if isinstance(proxies, Mapping):
+            values = proxies.values()
+        elif isinstance(proxies, list):
+            values = proxies
+        else:
+            return None
+        for proxy in values:
+            if not isinstance(proxy, Mapping):
+                return None
+            relative = proxy.get("path")
+            if not isinstance(relative, str) or not relative:
+                return None
+            path = Path(relative)
+            if path.is_absolute() or not path.parts or ".." in path.parts:
+                return None
+            try:
+                candidate = (resolved_root / path).resolve()
+            except OSError:
+                return None
+            if not candidate.is_relative_to(resolved_root):
+                return None
+            dependencies.add(candidate)
+    return dependencies
+
+
 def prune_local_video_orphans(
     output_root: Path,
     product_id: str,
@@ -2263,9 +2327,27 @@ def prune_local_video_orphans(
                 else:
                     manifest.unlink(missing_ok=True)
                     removed_manifests += 1
-    dependencies = _manifest_dependencies(output_root, kept_manifests)
+    # Exact composite sidecars are independently retained and are not present
+    # in the legacy video index. Include them before pruning this product's
+    # proxy namespace so an archive build cannot remove current hybrid layers.
+    composite_root = output_root / "composite-manifests" / product_id
+    composite_manifests = (
+        list(composite_root.rglob("*.json")) if composite_root.is_dir() else []
+    )
+    retained_manifests = [*kept_manifests, *composite_manifests]
+    dependencies = _manifest_dependencies(output_root, retained_manifests)
+    proxy_dependencies = _manifest_proxy_dependencies(
+        output_root,
+        retained_manifests,
+    )
+    if proxy_dependencies is not None:
+        dependencies.update(proxy_dependencies)
     removed_dependencies = 0
     for prefix in ("videos", "video-proxies"):
+        if prefix == "video-proxies" and proxy_dependencies is None:
+            # One unreadable retained manifest makes proxy reachability
+            # unknowable. Leave the namespace intact for the next clean pass.
+            continue
         root = output_root / prefix / product_id
         if not root.exists():
             continue
@@ -2298,6 +2380,9 @@ def prune_shared_video_orphans(
         *(output_root / "composite-manifests").rglob("*.json"),
     ]
     all_manifest_dependencies = _manifest_dependencies(output_root, manifests)
+    proxy_dependencies = _manifest_proxy_dependencies(output_root, manifests)
+    if proxy_dependencies is not None:
+        all_manifest_dependencies.update(proxy_dependencies)
     removed = 0
     videos_root = output_root / "videos"
     if videos_root.exists():
@@ -2317,6 +2402,18 @@ def prune_shared_video_orphans(
     if segment_root.exists():
         for path in segment_root.rglob("*.ts"):
             if path in all_manifest_dependencies:
+                continue
+            if current - path.stat().st_mtime <= grace_seconds:
+                continue
+            path.unlink(missing_ok=True)
+            removed += 1
+    # Content-addressed hybrid proxies can outlive a product-specific archive
+    # pass (regional products have no such pass). Only a complete, unambiguous
+    # manifest scan authorizes removing an aged unreferenced proxy.
+    proxy_root = output_root / "video-proxies"
+    if proxy_dependencies is not None and proxy_root.exists():
+        for path in proxy_root.rglob("*"):
+            if not path.is_file() or path in all_manifest_dependencies:
                 continue
             if current - path.stat().st_mtime <= grace_seconds:
                 continue

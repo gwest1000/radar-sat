@@ -4,8 +4,11 @@ export type VideoProfilePointer = {
 };
 
 export type CompositeProfilePointer = VideoProfilePointer & {
+  compositeKind?: "exact" | "hybrid-prefix";
   presetId: string;
   layerIds: string[];
+  bakedLayerIds?: string[];
+  eligibleOverlayLayerIds?: string[];
   rangeHours: number;
   generatedAt: string;
   endValidTime: string;
@@ -17,13 +20,16 @@ export type VideoProxy = {
   width: number;
   height: number;
   byteLength: number;
+  sha256?: string;
 };
 
 export type VideoProxyLayerSelection = {
   id: string;
+  ids?: string[];
   renderId: string;
   sourceKey: string;
   sourceValidTime: string | null;
+  sourceValidTimes?: Record<string, string | null>;
 };
 
 export type VideoManifestFrame = {
@@ -31,6 +37,7 @@ export type VideoManifestFrame = {
   validTime: string;
   sourceValidTime: string;
   sourceTimes?: Record<string, string>;
+  layerSourceTimes?: Record<string, string | null>;
   encodedSourceLayer: string;
   sourcePath: string;
   sourceFetchedAt: string;
@@ -91,11 +98,13 @@ export type CompositeLoopFrame = {
   sourceValidTime: string;
   sourceTimes?: Record<string, string>;
   layerSourceTimes?: Record<string, string | null>;
+  proxyLayers?: VideoProxyLayerSelection[];
   durationSeconds: number;
 };
 
 export type CompositeLoopManifest = {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
+  compositeKind?: "exact" | "hybrid-prefix";
   generation: string;
   generatedAt: string;
   productId: string;
@@ -104,6 +113,8 @@ export type CompositeLoopManifest = {
   track: "live" | "day" | "archive";
   presetId: string;
   layerIds: string[];
+  bakedLayerIds?: string[];
+  eligibleOverlayLayerIds?: string[];
   rangeHours: number;
   cadenceMinutes: number;
   viewport: Record<string, number>;
@@ -113,6 +124,7 @@ export type CompositeLoopManifest = {
   boundaryIntervalMultiplier: 4;
   frames: CompositeLoopFrame[];
   renditions: VideoCompositeRendition[];
+  proxies?: Record<string, VideoProxy>;
 };
 
 export type VideoLoopManifest = {
@@ -164,7 +176,31 @@ function validProxy(value: unknown): value is VideoProxy {
     && finitePositive(proxy.height)
     && typeof proxy.byteLength === "number"
     && Number.isFinite(proxy.byteLength)
-    && proxy.byteLength >= 0;
+    && proxy.byteLength >= 0
+    && (
+      proxy.sha256 === undefined
+      || (typeof proxy.sha256 === "string" && proxy.sha256.length > 0)
+    );
+}
+
+function validProxyLayerSelection(value: unknown): value is VideoProxyLayerSelection {
+  if (!value || typeof value !== "object") return false;
+  const layer = value as Partial<VideoProxyLayerSelection>;
+  return typeof layer.id === "string"
+    && layer.id.length > 0
+    && typeof layer.renderId === "string"
+    && layer.renderId.length > 0
+    && typeof layer.sourceKey === "string"
+    && layer.sourceKey.length > 0
+    && (layer.ids === undefined || validLayerIds(layer.ids))
+    && validSourceTimes(layer.sourceValidTimes, true)
+    && (
+      layer.sourceValidTime === null
+      || (
+        typeof layer.sourceValidTime === "string"
+        && Number.isFinite(Date.parse(layer.sourceValidTime))
+      )
+    );
 }
 
 function validFrame(value: unknown): value is VideoManifestFrame {
@@ -182,24 +218,9 @@ function validFrame(value: unknown): value is VideoManifestFrame {
     && Number.isFinite(frame.ptsSeconds)
     && frame.ptsSeconds >= 0
     && finitePositive(frame.durationSeconds)
+    && validSourceTimes(frame.layerSourceTimes, true)
     && Array.isArray(frame.proxyLayers)
-    && frame.proxyLayers.every((value) => {
-      if (!value || typeof value !== "object") return false;
-      const layer = value as Partial<VideoProxyLayerSelection>;
-      return typeof layer.id === "string"
-        && layer.id.length > 0
-        && typeof layer.renderId === "string"
-        && layer.renderId.length > 0
-        && typeof layer.sourceKey === "string"
-        && layer.sourceKey.length > 0
-        && (
-          layer.sourceValidTime === null
-          || (
-            typeof layer.sourceValidTime === "string"
-            && Number.isFinite(Date.parse(layer.sourceValidTime))
-          )
-        );
-    });
+    && frame.proxyLayers.every(validProxyLayerSelection);
 }
 
 function validMedia(value: unknown, transport?: unknown): value is VideoMedia {
@@ -387,16 +408,18 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
   // The composite is an optional fast path. A malformed or partially
   // published preset must never take the healthy satellite-video + proxy
   // compositor down with it.
-  if (
-    parsed.defaultComposite !== undefined
-    && !validDefaultComposite(parsed.defaultComposite, parsed)
-  ) {
-    return { ...parsed, defaultComposite: undefined };
-  }
-  const composites = parsed.composites?.filter((value) => (
-    validCompositePreset(value, parsed)
-  ));
-  return { ...parsed, composites: composites?.length ? composites : undefined };
+  const defaultComposite = parsed.defaultComposite !== undefined
+    && validDefaultComposite(parsed.defaultComposite, parsed)
+    ? parsed.defaultComposite
+    : undefined;
+  const composites = Array.isArray(parsed.composites)
+    ? parsed.composites.filter((value) => validCompositePreset(value, parsed))
+    : undefined;
+  return {
+    ...parsed,
+    defaultComposite,
+    composites: composites?.length ? composites : undefined,
+  };
 }
 
 export function loadVideoLoopManifest(url: string): Promise<VideoLoopManifest> {
@@ -429,6 +452,8 @@ export function parseCompositeProfilePointer(value: unknown): CompositeProfilePo
     throw new Error("Composite profile pointer is not an object.");
   }
   const pointer = value as Partial<CompositeProfilePointer>;
+  const hybrid = pointer.compositeKind === "hybrid-prefix";
+  const pointerLayerIds = pointer.layerIds ?? [];
   if (
     typeof pointer.generation !== "string"
     || !pointer.generation
@@ -441,6 +466,20 @@ export function parseCompositeProfilePointer(value: unknown): CompositeProfilePo
     || !validTimestamp(pointer.generatedAt)
     || !validTimestamp(pointer.endValidTime)
     || !validTimestamp(pointer.endSourceTime)
+    || (
+      pointer.compositeKind !== undefined
+      && !["exact", "hybrid-prefix"].includes(pointer.compositeKind)
+    )
+    || (
+      hybrid
+      && (
+        !validLayerIds(pointer.bakedLayerIds)
+        || !validLayerIds(pointer.eligibleOverlayLayerIds)
+        || pointer.bakedLayerIds.length !== pointerLayerIds.length
+        || pointer.bakedLayerIds.some((id, index) => id !== pointerLayerIds[index])
+        || pointer.eligibleOverlayLayerIds.some((id) => pointerLayerIds.includes(id))
+      )
+    )
   ) {
     throw new Error("Composite profile pointer has an unsupported schema.");
   }
@@ -461,6 +500,8 @@ export function matchingCompositeProfile(
       continue;
     }
     if (
+      pointer.compositeKind !== "hybrid-prefix"
+      &&
       pointer.rangeHours === rangeHours
       && pointer.layerIds.length === selected.size
       && pointer.layerIds.every((id) => selected.has(id))
@@ -469,13 +510,54 @@ export function matchingCompositeProfile(
   return null;
 }
 
+export function matchingHybridCompositeProfile(
+  values: readonly unknown[],
+  orderedLayerIds: readonly string[],
+  rangeHours: number,
+): CompositeProfilePointer | null {
+  const compatible: CompositeProfilePointer[] = [];
+  for (const value of values) {
+    let pointer: CompositeProfilePointer;
+    try {
+      pointer = parseCompositeProfilePointer(value);
+    } catch {
+      continue;
+    }
+    if (
+      pointer.compositeKind !== "hybrid-prefix"
+      || pointer.rangeHours !== rangeHours
+    ) continue;
+    const baked = pointer.bakedLayerIds ?? pointer.layerIds;
+    const eligible = new Set(pointer.eligibleOverlayLayerIds ?? []);
+    if (
+      baked.length > orderedLayerIds.length
+      || baked.some((id, index) => orderedLayerIds[index] !== id)
+      || orderedLayerIds.slice(baked.length).some((id) => !eligible.has(id))
+    ) continue;
+    compatible.push(pointer);
+  }
+  compatible.sort((left, right) => {
+    const bakedDifference = (right.bakedLayerIds?.length ?? right.layerIds.length)
+      - (left.bakedLayerIds?.length ?? left.layerIds.length);
+    if (bakedDifference) return bakedDifference;
+    return Date.parse(right.generatedAt) - Date.parse(left.generatedAt);
+  });
+  return compatible[0] ?? null;
+}
+
 export function parseCompositeLoopManifest(value: unknown): CompositeLoopManifest {
   if (!value || typeof value !== "object") {
     throw new Error("Composite loop manifest is not an object.");
   }
   const manifest = value as Partial<CompositeLoopManifest>;
+  const hybrid = manifest.compositeKind === "hybrid-prefix";
   if (
-    manifest.schemaVersion !== 1
+    ![1, 2].includes(Number(manifest.schemaVersion))
+    || (hybrid && manifest.schemaVersion !== 2)
+    || (
+      manifest.compositeKind !== undefined
+      && !["exact", "hybrid-prefix"].includes(manifest.compositeKind)
+    )
     || typeof manifest.generation !== "string"
     || !manifest.generation
     || !validTimestamp(manifest.generatedAt)
@@ -500,6 +582,21 @@ export function parseCompositeLoopManifest(value: unknown): CompositeLoopManifes
     || manifest.frames.length < 2
     || !Array.isArray(manifest.renditions)
     || !manifest.renditions.length
+    || (
+      hybrid
+      && (
+        !validLayerIds(manifest.bakedLayerIds)
+        || !validLayerIds(manifest.eligibleOverlayLayerIds)
+        || manifest.bakedLayerIds.length !== manifest.layerIds.length
+        || manifest.bakedLayerIds.some((id, index) => id !== manifest.layerIds?.[index])
+        || manifest.eligibleOverlayLayerIds.some((id) => manifest.layerIds?.includes(id))
+        || !manifest.proxies
+        || typeof manifest.proxies !== "object"
+        || !Object.values(manifest.proxies).every((proxy) => (
+          validProxy(proxy) && typeof proxy.sha256 === "string" && proxy.sha256.length > 0
+        ))
+      )
+    )
   ) {
     throw new Error("Composite loop manifest has an unsupported schema.");
   }
@@ -513,6 +610,7 @@ export function parseCompositeLoopManifest(value: unknown): CompositeLoopManifes
   }
   let previousValidTime = -Infinity;
   let previousSourceTime = -Infinity;
+  const eligibleOverlayLayerIds = new Set(manifest.eligibleOverlayLayerIds ?? []);
   for (const frame of manifest.frames) {
     if (
       !frame
@@ -522,6 +620,21 @@ export function parseCompositeLoopManifest(value: unknown): CompositeLoopManifes
       || !finitePositive(frame.durationSeconds)
       || !validSourceTimes(frame.sourceTimes, false)
       || !validSourceTimes(frame.layerSourceTimes, true)
+      || (
+        hybrid
+        && (
+          !Array.isArray(frame.proxyLayers)
+          || !frame.proxyLayers.every((selection) => (
+            validProxyLayerSelection(selection)
+            && (selection.ids ?? [selection.id]).every((id) => (
+              eligibleOverlayLayerIds.has(id)
+            ))
+            && Boolean(manifest.proxies?.[selection.sourceKey])
+          ))
+          || new Set(frame.proxyLayers.map((selection) => selection.id)).size
+            !== frame.proxyLayers.length
+        )
+      )
     ) {
       throw new Error("Composite loop manifest contains an invalid frame.");
     }
@@ -595,17 +708,20 @@ export function compositeLoopVideoManifest(
       validTime: frame.validTime,
       sourceValidTime: frame.sourceValidTime,
       sourceTimes: frame.sourceTimes,
+      layerSourceTimes: frame.layerSourceTimes,
       encodedSourceLayer: manifest.layerId,
       sourcePath: "",
       sourceFetchedAt: manifest.generatedAt,
       ptsSeconds: pts,
       durationSeconds: frame.durationSeconds,
-      proxyLayers: Object.entries(frame.layerSourceTimes ?? {}).map(([id, sourceValidTime]) => ({
-        id,
-        renderId: id,
-        sourceKey: `composite:${id}:${sourceValidTime ?? "static"}`,
-        sourceValidTime,
-      })),
+      proxyLayers: frame.proxyLayers ?? Object.entries(frame.layerSourceTimes ?? {}).map(
+        ([id, sourceValidTime]) => ({
+          id,
+          renderId: id,
+          sourceKey: `composite:${id}:${sourceValidTime ?? "static"}`,
+          sourceValidTime,
+        }),
+      ),
     };
     pts += frame.durationSeconds;
     return result;
@@ -630,9 +746,34 @@ export function compositeLoopVideoManifest(
       mediaViewport: manifest.mediaViewport,
       media: rendition.media,
       frames,
-      proxies: {},
+      proxies: manifest.proxies ?? {},
     },
   };
+}
+
+export function videoFrameSourceTimeMap(
+  frame: Pick<
+    VideoManifestFrame,
+    "sourceValidTime" | "layerSourceTimes" | "proxyLayers"
+  >,
+): Map<string, number> {
+  const sourceTimes = new Map<string, number>();
+  const remember = (id: string, value: string | null | undefined) => {
+    if (!id || !value) return;
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) sourceTimes.set(id, parsed);
+  };
+  for (const [id, sourceValidTime] of Object.entries(frame.layerSourceTimes ?? {})) {
+    remember(id, sourceValidTime);
+  }
+  for (const selection of frame.proxyLayers) {
+    remember(selection.id, selection.sourceValidTime);
+    for (const id of selection.ids ?? [selection.id]) {
+      remember(id, selection.sourceValidTimes?.[id] ?? selection.sourceValidTime);
+    }
+  }
+  remember("satellite", frame.sourceValidTime);
+  return sourceTimes;
 }
 
 export function sourceCacheKey(path: string, revision: string): string {

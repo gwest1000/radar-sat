@@ -127,6 +127,7 @@ class OpsScriptTests(unittest.TestCase):
             "RADARSAT_OUTPUT_ROOT": str(output),
             "RADARSAT_ENV_FILE": str(root / "missing.env"),
             "RADARSAT_VIDEO_ENABLED": "1",
+            "RADARSAT_HYBRID_CORE_ENABLED": "0",
             "RADARSAT_COMPOSITE_VIDEO_BUILDER": str(driver),
             "RADARSAT_LEGACY_VIDEO_BUILDER": str(driver),
             "RADARSAT_VIDEO_CATALOG_WRITER": str(driver),
@@ -137,6 +138,43 @@ class OpsScriptTests(unittest.TestCase):
             "RADARSAT_VIDEO_PRUNE_INTERVAL_SECONDS": "3600",
         })
         return environment, calls
+
+    def test_video_scheduler_runs_smoke_core_after_exact_work_for_pilot_only(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment, calls = self._video_scheduler_fixture(root)
+            environment["RADARSAT_HYBRID_CORE_ENABLED"] = "1"
+
+            result = subprocess.run(
+                ["/bin/zsh", str(RUN_VIDEO_SCHEDULER)],
+                cwd=PROJECT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = calls.read_text().splitlines()
+            exact_calls = [
+                (index, line)
+                for index, line in enumerate(lines)
+                if "--range-hours " in line
+                and "--preset weather-smoke-core-v1" not in line
+            ]
+            hybrid_calls = [
+                (index, line)
+                for index, line in enumerate(lines)
+                if "--preset weather-smoke-core-v1" in line
+            ]
+            self.assertTrue(exact_calls)
+            self.assertEqual(len(hybrid_calls), 1)
+            self.assertGreater(hybrid_calls[0][0], max(index for index, _ in exact_calls))
+            self.assertIn("--product bc-large-overlay", hybrid_calls[0][1])
+            self.assertIn("--range-hours 3", hybrid_calls[0][1])
+            self.assertTrue(all("--preset " not in line for _, line in exact_calls))
 
     def test_video_scheduler_prioritizes_ranges_coalesces_and_prunes_last(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

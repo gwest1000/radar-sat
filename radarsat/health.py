@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import PUBLIC_VIDEO_LAYERS
-from .config import VIDEO_ARCHIVE_PRODUCTS, VIDEO_COMPOSITE_PRESETS, VIDEO_EXACT_RANGES
+from .config import (
+    VIDEO_ARCHIVE_PRODUCTS,
+    VIDEO_COMPOSITE_PRESETS,
+    VIDEO_EXACT_RANGES,
+    video_composite_kind,
+)
 from .geomet import format_utc, parse_utc
 
 
@@ -145,13 +150,26 @@ def inspect_health(
         }
         freshness_minutes = {3: 20, 6: 25, 12: 40, 24: 40}
         for product_id, layer_id in PUBLIC_VIDEO_LAYERS.items():
-            expected_presets = {
-                str(value.get("id"))
+            configured_presets = {
+                str(value.get("id")): video_composite_kind(
+                    product_id, str(value.get("id"))
+                )
                 for value in VIDEO_COMPOSITE_PRESETS.get(product_id, ())
                 if isinstance(value, dict)
             }
+            expected_presets = {
+                preset_id
+                for preset_id, kind in configured_presets.items()
+                if kind == "exact"
+            }
+            expected_hybrids = {
+                preset_id
+                for preset_id, kind in configured_presets.items()
+                if kind == "hybrid-prefix"
+            }
             product_status: dict[str, object] = {"exact": {}}
-            exact_status = product_status["exact"]
+            if expected_hybrids:
+                product_status["hybrid"] = {}
             product_config = product_configs.get(product_id, {})
             domain_id = str(product_config.get("domain", ""))
             source_frames = (
@@ -180,46 +198,72 @@ def inspect_health(
             for hours in VIDEO_EXACT_RANGES.get(product_id, ()):
                 track = "day" if hours == 24 else "live"
                 pointers = tracks.get(track, []) if isinstance(tracks, dict) else []
-                range_status: dict[str, object] = {}
-                for preset_id in sorted(expected_presets):
-                    pointer = next((
-                        value for value in pointers
-                        if isinstance(value, dict)
-                        and value.get("presetId") == preset_id
-                        and value.get("rangeHours") == hours
-                    ), None) if isinstance(pointers, list) else None
-                    label = f"{product_id}/{hours}h/{preset_id}"
-                    if not isinstance(pointer, dict) or not isinstance(pointer.get("manifestPath"), str):
-                        warnings.append(f"{label} has no prebuilt composite")
-                        range_status[preset_id] = "missing"
+                for status_key, expected, label_kind in (
+                    ("exact", expected_presets, "prebuilt composite"),
+                    ("hybrid", expected_hybrids, "hybrid core"),
+                ):
+                    if not expected:
                         continue
-                    try:
-                        manifest_path = output_root / str(pointer["manifestPath"])
-                        manifest = read_json(manifest_path)
-                        frames = manifest.get("frames", [])
-                        if not isinstance(frames, list) or len(frames) < 2:
-                            raise RuntimeError(f"{manifest_path} contains fewer than two frames")
-                        end_source = parse_utc(str(pointer["endSourceTime"]))
-                        lag_minutes = max(
-                            0.0,
-                            ((newest_source or end_source) - end_source).total_seconds() / 60,
-                        )
-                        lag_limit = freshness_minutes.get(hours, 40)
-                        if lag_minutes > lag_limit:
-                            warnings.append(
-                                f"{label} trails the newest satellite by {lag_minutes:.0f} minutes "
-                                f"(target {lag_limit})"
+                    range_status: dict[str, object] = {}
+                    for preset_id in sorted(expected):
+                        pointer = next((
+                            value for value in pointers
+                            if isinstance(value, dict)
+                            and value.get("presetId") == preset_id
+                            and value.get("rangeHours") == hours
+                        ), None) if isinstance(pointers, list) else None
+                        label = f"{product_id}/{hours}h/{preset_id}"
+                        if not isinstance(pointer, dict) or not isinstance(pointer.get("manifestPath"), str):
+                            warnings.append(f"{label} has no {label_kind}")
+                            range_status[preset_id] = "missing"
+                            continue
+                        try:
+                            manifest_path = output_root / str(pointer["manifestPath"])
+                            manifest = read_json(manifest_path)
+                            frames = manifest.get("frames", [])
+                            if not isinstance(frames, list) or len(frames) < 2:
+                                raise RuntimeError(f"{manifest_path} contains fewer than two frames")
+                            if status_key == "hybrid" and manifest.get("compositeKind") != "hybrid-prefix":
+                                raise RuntimeError(f"{manifest_path} is not a hybrid-prefix manifest")
+                            if manifest.get("renditionPolicy") == "high-only":
+                                expected_id = "high" if domain_id == "bc" else "display"
+                                rendition_ids = {
+                                    value.get("id")
+                                    for value in manifest.get("renditions", [])
+                                    if isinstance(value, dict)
+                                }
+                                if rendition_ids != {expected_id}:
+                                    raise RuntimeError(
+                                        f"{manifest_path} does not contain exactly the {expected_id} rendition"
+                                    )
+                            end_source = parse_utc(str(pointer["endSourceTime"]))
+                            lag_minutes = max(
+                                0.0,
+                                ((newest_source or end_source) - end_source).total_seconds() / 60,
                             )
-                        range_status[preset_id] = {
-                            "generation": pointer.get("generation"),
-                            "frames": len(frames),
-                            "sourceLagMinutes": round(lag_minutes, 1),
-                        }
-                    except (RuntimeError, KeyError, TypeError, ValueError) as error:
-                        warnings.append(f"{label} is invalid: {error}")
-                        range_status[preset_id] = "invalid"
-                if isinstance(exact_status, dict):
-                    exact_status[f"{hours}h"] = range_status
+                            lag_limit = freshness_minutes.get(hours, 40)
+                            if lag_minutes > lag_limit:
+                                warnings.append(
+                                    f"{label} trails the newest satellite by {lag_minutes:.0f} minutes "
+                                    f"(target {lag_limit})"
+                                )
+                            range_status[preset_id] = {
+                                "generation": pointer.get("generation"),
+                                "frames": len(frames),
+                                "sourceLagMinutes": round(lag_minutes, 1),
+                                **(
+                                    {"proxies": len(manifest.get("proxies", {}))}
+                                    if status_key == "hybrid"
+                                    and isinstance(manifest.get("proxies"), dict)
+                                    else {}
+                                ),
+                            }
+                        except (RuntimeError, KeyError, TypeError, ValueError) as error:
+                            warnings.append(f"{label} is invalid: {error}")
+                            range_status[preset_id] = "invalid"
+                    status_bucket = product_status.get(status_key)
+                    if isinstance(status_bucket, dict):
+                        status_bucket[f"{hours}h"] = range_status
 
             # Seven-day playback remains on the existing reusable HLS profile
             # until its CMAF sidecar migration. Monitor it independently.

@@ -11,6 +11,7 @@ import {
 } from "react";
 import Hls from "hls.js";
 
+import { shouldWaitForSequentialSurface } from "./video-playback-guard";
 import {
   VideoLoopManifest,
   VideoManifestFrame,
@@ -55,7 +56,8 @@ type DecodeTask = {
 };
 
 const BITMAP_CACHE_BYTES = 128 * 1024 * 1024;
-const MIN_SURFACE_CACHE_ENTRIES = 16;
+const PREWARM_BITMAP_CACHE_BYTES = 32 * 1024 * 1024;
+const ACTIVE_BITMAP_CACHE_BYTES = BITMAP_CACHE_BYTES - PREWARM_BITMAP_CACHE_BYTES;
 const LOW_MEMORY_SURFACE_CACHE_BYTES = 192 * 1024 * 1024;
 const STANDARD_SURFACE_CACHE_BYTES = 256 * 1024 * 1024;
 const HIGH_MEMORY_SURFACE_CACHE_BYTES = 384 * 1024 * 1024;
@@ -68,6 +70,71 @@ const HLS_ARCHIVE_MAX_BUFFER_SECONDS = 60;
 const HLS_BACK_BUFFER_SECONDS = 15;
 const MAX_CONCURRENT_OVERLAY_DECODES = 3;
 const EMPTY_PREPARED_SURFACES: PreparedSurfaces = {};
+const PREWARM_SURFACE_CACHE_BYTES = 8 * 1024 * 1024;
+const prewarmedSurfaces = new Map<string, {
+  surfaces: PreparedSurfaces;
+  byteLength: number;
+}>();
+let prewarmedSurfaceBytes = 0;
+
+function prewarmedSurfaceKey(key: string, width: number, height: number): string {
+  return `${width}x${height}\u0000${key}`;
+}
+
+function disposePreparedSurfaces(surfaces: PreparedSurfaces): void {
+  for (const surface of [surfaces.underlay, surfaces.overlay]) {
+    if (!surface) continue;
+    surface.remove();
+    surface.width = 0;
+    surface.height = 0;
+  }
+}
+
+function rememberPrewarmedSurface(
+  key: string,
+  width: number,
+  height: number,
+  surfaces: PreparedSurfaces,
+): void {
+  const cacheKey = prewarmedSurfaceKey(key, width, height);
+  const byteLength = width * height * 4
+    * (Number(Boolean(surfaces.underlay)) + Number(Boolean(surfaces.overlay)));
+  if (byteLength > PREWARM_SURFACE_CACHE_BYTES) {
+    disposePreparedSurfaces(surfaces);
+    return;
+  }
+  const existing = prewarmedSurfaces.get(cacheKey);
+  if (existing) {
+    prewarmedSurfaceBytes -= existing.byteLength;
+    disposePreparedSurfaces(existing.surfaces);
+    prewarmedSurfaces.delete(cacheKey);
+  }
+  prewarmedSurfaces.set(cacheKey, { surfaces, byteLength });
+  prewarmedSurfaceBytes += byteLength;
+  while (prewarmedSurfaceBytes > PREWARM_SURFACE_CACHE_BYTES && prewarmedSurfaces.size > 1) {
+    const oldestKey = prewarmedSurfaces.keys().next().value;
+    if (typeof oldestKey !== "string") break;
+    const oldest = prewarmedSurfaces.get(oldestKey);
+    prewarmedSurfaces.delete(oldestKey);
+    if (oldest) {
+      prewarmedSurfaceBytes -= oldest.byteLength;
+      disposePreparedSurfaces(oldest.surfaces);
+    }
+  }
+}
+
+function takePrewarmedSurface(
+  key: string,
+  width: number,
+  height: number,
+): PreparedSurfaces | undefined {
+  const cacheKey = prewarmedSurfaceKey(key, width, height);
+  const warmed = prewarmedSurfaces.get(cacheKey);
+  if (!warmed) return undefined;
+  prewarmedSurfaces.delete(cacheKey);
+  prewarmedSurfaceBytes -= warmed.byteLength;
+  return warmed.surfaces;
+}
 
 function percentile95(values: readonly number[]): number {
   if (!values.length) return 0;
@@ -94,9 +161,9 @@ function surfaceCacheBudgetBytes(): number {
   const deviceMemory = Number(
     (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4,
   );
-  if (deviceMemory >= 8) return HIGH_MEMORY_SURFACE_CACHE_BYTES;
-  if (deviceMemory >= 4) return STANDARD_SURFACE_CACHE_BYTES;
-  return LOW_MEMORY_SURFACE_CACHE_BYTES;
+  if (deviceMemory >= 8) return HIGH_MEMORY_SURFACE_CACHE_BYTES - PREWARM_SURFACE_CACHE_BYTES;
+  if (deviceMemory >= 4) return STANDARD_SURFACE_CACHE_BYTES - PREWARM_SURFACE_CACHE_BYTES;
+  return LOW_MEMORY_SURFACE_CACHE_BYTES - PREWARM_SURFACE_CACHE_BYTES;
 }
 
 function surfaceCacheEntryLimit(
@@ -110,10 +177,7 @@ function surfaceCacheEntryLimit(
   const surfacesPerFrame = Math.max(1, Number(hasUnderlay) + Number(hasOverlay));
   const bytesPerFrame = width * height * 4 * surfacesPerFrame;
   const budgetEntries = Math.max(1, Math.floor(budgetBytes / bytesPerFrame));
-  return Math.min(
-    plans.length,
-    Math.max(MIN_SURFACE_CACHE_ENTRIES, budgetEntries),
-  );
+  return Math.min(plans.length, budgetEntries);
 }
 
 class BitmapCache {
@@ -125,6 +189,7 @@ class BitmapCache {
   constructor(
     private readonly width: number,
     private readonly height: number,
+    private readonly maxBytes: number,
   ) {}
 
   acquire(layer: VideoCanvasProxyLayer): Promise<BitmapLease> {
@@ -210,7 +275,7 @@ class BitmapCache {
 
   private trim(): void {
     let bytes = [...this.entries.values()].reduce((sum, entry) => sum + entry.decodedBytes, 0);
-    while (bytes > BITMAP_CACHE_BYTES && this.entries.size > 1) {
+    while (bytes > this.maxBytes && this.entries.size > 1) {
       const oldestKey = [...this.entries.entries()]
         .find(([, entry]) => entry.references === 0 && Boolean(entry.bitmap))?.[0];
       if (!oldestKey) break;
@@ -286,6 +351,13 @@ class SurfaceCache {
       this.entries.delete(plan.cacheKey);
       this.entries.set(plan.cacheKey, existing);
       return existing.promise;
+    }
+    const warmed = takePrewarmedSurface(plan.cacheKey, this.width, this.height);
+    if (warmed) {
+      const entry = { promise: Promise.resolve(warmed), value: warmed };
+      this.entries.set(plan.cacheKey, entry);
+      this.trim();
+      return entry.promise;
     }
     const entry: { promise: Promise<PreparedSurfaces>; value?: PreparedSurfaces } = {
       promise: Promise.resolve({}),
@@ -372,6 +444,55 @@ class SurfaceCache {
   }
 }
 
+export async function prewarmVideoCompositeSurfaces(
+  plans: VideoCompositeFramePlan[],
+  sourceWidth: number,
+  sourceHeight: number,
+  count = 1,
+): Promise<void> {
+  const selected = plans
+    .filter((plan) => plan.underlays.length > 0 || plan.overlays.length > 0)
+    .filter((plan, index, all) => all.findIndex((candidate) => (
+      candidate.cacheKey === plan.cacheKey
+    )) === index)
+    .slice(0, Math.max(0, count));
+  if (!selected.length) return;
+  const size = playbackSurfaceSize(sourceWidth, sourceHeight);
+  const bitmaps = new BitmapCache(
+    size.width,
+    size.height,
+    PREWARM_BITMAP_CACHE_BYTES,
+  );
+  const surfaces = new SurfaceCache(
+    bitmaps,
+    size.width,
+    size.height,
+    selected.length,
+  );
+  bitmaps.activate();
+  try {
+    for (const plan of selected) {
+      // Prepare one meteorological frame at a time so a background generation
+      // refresh does not contend with the visible decoder for a burst of CPU.
+      const prepared = await surfaces.prepare(plan);
+      rememberPrewarmedSurface(
+        plan.cacheKey,
+        size.width,
+        size.height,
+        prepared,
+      );
+    }
+    // Prepared canvases have their own pixels. Release the temporary decoded
+    // bitmap inputs while the canvases wait for the next stage generation to
+    // take ownership.
+    bitmaps.clear();
+  } catch (error) {
+    surfaces.clear();
+    bitmaps.clear();
+    throw error;
+  }
+}
+
 export function VideoCompositeStage({
   manifest,
   mediaUrl,
@@ -425,6 +546,7 @@ export function VideoCompositeStage({
   const [bitmapCache] = useState(() => new BitmapCache(
     surfaceSize.width,
     surfaceSize.height,
+    ACTIVE_BITMAP_CACHE_BYTES,
   ));
   const [surfaceCache] = useState(() => new SurfaceCache(
     bitmapCache,
@@ -454,6 +576,10 @@ export function VideoCompositeStage({
   const operationEpochRef = useRef(0);
   const seekedListenerRef = useRef<(() => void) | undefined>(undefined);
   const planFrames = useMemo(() => plans.map((plan) => plan.frame), [plans]);
+  const planCacheKeys = useMemo(
+    () => new Set(plans.map((plan) => plan.cacheKey)),
+    [plans],
+  );
   const planRevision = useMemo(
     () => `${satelliteFilter ?? "none"}\u0000${plans.map((plan) => plan.cacheKey).join("\u0000")}`,
     [plans, satelliteFilter],
@@ -611,7 +737,13 @@ export function VideoCompositeStage({
         || operationEpochRef.current !== operationEpoch
         || plans[index]?.cacheKey !== plan.cacheKey
       ) return false;
-      if (!fullyComposited) commitSurfaces(prepared);
+      if (!fullyComposited) {
+        commitSurfaces(prepared);
+        // Only retire prior-generation canvases after the matching new video
+        // sample and surfaces have committed. Until then the old complete
+        // frame remains visible while preparation is in flight.
+        surfaces.retain(planCacheKeys);
+      }
       const previousIndex = committedIndexRef.current;
       committedIndexRef.current = index;
       requestedIndexRef.current = index;
@@ -675,11 +807,18 @@ export function VideoCompositeStage({
       // the requested sample. Stop it on that first committed frame; the
       // user's paused state remains authoritative.
       if (!playingRef.current) video.pause();
+      let nextSurfaceReady = true;
+      let nextPreparation: Promise<PreparedSurfaces> | undefined;
       if (!fullyComposited) {
         const lookahead = playbackLookahead(speedRef.current);
         for (let offset = 1; offset <= lookahead; offset += 1) {
           const candidate = plans[(index + offset) % plans.length];
-          void surfaces.prepare(candidate).catch((reason) => {
+          if (offset === 1) {
+            nextSurfaceReady = Boolean(surfaces.peek(candidate.cacheKey));
+          }
+          const pending = surfaces.prepare(candidate);
+          if (offset === 1) nextPreparation = pending;
+          void pending.catch((reason) => {
             if (operationEpochRef.current === operationEpoch) fail(reason);
           });
         }
@@ -687,8 +826,34 @@ export function VideoCompositeStage({
       if (index === 0 && previousIndex === plans.length - 1 && nativeLoop) {
         onLoopBoundary?.();
       }
-      if (index === plans.length - 1 && !nativeLoop) scheduleLoop(index);
-      else requestFrameRef.current();
+      if (index === plans.length - 1 && !nativeLoop) {
+        scheduleLoop(index);
+      } else if (shouldWaitForSequentialSurface({
+        playing: playingRef.current,
+        fullyComposited,
+        nativeLoop,
+        currentIndex: index,
+        frameCount: plans.length,
+        nextSurfaceReady,
+      })) {
+        // Stop on committed frame N before the decoder can submit N+1. Resume
+        // only after N+1's complete overlay surface is ready, so a cache miss
+        // never exposes video N+1 with canvas N (or a blank gate).
+        overlayStallsRef.current += 1;
+        video.pause();
+        requestFrameRef.current();
+        void nextPreparation?.then(() => {
+          if (
+            operationEpochRef.current === operationEpoch
+            && playingRef.current
+            && !failedRef.current
+          ) playVideo(video);
+        }).catch((reason) => {
+          if (operationEpochRef.current === operationEpoch) fail(reason);
+        });
+      } else {
+        requestFrameRef.current();
+      }
       return true;
     };
     if (ready) {
@@ -713,13 +878,17 @@ export function VideoCompositeStage({
       ? Promise.all([current, ...future]).then(([prepared]) => prepared)
       : current;
     void readyToResume.then((prepared) => {
-      if (commit(prepared) && playingRef.current && index < plans.length - 1) {
+      if (
+        commit(prepared)
+        && playingRef.current
+        && (index < plans.length - 1 || nativeLoop)
+      ) {
         playVideo(video);
       }
     }).catch((reason) => {
       if (operationEpochRef.current === operationEpoch) fail(reason);
     });
-  }, [commitSurfaces, fail, fullyComposited, nativeLoop, onFramePresented, onLoopBoundary, planFrames, plans, playVideo, scheduleLoop, surfaceBudgetBytes, surfaceCache]);
+  }, [commitSurfaces, fail, fullyComposited, nativeLoop, onFramePresented, onLoopBoundary, planCacheKeys, planFrames, plans, playVideo, scheduleLoop, surfaceBudgetBytes, surfaceCache]);
 
   useEffect(() => {
     requestFrameRef.current = () => {
@@ -748,36 +917,45 @@ export function VideoCompositeStage({
       requestedIndexRef.current = safeIndex;
       seekingRef.current = true;
       video.pause();
-      const frame = plans[safeIndex].frame;
-      // Chromium can resolve an exact MP4 sample-boundary seek a fraction of a
-      // millisecond before the requested PTS (for example 3.999999 instead of
-      // 4.000000). The media clock then reports the requested frame while the
-      // video plane still displays the preceding sample. Seek a few
-      // milliseconds inside the sample so paused scrubbing and frame buttons
-      // deterministically present the intended meteorological frame.
-      const target = frame.ptsSeconds + Math.min(0.005, frame.durationSeconds / 4);
-      const finishSeek = () => {
+      const plan = plans[safeIndex];
+      const beginSeek = () => {
         if (operationEpochRef.current !== operationEpoch) return;
-        seekedListenerRef.current = undefined;
-        seekingRef.current = false;
-        requestFrameRef.current();
-        if (
-          playingRef.current
-          || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
-        ) playVideo(video);
+        // Chromium can resolve an exact MP4 sample-boundary seek a fraction of
+        // a millisecond before the requested PTS. Seek just inside the sample
+        // so the intended meteorological frame is deterministic.
+        const target = plan.frame.ptsSeconds
+          + Math.min(0.005, plan.frame.durationSeconds / 4);
+        const finishSeek = () => {
+          if (operationEpochRef.current !== operationEpoch) return;
+          seekedListenerRef.current = undefined;
+          seekingRef.current = false;
+          requestFrameRef.current();
+          if (
+            playingRef.current
+            || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+          ) playVideo(video);
+        };
+        if (Math.abs(video.currentTime - target) < 0.0005) {
+          finishSeek();
+          return;
+        }
+        const onSeeked = () => finishSeek();
+        seekedListenerRef.current = onSeeked;
+        video.addEventListener("seeked", onSeeked, { once: true });
+        video.currentTime = target;
       };
-      if (Math.abs(video.currentTime - target) < 0.0005) {
-        finishSeek();
+      if (fullyComposited || surfaceCache.peek(plan.cacheKey)) {
+        beginSeek();
         return;
       }
-      const onSeeked = () => {
-        finishSeek();
-      };
-      seekedListenerRef.current = onSeeked;
-      video.addEventListener("seeked", onSeeked, { once: true });
-      video.currentTime = target;
+      // Keep the last complete frame visible while the target overlay is
+      // decoded. Only move the media clock once its matching surface exists.
+      overlayStallsRef.current += 1;
+      void surfaceCache.prepare(plan).then(beginSeek).catch((reason) => {
+        if (operationEpochRef.current === operationEpoch) fail(reason);
+      });
     };
-  }, [invalidateOperation, plans, playVideo]);
+  }, [fail, fullyComposited, invalidateOperation, plans, playVideo, surfaceCache]);
 
   useLayoutEffect(() => {
     if (previousPlanRevisionRef.current === planRevision) return;
@@ -785,14 +963,6 @@ export function VideoCompositeStage({
     const video = videoRef.current;
     const stage = stageRef.current;
     const operationEpoch = invalidateOperation(video);
-    for (const surface of [
-      visibleSurfacesRef.current.underlay,
-      visibleSurfacesRef.current.overlay,
-    ]) {
-      if (surface) surface.hidden = true;
-    }
-    surfaceCache.retain(new Set(plans.map((plan) => plan.cacheKey)));
-    visibleSurfacesRef.current = {};
     if (loopTimerRef.current !== undefined) {
       window.clearTimeout(loopTimerRef.current);
       loopTimerRef.current = undefined;
@@ -812,16 +982,37 @@ export function VideoCompositeStage({
       seekToIndexRef.current(index);
       return;
     }
+    const runway = playingRef.current && !fullyComposited
+      ? Array.from(
+          {
+            length: Math.min(
+              playbackLookahead(speedRef.current),
+              Math.max(0, plans.length - 1),
+            ),
+          },
+          (_, offset) => plans[(index + offset + 1) % plans.length],
+        )
+      : [];
+    // On a hybrid plan/layer revision, prepare the actual stage surfaces—not
+    // merely HTTP responses—before restarting the media clock. This makes the
+    // first circuit and a user-triggered layer change atomic at the video
+    // frame boundary.
     const preparedSurfaces = fullyComposited
-      ? Promise.resolve(EMPTY_PREPARED_SURFACES)
-      : surfaceCache.prepare(plan);
-    void preparedSurfaces.then((prepared) => {
+      ? Promise.resolve([EMPTY_PREPARED_SURFACES])
+      : Promise.all([
+          surfaceCache.prepare(plan),
+          ...runway.map((candidate) => surfaceCache.prepare(candidate)),
+        ]);
+    void preparedSurfaces.then(([prepared]) => {
       if (
         failedRef.current
         || operationEpochRef.current !== operationEpoch
         || plans[index]?.cacheKey !== plan.cacheKey
       ) return;
-      if (!fullyComposited) commitSurfaces(prepared);
+      if (!fullyComposited) {
+        commitSurfaces(prepared);
+        surfaceCache.retain(planCacheKeys);
+      }
       committedIndexRef.current = index;
       lastFrameCommitAtRef.current = 0;
       cadenceErrorsRef.current = [];
@@ -856,6 +1047,7 @@ export function VideoCompositeStage({
     invalidateOperation,
     nativeLoop,
     onFramePresented,
+    planCacheKeys,
     planRevision,
     plans,
     playVideo,

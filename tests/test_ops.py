@@ -11,7 +11,12 @@ from unittest import mock
 
 from PIL import Image
 
-from radarsat.config import DOMAINS, LAYERS
+from radarsat.config import (
+    DOMAINS,
+    LAYERS,
+    video_composite_layer_ids,
+    video_composite_overlay_layer_ids,
+)
 from radarsat.pipeline import (
     derive_lightning_trails,
     frame_path,
@@ -347,6 +352,157 @@ def add_composite_sidecar(
     }
     catalog_path.write_text(json.dumps(catalog))
     return {manifest_relative, media_relative}
+
+
+def add_hybrid_composite_sidecar(root: Path) -> set[str]:
+    product_id = "bc-northeast-overlay"
+    layer_id = "eccc-geocolor"
+    track = "live"
+    preset_id = "weather-smoke-core-v1"
+    range_hours = 3
+    generation = "20260720T2340Z-012345abcdef"
+    media_relative = (
+        f"videos/composite-{product_id}/{layer_id}/{track}/"
+        f"exact-{range_hours}h/high/{generation}.mp4"
+    )
+    manifest_relative = (
+        f"composite-manifests/{product_id}/{layer_id}/{track}/"
+        f"{preset_id}/{range_hours}/{generation}.json"
+    )
+    media = root / media_relative
+    media.parent.mkdir(parents=True, exist_ok=True)
+    media.write_bytes(b"hybrid-smoke-core-high-mp4")
+    baked_layer_ids = list(
+        video_composite_layer_ids(product_id, layer_id, preset_id)
+    )
+    eligible_layer_ids = list(
+        video_composite_overlay_layer_ids(product_id, layer_id, preset_id)
+    )
+    proxy_specs = {
+        "lightning-trail": "1111111111111111",
+        "hotspots": "2222222222222222",
+        "hrdps-mslp-region-northeast": "3333333333333333",
+        "hrdps-hgt500-region-northeast": "4444444444444444",
+        "model-contours": "5555555555555555",
+    }
+    proxies: dict[str, dict[str, object]] = {}
+    for render_id, fingerprint in proxy_specs.items():
+        relative = (
+            f"video-proxies/{product_id}/{render_id}/{fingerprint}.webp"
+        )
+        path = root / relative
+        write_webp(path)
+        proxies[relative] = {
+            "path": relative,
+            "width": 1920,
+            "height": 800,
+            "byteLength": path.stat().st_size,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+    selections = [
+        {
+            "id": "lightning-trail",
+            "renderId": "lightning-trail",
+            "sourceKey": next(
+                key for key in proxies if "/lightning-trail/" in key
+            ),
+            "sourceValidTime": "2026-07-20T23:30:00Z",
+        },
+        {
+            "id": "hotspots",
+            "renderId": "hotspots",
+            "sourceKey": next(key for key in proxies if "/hotspots/" in key),
+            "sourceValidTime": "2026-07-20T23:20:00Z",
+        },
+        {
+            "id": "model-mslp",
+            "renderId": "hrdps-mslp-region-northeast",
+            "sourceKey": next(key for key in proxies if "/hrdps-mslp-" in key),
+            "sourceValidTime": "2026-07-20T23:00:00Z",
+        },
+        {
+            "id": "model-hgt500",
+            "renderId": "hrdps-hgt500-region-northeast",
+            "sourceKey": next(key for key in proxies if "/hrdps-hgt500-" in key),
+            "sourceValidTime": "2026-07-20T23:00:00Z",
+        },
+        {
+            "id": "model-contours",
+            "ids": ["model-mslp", "model-hgt500"],
+            "renderId": "model-contours",
+            "sourceKey": next(
+                key for key in proxies if "/model-contours/" in key
+            ),
+            "sourceValidTime": "2026-07-20T23:00:00Z",
+            "sourceValidTimes": {
+                "model-mslp": "2026-07-20T23:00:00Z",
+                "model-hgt500": "2026-07-20T23:00:00Z",
+            },
+        },
+    ]
+    frames = [
+        {
+            "validTime": valid_time,
+            "sourceValidTime": source_time,
+            "layerSourceTimes": {},
+            "durationSeconds": duration,
+            "proxyLayers": selections,
+        }
+        for valid_time, source_time, duration in (
+            ("2026-07-20T23:30:00Z", "2026-07-20T23:20:00Z", 0.2),
+            ("2026-07-20T23:40:00Z", "2026-07-20T23:30:00Z", 0.8),
+        )
+    ]
+    pointer = {
+        "schemaVersion": 2,
+        "compositeKind": "hybrid-prefix",
+        "productId": product_id,
+        "layerId": layer_id,
+        "track": track,
+        "presetId": preset_id,
+        "layerIds": baked_layer_ids,
+        "bakedLayerIds": baked_layer_ids,
+        "eligibleOverlayLayerIds": eligible_layer_ids,
+        "renditionPolicy": "high-only",
+        "rangeHours": range_hours,
+        "generation": generation,
+        "manifestPath": manifest_relative,
+        "generatedAt": "2026-07-20T23:42:00Z",
+        "endValidTime": frames[-1]["validTime"],
+        "endSourceTime": frames[-1]["sourceValidTime"],
+    }
+    manifest = root / manifest_relative
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({
+        **pointer,
+        "domainId": "bc",
+        "cadenceMinutes": 10,
+        "viewport": {"left": 0.4, "top": 0.15, "width": 0.5, "height": 0.44},
+        "mediaViewport": {"left": 0.4, "top": 0.15, "width": 0.5, "height": 0.44},
+        "boundaryIntervalMultiplier": 4,
+        "frames": frames,
+        "proxies": proxies,
+        "renditions": [{
+            "id": "high",
+            "media": {
+                "path": media_relative,
+                "mimeType": "video/mp4",
+                "codec": "avc1",
+                "width": 1920,
+                "height": 816,
+                "contentHeight": 800,
+                "byteLength": media.stat().st_size,
+                "sha256": hashlib.sha256(media.read_bytes()).hexdigest(),
+            },
+        }],
+    }))
+    catalog_path = root / "catalog.json"
+    catalog = json.loads(catalog_path.read_text())
+    catalog["compositeProfiles"] = {
+        product_id: {layer_id: {track: [pointer]}}
+    }
+    catalog_path.write_text(json.dumps(catalog))
+    return {manifest_relative, media_relative, *proxies}
 
 
 def add_hls_video_profile(
@@ -846,6 +1002,35 @@ class PublisherTests(unittest.TestCase):
             self.assertTrue(composite_keys.issubset(uploaded_before_catalog))
             self.assertEqual(result["localBytes"], expected_local_bytes)
 
+    def test_hybrid_media_and_proxies_upload_before_catalog_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_hybrid_composite_sidecar(root)
+            fake = FakeR2()
+
+            result = publish(
+                root,
+                self.config(max_bytes=10_000_000),
+                base / "state.sqlite3",
+                base / "publish.json",
+                client=fake,
+                now=now,
+            )
+
+            catalog_commit = fake.events.index(("put", "catalog.json"))
+            uploaded_before_catalog = {
+                str(event[1]) for event in fake.events[:catalog_commit]
+            }
+            self.assertTrue(expected.issubset(uploaded_before_catalog))
+            self.assertEqual(
+                result["uploaded"],
+                len(uploaded_before_catalog.difference({"westwx-catalog.json"})),
+            )
+
     def test_referenced_default_composite_is_protected_from_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1007,6 +1192,80 @@ class PublisherTests(unittest.TestCase):
             self.assertNotIn("compositeProfiles", json.loads(payload))
             self.assertTrue(any(item.key.startswith("frames/") for item in objects))
             self.assertFalse(any(item.key.startswith("composite-manifests/") for item in objects))
+
+    def test_hybrid_sidecar_publishes_immutable_proxy_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_hybrid_composite_sidecar(root)
+
+            objects, payload = discover_objects(root)
+
+            published = json.loads(payload)
+            pointer = published["compositeProfiles"]["bc-northeast-overlay"][
+                "eccc-geocolor"
+            ]["live"][0]
+            self.assertEqual(pointer["compositeKind"], "hybrid-prefix")
+            self.assertEqual(pointer["bakedLayerIds"], pointer["layerIds"])
+            keys = {item.key for item in objects}
+            self.assertTrue(expected.issubset(keys))
+            self.assertEqual(
+                len([key for key in keys if key.startswith("video-proxies/")]),
+                5,
+            )
+
+    def test_hybrid_sidecar_fails_open_when_one_proxy_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_hybrid_composite_sidecar(root)
+            missing = next(key for key in expected if key.startswith("video-proxies/"))
+            (root / missing).unlink()
+
+            objects, payload = discover_objects(root)
+
+            self.assertNotIn("compositeProfiles", json.loads(payload))
+            keys = {item.key for item in objects}
+            self.assertFalse(any(key.startswith("video-proxies/") for key in keys))
+            self.assertFalse(any(key.endswith(".mp4") for key in keys))
+
+    def test_high_only_hybrid_rejects_an_extra_efficient_rendition(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_hybrid_composite_sidecar(root)
+            manifest_key = next(
+                key for key in expected if key.startswith("composite-manifests/")
+            )
+            manifest = root / manifest_key
+            payload = json.loads(manifest.read_text())
+            efficient_relative = next(
+                key for key in expected if key.endswith(".mp4")
+            ).replace("/high/", "/efficient/")
+            efficient = root / efficient_relative
+            efficient.parent.mkdir(parents=True, exist_ok=True)
+            efficient.write_bytes(b"unexpected-efficient-rendition")
+            payload["renditions"].append({
+                "id": "efficient",
+                "media": {
+                    **payload["renditions"][0]["media"],
+                    "path": efficient_relative,
+                    "width": 1280,
+                    "height": 550,
+                    "contentHeight": 534,
+                    "byteLength": efficient.stat().st_size,
+                    "sha256": hashlib.sha256(efficient.read_bytes()).hexdigest(),
+                },
+            })
+            manifest.write_text(json.dumps(payload))
+
+            objects, published = discover_objects(root)
+
+            self.assertNotIn("compositeProfiles", json.loads(published))
+            self.assertFalse(any(item.key.endswith(".mp4") for item in objects))
 
     def test_composite_sidecar_rejects_valid_preset_with_noncanonical_layers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

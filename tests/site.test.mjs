@@ -2,6 +2,31 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
+
+test("holds the committed weather frame until its sequential overlay is ready", () => {
+  const state = {
+    playing: true,
+    fullyComposited: false,
+    nativeLoop: false,
+    currentIndex: 4,
+    frameCount: 10,
+    nextSurfaceReady: false,
+  };
+  assert.equal(shouldWaitForSequentialSurface(state), true);
+  assert.equal(shouldWaitForSequentialSurface({ ...state, nextSurfaceReady: true }), false);
+  assert.equal(shouldWaitForSequentialSurface({ ...state, fullyComposited: true }), false);
+  assert.equal(shouldWaitForSequentialSurface({ ...state, playing: false }), false);
+  assert.equal(
+    shouldWaitForSequentialSurface({ ...state, currentIndex: 9, nativeLoop: false }),
+    false,
+  );
+  assert.equal(
+    shouldWaitForSequentialSurface({ ...state, currentIndex: 9, nativeLoop: true }),
+    true,
+  );
+});
+
 test("exports the operational viewer", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
   assert.match(html, /Real-Time Wx Display/);
@@ -104,7 +129,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(videoLoop, /MAX_MANIFEST_CACHE_ENTRIES = 8/);
   assert.match(videoLoop, /manifestCache\.size > MAX_MANIFEST_CACHE_ENTRIES/);
   assert.match(videoLoop, /requestVideoFrameCallback/);
-  assert.match(viewer, /for \(const selection of manifestFrame\.proxyLayers\)/);
+  assert.match(viewer, /selectedProxyLayers\(frame\.proxyLayers, enabledIds\)/);
   assert.match(viewer, /playbackVideoManifest\.proxies\[selection\.sourceKey\]/);
   assert.match(viewer, /activeVideoProxyLayers/);
   assert.match(viewer, /const pointSourceTimes = \(videoModeReady \? \[\] : \[/);
@@ -126,17 +151,21 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(compositor, /HIGH_MEMORY_SURFACE_CACHE_BYTES = 384/);
   assert.match(compositor, /surfaceCacheEntryLimit/);
   assert.match(compositor, /surfaceCache\.setLimit\(surfaceEntryLimit\)/);
-  assert.match(compositor, /surfaceCache\.retain\(new Set\(plans\.map/);
+  assert.match(compositor, /surfaceCache\.retain\(planCacheKeys\)/);
   assert.match(compositor, /const readyToResume = committedIndexRef\.current < 0/);
   assert.match(compositor, /const delay = plans\[index\]\.frame\.durationSeconds \* 1_000 \/ speedRef\.current/);
   assert.match(compositor, /data-surface-cache-limit/);
   assert.match(compositor, /data-surface-builds/);
   assert.match(compositor, /if \(playingRef\.current\) return/);
-  assert.match(compositor, /frame\.ptsSeconds \+ Math\.min\(0\.005, frame\.durationSeconds \/ 4\)/);
+  assert.match(compositor, /plan\.frame\.ptsSeconds[\s\S]*Math\.min\(0\.005, plan\.frame\.durationSeconds \/ 4\)/);
   assert.match(compositor, /video\.readyState < HTMLMediaElement\.HAVE_CURRENT_DATA/);
   assert.match(compositor, /if \(!playingRef\.current\) video\.pause\(\)/);
   assert.match(compositor, /if \(speed >= 4\) return 12/);
   assert.match(compositor, /PLAYBACK_SURFACE_PIXELS = 1_300_000/);
+  assert.match(compositor, /PREWARM_BITMAP_CACHE_BYTES = 32/);
+  assert.match(compositor, /ACTIVE_BITMAP_CACHE_BYTES = BITMAP_CACHE_BYTES - PREWARM_BITMAP_CACHE_BYTES/);
+  assert.match(compositor, /shouldWaitForSequentialSurface/);
+  assert.match(compositor, /video\.pause\(\);[\s\S]*surfaceCache\.prepare\(plan\)\.then\(beginSeek\)/);
   assert.match(compositor, /playbackSurfaceSize\(manifest\.width, manifest\.height\)/);
   assert.match(compositor, /crossOrigin="anonymous"/);
   assert.match(compositor, /requestVideoFrameCallback/);
@@ -147,33 +176,35 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(videoLoop, /candidate\.hours === rangeHours/);
   assert.match(videoLoop, /const durationSeconds = range\.durationsSeconds\[index\]/);
   assert.match(videoLoop, /validDefaultComposite/);
-  assert.match(videoLoop, /return \{ \.\.\.parsed, defaultComposite: undefined \}/);
+  assert.match(videoLoop, /const defaultComposite = parsed\.defaultComposite/);
+  assert.match(videoLoop, /const composites = Array\.isArray\(parsed\.composites\)/);
   assert.match(viewer, /sameLayerSet\(enabledVideoLayerIds, candidateDefaultComposite\.layerIds\)/);
   assert.match(viewer, /mediaViewport: activeExactComposite\.manifest\.mediaViewport \?\? FULL_VIEWPORT/);
   assert.match(viewer, /satelliteFilter=\{activeComposite \? undefined : satelliteFilter\}/);
   assert.match(viewer, /nativeLoop=\{activeComposite\?\.nativeLoop\}/);
   assert.match(viewer, /playbackQuality/);
   assert.match(viewer, /label: "Prebuilt loop"/);
-  assert.match(viewer, /label: "Loading prebuilt"/);
+  assert.match(viewer, /"Loading prebuilt"/);
   assert.match(viewer, /label: "Dynamic layers"/);
   assert.match(viewer, /data-playback-build={playbackBuildStatus\.mode}/);
   assert.match(viewer, /className={`decoder-selector\$\{decoderMenuOpen \? " is-open" : ""\}`}/);
   assert.match(viewer, /className="layers-summary decoder-summary"/);
   assert.match(viewer, /className="layers-popover decoder-popover"/);
-  assert.match(viewer, /role="radiogroup" aria-label="Playback quality"/);
-  assert.match(viewer, /name="playback-quality"/);
+  assert.match(viewer, /role="group" aria-label="Playback decoder"/);
+  assert.match(viewer, /type PlaybackQuality = "high"/);
+  assert.doesNotMatch(viewer, /name="playback-quality"/);
   assert.match(styles, /\.layer-toolbar\s*\{/);
   assert.match(styles, /\.decoder-selector:hover \.decoder-popover/);
   assert.match(styles, /\.decoder-options\s*\{/);
   assert.match(styles, /\.playback-build-indicator\.is-prebuilt/);
+  assert.match(styles, /\.playback-build-indicator\.is-hybrid/);
   assert.match(styles, /\.playback-build-indicator\.is-dynamic/);
-  assert.match(viewer, /navigator\.mediaCapabilities/);
-  assert.match(viewer, /ResizeObserver/);
-  assert.match(viewer, /setFailedDefaultComposite/);
+  assert.doesNotMatch(viewer, /navigator\.mediaCapabilities/);
+  assert.match(viewer, /rememberCompositeMediaFailure/);
   assert.match(viewer, /data-composite-preset=/);
   assert.match(compositor, /const fullyComposited = Boolean\(compositePresetId\)/);
-  assert.match(compositor, /fullyComposited \? EMPTY_PREPARED_SURFACES/);
-  assert.match(compositor, /if \(!fullyComposited\) commitSurfaces\(prepared\)/);
+  assert.match(compositor, /fullyComposited[\s\S]*?Promise\.resolve\(\[EMPTY_PREPARED_SURFACES\]\)/);
+  assert.match(compositor, /commitSurfaces\(prepared\)/);
   assert.match(compositor, /getVideoPlaybackQuality/);
   assert.match(compositor, /loop=\{nativeLoop\}/);
   assert.match(compositor, /data-cadence-p95-error-ms/);
@@ -198,35 +229,351 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(compositor, /disposedRef\.current = true;[\s\S]*?invalidateOperation\(video\)/);
   assert.match(styles, /\.video-composite-canvas/);
   assert.match(styles, /\.video-loop-decoder/);
+  assert.doesNotMatch(styles, /data-presentation-ready="false"/);
 });
 
 test("prefers exact-range composite sidecars and fails open to legacy playback", async () => {
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
   const videoLoop = await readFile(new URL("../app/video-loop.ts", import.meta.url), "utf8");
+  const compositor = await readFile(new URL("../app/video-composite-stage.tsx", import.meta.url), "utf8");
 
   assert.match(videoLoop, /export type CompositeProfilePointer/);
   assert.match(videoLoop, /export type CompositeLoopManifest/);
   assert.match(videoLoop, /export function parseCompositeLoopManifest/);
   assert.match(videoLoop, /export function matchingCompositeProfile/);
+  assert.match(videoLoop, /export function matchingHybridCompositeProfile/);
+  assert.match(videoLoop, /compositeKind\?: "exact" \| "hybrid-prefix"/);
+  assert.match(videoLoop, /bakedLayerIds\?: string\[\]/);
+  assert.match(videoLoop, /eligibleOverlayLayerIds\?: string\[\]/);
+  assert.match(videoLoop, /proxyLayers\?: VideoProxyLayerSelection\[\]/);
   assert.match(videoLoop, /pointer\.rangeHours === rangeHours/);
   assert.match(videoLoop, /pointer\.layerIds\.every\(\(id\) => selected\.has\(id\)\)/);
   assert.match(videoLoop, /manifest\.endValidTime[\s\S]*finalFrame\.validTime/);
   assert.match(videoLoop, /manifest\.endSourceTime[\s\S]*finalFrame\.sourceValidTime/);
   assert.match(videoLoop, /export function compositeLoopVideoManifest/);
-  assert.match(videoLoop, /proxies: \{\}/);
+  assert.match(videoLoop, /proxies: manifest\.proxies \?\? \{\}/);
 
   assert.match(viewer, /compositeProfiles\?: Record/);
   assert.match(viewer, /matchingCompositeProfile\([\s\S]*enabledVideoLayerIds,[\s\S]*effectiveRangeHours/);
   assert.match(viewer, /COMPOSITE_FRESHNESS_MINUTES[\s\S]*3: 20[\s\S]*6: 25[\s\S]*12: 40[\s\S]*24: 40[\s\S]*168: 70/);
-  assert.match(viewer, /const exactComposite = sidecarExactComposite[\s\S]*legacyExactComposite/);
+  assert.match(viewer, /const exactComposite = candidateCompositeManifest\?\.compositeKind === "hybrid-prefix"[\s\S]*usableLegacyExactComposite \?\? usableSidecarComposite/);
   assert.match(viewer, /const needsFullCatalog = compositeUnavailable && legacyUnavailable/);
   assert.match(viewer, /pendingCompositeManifestRef\.current[\s\S]*handleVideoLoopBoundary/);
   assert.match(viewer, /acceptedCompositeGeneration === loadedCompositeManifest\.generation/);
   assert.match(viewer, /retiredStaleComposite[\s\S]*setLoadedCompositeManifest\(null\)/);
   assert.match(viewer, /pendingMediaReadyKeyRef\.current !== readyKey/);
-  assert.match(viewer, /exactCompositeSelectionKey\("legacy", pendingSelection\)/);
+  assert.match(viewer, /pendingOverlayReadyKeyRef\.current !== readyKey/);
+  assert.match(viewer, /label: "Prebuilt core \+ layers"/);
+  assert.match(viewer, /selectedProxyLayers/);
+  assert.match(viewer, /selection\.ids \?\? \[selection\.id\]/);
+  assert.match(viewer, /sort\(\(left, right\) => left\.configured\.index - right\.configured\.index\)/);
+  assert.match(viewer, /prewarmVideoCompositeSurfaces/);
+  assert.match(compositor, /takePrewarmedSurface/);
+  assert.match(compositor, /PREWARM_SURFACE_CACHE_BYTES = 8/);
+  assert.match(
+    viewer,
+    /const pendingSelectionKey = pendingSelectionCandidate[\s\S]*exactCompositeSelectionKey\("legacy", pendingSelectionCandidate\)/,
+  );
   assert.match(viewer, /onCanPlay=\{\(event\) => \{[\s\S]*HTMLMediaElement\.HAVE_FUTURE_DATA/);
   assert.match(viewer, /key=\{pendingExactCompositeKey\}/);
+  assert.match(compositor, /index < plans\.length - 1 \|\| nativeLoop/);
+});
+
+test("falls through stale or failed exact profiles without resurrecting failed media", async () => {
+  const {
+    canRetainLoadedComposite,
+    pendingMediaFailureTransition,
+    preferredCompositeProfile,
+    rememberCompositeMediaFailure,
+    rememberFailedKey,
+    requiresPendingMediaPreload,
+    shouldQueueCompositeHandoff,
+  } = await import("../app/video-selection-policy.ts");
+  const pointer = (presetId, compositeKind) => ({
+    compositeKind,
+    presetId,
+    layerIds: ["base-dark", "satellite"],
+    rangeHours: 3,
+    generation: "generation-a",
+    manifestPath: `video/${presetId}.json`,
+    generatedAt: "2026-08-21T12:10:00Z",
+    endValidTime: "2026-08-21T12:10:00Z",
+    endSourceTime: "2026-08-21T12:10:00Z",
+  });
+  const exact = {
+    pointer: pointer("exact-v1", "exact"),
+    failureKey: "exact-key",
+    fresh: true,
+  };
+  const hybrid = {
+    pointer: pointer("weather-smoke-core-v1", "hybrid-prefix"),
+    failureKey: "hybrid-key",
+    fresh: true,
+  };
+
+  assert.equal(preferredCompositeProfile(exact, hybrid, [])?.pointer.presetId, "exact-v1");
+  assert.equal(
+    preferredCompositeProfile({ ...exact, fresh: false }, hybrid, [])?.pointer.presetId,
+    "weather-smoke-core-v1",
+  );
+  assert.equal(
+    preferredCompositeProfile(exact, hybrid, ["exact-key"])?.pointer.presetId,
+    "weather-smoke-core-v1",
+  );
+  assert.equal(preferredCompositeProfile(exact, hybrid, ["exact-key", "hybrid-key"]), null);
+
+  let failedMedia = rememberCompositeMediaFailure({}, "sidecar-key", "sidecar failed");
+  failedMedia = rememberCompositeMediaFailure(failedMedia, "legacy-key", "legacy failed");
+  assert.deepEqual(failedMedia, {
+    "sidecar-key": "sidecar failed",
+    "legacy-key": "legacy failed",
+  });
+  assert.deepEqual(
+    rememberFailedKey(rememberFailedKey([], "exact-key"), "hybrid-key"),
+    ["exact-key", "hybrid-key"],
+  );
+  assert.equal(requiresPendingMediaPreload({ manifest: { transport: "hls-ts" } }), false);
+  assert.equal(requiresPendingMediaPreload({ manifest: { transport: "progressive-mp4" } }), true);
+
+  const activeHybrid = {
+    generation: "hybrid-generation-a",
+    productId: "test-product",
+    layerId: "satellite",
+    track: "live",
+    presetId: "weather-smoke-core-v1",
+    rangeHours: 3,
+  };
+  const incomingExact = {
+    ...activeHybrid,
+    generation: "exact-generation-b",
+    presetId: "exact-v1",
+  };
+  assert.equal(
+    canRetainLoadedComposite(activeHybrid, incomingExact, activeHybrid.generation),
+    true,
+    "an accepted hybrid remains visible while an exact target is loading",
+  );
+  assert.equal(
+    canRetainLoadedComposite(activeHybrid, null, activeHybrid.generation),
+    true,
+    "an accepted stale profile remains visible until its loop boundary",
+  );
+  assert.equal(canRetainLoadedComposite(activeHybrid, incomingExact, ""), false);
+  assert.equal(
+    shouldQueueCompositeHandoff(
+      activeHybrid,
+      incomingExact,
+      activeHybrid.generation,
+      true,
+    ),
+    true,
+    "a cross-preset replacement queues behind a proven active circuit",
+  );
+  assert.equal(
+    shouldQueueCompositeHandoff(
+      activeHybrid,
+      incomingExact,
+      activeHybrid.generation,
+      false,
+    ),
+    false,
+    "an incompatible old circuit cannot strand a replacement in pending state",
+  );
+
+  assert.deepEqual(
+    pendingMediaFailureTransition("sidecar", "sidecar-key", "sidecar-profile"),
+    {
+      discardPendingComposite: true,
+      discardPendingVideo: false,
+      failedMediaKey: "sidecar-key",
+      failedProfileKey: "sidecar-profile",
+    },
+    "a rejected sidecar is removed so it cannot block the legacy pending source",
+  );
+  assert.deepEqual(
+    pendingMediaFailureTransition("legacy", "legacy-key", "legacy-profile"),
+    {
+      discardPendingComposite: false,
+      discardPendingVideo: false,
+      failedMediaKey: "legacy-key",
+      failedProfileKey: "",
+    },
+    "a rejected legacy rendition preserves its base pending video manifest",
+  );
+});
+
+test("sanitizes legacy and range composites independently", async () => {
+  const {
+    exactCompositeManifest,
+    parseVideoLoopManifest,
+  } = await import("../app/video-loop.ts");
+  const media = {
+    path: "videos/exact.mp4",
+    mimeType: "video/mp4",
+    codec: "avc1",
+    width: 10,
+    height: 10,
+    byteLength: 1,
+    sha256: "abc123",
+  };
+  const frame = (index, validTime) => ({
+    index,
+    validTime,
+    sourceValidTime: validTime,
+    encodedSourceLayer: "satellite",
+    sourcePath: `satellite-${index}.webp`,
+    sourceFetchedAt: validTime,
+    ptsSeconds: index,
+    durationSeconds: 1,
+    proxyLayers: [],
+  });
+  const parsed = parseVideoLoopManifest({
+    schemaVersion: 2,
+    generation: "generation-a",
+    generatedAt: "2026-08-21T12:10:00Z",
+    productId: "test-product",
+    layerId: "satellite",
+    track: "live",
+    transport: "progressive-mp4",
+    cadenceMinutes: 10,
+    width: 10,
+    height: 10,
+    media,
+    frames: [
+      frame(0, "2026-08-21T12:00:00Z"),
+      frame(1, "2026-08-21T12:10:00Z"),
+    ],
+    proxies: {},
+    defaultComposite: {},
+    composites: [
+      {
+        id: "malformed-matching-preset",
+        layerIds: ["base-dark", "satellite"],
+        mediaViewport: { left: 0, top: 0, width: 1, height: 1 },
+      },
+      {
+        id: "healthy-matching-preset",
+        layerIds: ["base-dark", "satellite"],
+        mediaViewport: { left: 0, top: 0, width: 1, height: 1 },
+        ranges: [{
+          hours: 3,
+          firstFrame: 0,
+          frameCount: 2,
+          durationsSeconds: [1, 4],
+          boundaryIntervalMultiplier: 4,
+          renditions: [{ id: "high", media }],
+        }],
+      },
+    ],
+  });
+
+  assert.equal(parsed.defaultComposite, undefined);
+  assert.deepEqual(parsed.composites?.map((preset) => preset.id), ["healthy-matching-preset"]);
+  assert.doesNotThrow(() => exactCompositeManifest(
+    parsed,
+    ["base-dark", "satellite"],
+    3,
+    "high",
+  ));
+  assert.equal(
+    exactCompositeManifest(parsed, ["base-dark", "satellite"], 3, "high")?.presetId,
+    "healthy-matching-preset",
+  );
+});
+
+test("preserves immutable baked source times for hybrid freshness", async () => {
+  const {
+    compositeLoopVideoManifest,
+    parseCompositeLoopManifest,
+    videoFrameSourceTimeMap,
+  } = await import("../app/video-loop.ts");
+  const proxy = {
+    path: "video-proxies/model-contours.webp",
+    width: 10,
+    height: 10,
+    byteLength: 1,
+    sha256: "def456",
+  };
+  const media = {
+    path: "videos/hybrid.mp4",
+    mimeType: "video/mp4",
+    codec: "avc1",
+    width: 10,
+    height: 11,
+    contentHeight: 10,
+    byteLength: 1,
+    sha256: "abc123",
+  };
+  const hybridFrame = (validTime, radarTime, modelTime) => ({
+    validTime,
+    sourceValidTime: validTime,
+    layerSourceTimes: {
+      "base-dark": null,
+      satellite: validTime,
+      smoke: validTime,
+      "radar-rain": radarTime,
+    },
+    proxyLayers: [{
+      id: "model-contours",
+      ids: ["model-mslp", "model-hgt500"],
+      renderId: "model-contours",
+      sourceKey: proxy.path,
+      sourceValidTime: modelTime,
+      sourceValidTimes: {
+        "model-mslp": modelTime,
+        "model-hgt500": modelTime,
+      },
+    }],
+    durationSeconds: 1,
+  });
+  const parsed = parseCompositeLoopManifest({
+    schemaVersion: 2,
+    compositeKind: "hybrid-prefix",
+    generation: "generation-b",
+    generatedAt: "2026-08-21T12:10:00Z",
+    productId: "test-product",
+    domainId: "test-domain",
+    layerId: "satellite",
+    track: "live",
+    presetId: "weather-smoke-core-v1",
+    layerIds: ["base-dark", "satellite", "smoke", "radar-rain"],
+    bakedLayerIds: ["base-dark", "satellite", "smoke", "radar-rain"],
+    eligibleOverlayLayerIds: ["model-mslp", "model-hgt500"],
+    rangeHours: 3,
+    cadenceMinutes: 10,
+    viewport: { left: 0, top: 0, width: 1, height: 1 },
+    mediaViewport: { left: 0, top: 0, width: 1, height: 1 },
+    endValidTime: "2026-08-21T12:10:00Z",
+    endSourceTime: "2026-08-21T12:10:00Z",
+    boundaryIntervalMultiplier: 4,
+    frames: [
+      hybridFrame(
+        "2026-08-21T12:00:00Z",
+        "2026-08-21T12:00:00Z",
+        "2026-08-21T11:00:00Z",
+      ),
+      hybridFrame(
+        "2026-08-21T12:10:00Z",
+        "2026-08-21T12:06:00Z",
+        "2026-08-21T12:00:00Z",
+      ),
+    ],
+    renditions: [{ id: "high", media }],
+    proxies: { [proxy.path]: proxy },
+  });
+  const converted = compositeLoopVideoManifest(parsed, "high");
+  assert.ok(converted);
+  const finalFrame = converted.manifest.frames[1];
+  assert.equal(finalFrame.layerSourceTimes?.["radar-rain"], "2026-08-21T12:06:00Z");
+
+  const sourceTimes = videoFrameSourceTimeMap(finalFrame);
+  assert.equal(sourceTimes.get("radar-rain"), Date.parse("2026-08-21T12:06:00Z"));
+  assert.equal(sourceTimes.get("model-mslp"), Date.parse("2026-08-21T12:00:00Z"));
+  assert.equal(sourceTimes.get("model-hgt500"), Date.parse("2026-08-21T12:00:00Z"));
+  assert.equal(
+    Date.parse("2026-08-21T12:00:00Z") > (sourceTimes.get("radar-rain") ?? -Infinity) + 1_000,
+    false,
+  );
 });
 
 test("exposes stable layer-control targets for deterministic toggles", async () => {
@@ -407,7 +754,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "model-mslp").optional, true);
   assert.equal(overlay.legends.includes("model-hgt500"), false);
   assert.equal(overlay.legends.includes("model-mslp"), false);
-  assert.match(viewer, /500 hPa Height/);
+  assert.match(viewer, /MSLP \+ 500 hPa/);
   assert.match(viewer, /ECMWF IFS Control/);
   assert.equal(demo.products.some((product) => product.group === "Snow / fog"), false);
   assert.equal(overlay.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
@@ -440,6 +787,8 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.layers.find((layer) => layer.id === "westwx-ir").controlId, "noaa-ir");
   assert.equal(northAmerica.layers.find((layer) => layer.id === "glm-lightning-trail").controlId, "lightning");
   assert.match(viewer, /normalizeLayerChoices/);
+  assert.match(viewer, /if \(controlId !== "model-contours"\) continue/);
+  assert.doesNotMatch(viewer, /if \(!controlId\) continue;[\s\S]{0,500}sharedControls\.set/);
   assert.match(viewer, /Additional BC satellite/);
   assert.doesNotMatch(viewer, /Additional MSC\/ECCC satellite views are available/);
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);

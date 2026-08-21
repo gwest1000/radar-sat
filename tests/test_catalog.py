@@ -7,7 +7,14 @@ import unittest
 from pathlib import Path
 
 from radarsat.catalog import build_catalog, write_catalog
-from radarsat.config import DOMAINS, LAYERS, VIEWPORTS
+from radarsat.config import (
+    DOMAINS,
+    LAYERS,
+    VIEWPORTS,
+    video_composite_kind,
+    video_composite_layer_ids,
+    video_composite_overlay_layer_ids,
+)
 from radarsat.pipeline import frame_path, metadata_path, write_metadata
 
 
@@ -66,22 +73,13 @@ class CatalogTests(unittest.TestCase):
             f"composite-manifests/{product_id}/{layer_id}/{track}/"
             f"{preset_id}/{range_hours}/{generation}.json"
         )
-        layer_ids = [
-            "base-dark",
-            layer_id,
-            *(["smoke"] if preset_id == "operational-default-v1" else []),
-            "radar-coverage",
-            "radar-rain",
-            "watersheds",
-            "transmission-lines",
-            "boundaries",
-            "lightning-trail",
-            *(["hotspots"] if preset_id == "operational-default-v1" else []),
-            "model-mslp",
-            "model-hgt500",
-        ]
+        layer_ids = list(
+            video_composite_layer_ids(product_id, layer_id, preset_id)
+        )
+        composite_kind = video_composite_kind(product_id, preset_id)
+        schema_version = 2 if composite_kind == "hybrid-prefix" else 1
         pointer = {
-            "schemaVersion": 1,
+            "schemaVersion": schema_version,
             "productId": product_id,
             "layerId": layer_id,
             "track": track,
@@ -94,9 +92,19 @@ class CatalogTests(unittest.TestCase):
             "endValidTime": "2026-07-22T12:00:00Z",
             "endSourceTime": "2026-07-22T11:50:00Z",
         }
+        if composite_kind == "hybrid-prefix":
+            pointer.update({
+                "compositeKind": "hybrid-prefix",
+                "bakedLayerIds": layer_ids,
+                "eligibleOverlayLayerIds": list(
+                    video_composite_overlay_layer_ids(
+                        product_id, layer_id, preset_id
+                    )
+                ),
+            })
         manifest = root / manifest_relative
         manifest.parent.mkdir(parents=True, exist_ok=True)
-        manifest.write_text(json.dumps({**pointer, "schemaVersion": 1}))
+        manifest.write_text(json.dumps(pointer))
         index = (
             root
             / "composite-index"
@@ -392,6 +400,53 @@ class CatalogTests(unittest.TestCase):
                 {pointer["presetId"] for pointer in pointers},
                 {"operational-default-v1", "operational-core-v1"},
             )
+
+    def test_catalog_exposes_hybrid_contract_without_requiring_it_for_hls_retirement(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_video_pointer(root)
+            self.write_composite_pointer(root)
+            self.write_composite_pointer(
+                root,
+                preset_id="operational-default-v1",
+                generation="20260722T1200Z-fedcba543210",
+            )
+            self.write_composite_pointer(
+                root,
+                preset_id="weather-smoke-core-v1",
+                generation="20260722T1200Z-012345abcdef",
+            )
+
+            catalog = build_catalog(root)
+
+            self.assertNotIn("videoProfiles", catalog)
+            pointers = catalog["compositeProfiles"]["bc-northeast-overlay"][
+                "eccc-geocolor"
+            ]["live"]
+            hybrid = next(
+                value
+                for value in pointers
+                if value["presetId"] == "weather-smoke-core-v1"
+            )
+            self.assertEqual(hybrid["compositeKind"], "hybrid-prefix")
+            self.assertEqual(hybrid["bakedLayerIds"], hybrid["layerIds"])
+            self.assertEqual(
+                hybrid["eligibleOverlayLayerIds"],
+                ["lightning-trail", "hotspots", "model-mslp", "model-hgt500"],
+            )
+
+    def test_catalog_rejects_noncanonical_hybrid_overlay_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_composite_pointer(root, preset_id="weather-smoke-core-v1")
+            index = next((root / "composite-index").rglob("*.json"))
+            pointer = json.loads(index.read_text())
+            pointer["eligibleOverlayLayerIds"] = ["hotspots"]
+            index.write_text(json.dumps(pointer))
+
+            self.assertNotIn("compositeProfiles", build_catalog(root))
 
     def test_catalog_omits_mismatched_composite_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

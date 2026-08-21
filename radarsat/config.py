@@ -549,8 +549,8 @@ def _overlay_product(
             {"id": "boundaries", "opacity": 1.0},
             {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "lightning"},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": product_id != "bc-south-coast-overlay"},
-            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": product_id != "bc-south-coast-overlay"},
+            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": product_id != "bc-south-coast-overlay", "controlId": "model-contours"},
+            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": product_id != "bc-south-coast-overlay", "controlId": "model-contours"},
         ],
         "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
@@ -617,8 +617,8 @@ def _broad_product(
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "lightning"},
             {"id": "lightning-trail", "opacity": 1.0, "enabledWith": "glm-lightning-trail"},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "model-contours"},
+            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "model-contours"},
         ],
         "legends": [
             anchor_layer,
@@ -773,6 +773,38 @@ VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
     for product_id in VIDEO_EXACT_RANGES
 }
 
+# A reusable opaque prefix is intentionally much narrower than the exact
+# composite matrix while the browser and storage costs are measured.  The
+# prefix ends at the static linework; every eligible layer is therefore above
+# the H.264 plane and can be added without changing the recipe's visual order.
+VIDEO_SMOKE_CORE_PRODUCTS = frozenset(
+    {
+        "bc-large-overlay",
+        "bc-northeast-overlay",
+        "north-america-overlay",
+    }
+)
+for _product_id in VIDEO_SMOKE_CORE_PRODUCTS:
+    _lightning_id = (
+        "lightning-trail"
+        if _product_id.startswith("bc-")
+        else "glm-lightning-trail"
+    )
+    VIDEO_COMPOSITE_PRESETS[_product_id] = (
+        *VIDEO_COMPOSITE_PRESETS[_product_id],
+        {
+            "id": "weather-smoke-core-v1",
+            "compositeKind": "hybrid-prefix",
+            "optionalLayers": ("smoke", "radar-rain"),
+            "overlayLayers": (
+                _lightning_id,
+                "hotspots",
+                "model-mslp",
+                "model-hgt500",
+            ),
+        },
+    )
+
 # South Coast's common display intentionally omits model contours. Its full
 # preset differs from the core only by smoke and fire.
 VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"] = (
@@ -787,17 +819,11 @@ VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"] = (
 )
 
 
-def video_composite_layer_ids(
+def _video_composite_preset(
     product_id: str,
-    satellite_layer_id: str,
     preset_id: str,
-) -> tuple[str, ...]:
-    """Resolve the one canonical recipe stack for a named video preset."""
-    product = next(
-        (value for value in PRODUCTS if value.get("id") == product_id),
-        None,
-    )
-    preset = next(
+) -> dict[str, object] | None:
+    return next(
         (
             value
             for value in VIDEO_COMPOSITE_PRESETS.get(product_id, ())
@@ -805,11 +831,20 @@ def video_composite_layer_ids(
         ),
         None,
     )
-    if product is None or preset is None:
+
+
+def _resolved_video_layer_ids(
+    product_id: str,
+    satellite_layer_id: str,
+    optional_layer_ids: tuple[str, ...],
+) -> tuple[str, ...]:
+    product = next(
+        (value for value in PRODUCTS if value.get("id") == product_id),
+        None,
+    )
+    if product is None:
         return ()
-    requested = {
-        str(value) for value in preset.get("optionalLayers", ())
-    }
+    requested = set(optional_layer_ids)
     selected: list[str] = []
     for recipe in product.get("layers", ()):
         recipe_id = str(recipe.get("id", ""))
@@ -828,6 +863,64 @@ def video_composite_layer_ids(
             continue
         selected.append(recipe_id)
     return tuple(selected)
+
+
+def video_composite_kind(product_id: str, preset_id: str) -> str:
+    """Return ``exact`` or the canonical reusable composite kind."""
+    preset = _video_composite_preset(product_id, preset_id)
+    if preset is None:
+        return ""
+    return str(preset.get("compositeKind", "exact"))
+
+
+def video_composite_layer_ids(
+    product_id: str,
+    satellite_layer_id: str,
+    preset_id: str,
+) -> tuple[str, ...]:
+    """Resolve the one canonical recipe stack for a named video preset."""
+    preset = _video_composite_preset(product_id, preset_id)
+    if preset is None:
+        return ()
+    return _resolved_video_layer_ids(
+        product_id,
+        satellite_layer_id,
+        tuple(str(value) for value in preset.get("optionalLayers", ())),
+    )
+
+
+def video_composite_overlay_layer_ids(
+    product_id: str,
+    satellite_layer_id: str,
+    preset_id: str,
+) -> tuple[str, ...]:
+    """Return the ordered dynamic suffix supported by a hybrid prefix.
+
+    This resolves ``enabledWith`` companions (notably the Canadian lightning
+    trail on broad GLM views) and verifies that the baked stack is an exact
+    prefix of the combined recipe.  Returning no values for an invalid policy
+    prevents a misconfigured opaque video from covering an intended underlay.
+    """
+    preset = _video_composite_preset(product_id, preset_id)
+    if preset is None or video_composite_kind(product_id, preset_id) != "hybrid-prefix":
+        return ()
+    baked = video_composite_layer_ids(product_id, satellite_layer_id, preset_id)
+    combined_optional = tuple(
+        dict.fromkeys(
+            (
+                *(str(value) for value in preset.get("optionalLayers", ())),
+                *(str(value) for value in preset.get("overlayLayers", ())),
+            )
+        )
+    )
+    combined = _resolved_video_layer_ids(
+        product_id,
+        satellite_layer_id,
+        combined_optional,
+    )
+    if combined[: len(baked)] != baked:
+        return ()
+    return combined[len(baked) :]
 
 
 LEGENDS: dict[str, dict[str, str]] = {
