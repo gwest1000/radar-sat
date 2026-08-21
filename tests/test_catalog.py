@@ -51,6 +51,64 @@ class CatalogTests(unittest.TestCase):
             },
         }))
 
+    def write_composite_pointer(
+        self,
+        root: Path,
+        *,
+        preset_id: str = "operational-core-v1",
+        generation: str = "20260722T1200Z-abcdef012345",
+    ) -> None:
+        product_id = "bc-northeast-overlay"
+        layer_id = "eccc-geocolor"
+        track = "live"
+        range_hours = 3
+        manifest_relative = (
+            f"composite-manifests/{product_id}/{layer_id}/{track}/"
+            f"{preset_id}/{range_hours}/{generation}.json"
+        )
+        layer_ids = [
+            "base-dark",
+            layer_id,
+            *(["smoke"] if preset_id == "operational-default-v1" else []),
+            "radar-coverage",
+            "radar-rain",
+            "watersheds",
+            "transmission-lines",
+            "boundaries",
+            "lightning-trail",
+            *(["hotspots"] if preset_id == "operational-default-v1" else []),
+            "model-mslp",
+            "model-hgt500",
+        ]
+        pointer = {
+            "schemaVersion": 1,
+            "productId": product_id,
+            "layerId": layer_id,
+            "track": track,
+            "presetId": preset_id,
+            "layerIds": layer_ids,
+            "rangeHours": range_hours,
+            "generation": generation,
+            "manifestPath": manifest_relative,
+            "generatedAt": "2026-07-22T12:02:00Z",
+            "endValidTime": "2026-07-22T12:00:00Z",
+            "endSourceTime": "2026-07-22T11:50:00Z",
+        }
+        manifest = root / manifest_relative
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(json.dumps({**pointer, "schemaVersion": 1}))
+        index = (
+            root
+            / "composite-index"
+            / product_id
+            / layer_id
+            / track
+            / preset_id
+            / f"{range_hours}.json"
+        )
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(json.dumps(pointer))
+
     def test_incremental_catalog_detects_replacement_and_deletion(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -297,6 +355,69 @@ class CatalogTests(unittest.TestCase):
                 },
             )
             self.assertNotIn("frames", json.dumps(catalog["videoProfiles"]))
+
+    def test_catalog_exposes_independent_composite_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_composite_pointer(root)
+
+            catalog = build_catalog(root)
+            values = catalog["compositeProfiles"]["bc-northeast-overlay"][
+                "eccc-geocolor"
+            ]["live"]
+
+            self.assertEqual(len(values), 1)
+            self.assertEqual(values[0]["presetId"], "operational-core-v1")
+            self.assertEqual(values[0]["rangeHours"], 3)
+            self.assertNotIn("frames", json.dumps(values))
+
+    def test_complete_exact_pair_retires_bulky_live_hls_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_video_pointer(root)
+            self.write_composite_pointer(root)
+            self.write_composite_pointer(
+                root,
+                preset_id="operational-default-v1",
+                generation="20260722T1200Z-fedcba543210",
+            )
+
+            catalog = build_catalog(root)
+
+            self.assertNotIn("videoProfiles", catalog)
+            pointers = catalog["compositeProfiles"]["bc-northeast-overlay"][
+                "eccc-geocolor"
+            ]["live"]
+            self.assertEqual(
+                {pointer["presetId"] for pointer in pointers},
+                {"operational-default-v1", "operational-core-v1"},
+            )
+
+    def test_catalog_omits_mismatched_composite_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_composite_pointer(root)
+            index = next((root / "composite-index").rglob("*.json"))
+            payload = json.loads(index.read_text())
+            payload["endSourceTime"] = "not-a-time"
+            index.write_text(json.dumps(payload))
+
+            self.assertNotIn("compositeProfiles", build_catalog(root))
+
+    def test_catalog_omits_valid_preset_with_noncanonical_layer_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_composite_pointer(root)
+            index = next((root / "composite-index").rglob("*.json"))
+            pointer = json.loads(index.read_text())
+            pointer["layerIds"].remove("model-hgt500")
+            index.write_text(json.dumps(pointer))
+            manifest = root / pointer["manifestPath"]
+            payload = json.loads(manifest.read_text())
+            payload["layerIds"] = pointer["layerIds"]
+            manifest.write_text(json.dumps(payload))
+
+            self.assertNotIn("compositeProfiles", build_catalog(root))
 
     def test_catalog_omits_legacy_default_video_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

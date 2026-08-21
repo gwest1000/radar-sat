@@ -78,6 +78,12 @@ def main() -> int:
                     "Expiration": {"Days": 9},
                 },
                 {
+                    "ID": "expire-composite-manifests",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "composite-manifests/"},
+                    "Expiration": {"Days": 9},
+                },
+                {
                     "ID": "abort-incomplete-uploads",
                     "Status": "Enabled",
                     "Filter": {"Prefix": ""},

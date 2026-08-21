@@ -539,7 +539,7 @@ def _overlay_product(
             {"id": "raw-ir", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlId": "noaa-ir"},
             {"id": "convective", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlSection": "regional-satellite"},
             {"id": "snowfog", "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlSection": "regional-satellite"},
-            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
@@ -549,8 +549,8 @@ def _overlay_product(
             {"id": "boundaries", "opacity": 1.0},
             {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "lightning"},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
-            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": product_id != "bc-south-coast-overlay"},
+            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": product_id != "bc-south-coast-overlay"},
         ],
         "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
@@ -607,7 +607,7 @@ def _broad_product(
             {"id": "base-dark", "opacity": 1.0},
             {"id": f"{satellite_prefix}-visir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite", "controlId": "noaa-visir"},
             {"id": anchor_layer, "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlId": "noaa-ir"},
-            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": True},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
@@ -617,8 +617,8 @@ def _broad_product(
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "lightning"},
             {"id": "lightning-trail", "opacity": 1.0, "enabledWith": "glm-lightning-trail"},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": False},
-            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": False},
+            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": True},
         ],
         "legends": [
             anchor_layer,
@@ -733,18 +733,32 @@ VIDEO_TRACKS_BY_PRODUCT: dict[str, tuple[str, ...]] = {
     for product_id, ranges in VIDEO_EXACT_RANGES.items()
 }
 
+
+def _default_video_optional_layers(product_id: str) -> tuple[str, ...]:
+    """Return the product's real UI-default optional controllers.
+
+    Satellite choice-group members are supplied by the video profile itself,
+    while ``enabledWith`` companions (for example radar coverage) are resolved
+    by the composite recipe builder. Keeping this derived from ``PRODUCTS``
+    prevents the low-power default video from silently drifting away from the
+    controls a new browser session actually enables.
+    """
+    product = next(value for value in PRODUCTS if value.get("id") == product_id)
+    return tuple(
+        str(layer["id"])
+        for layer in product.get("layers", ())
+        if layer.get("optional")
+        and layer.get("defaultEnabled")
+        and not layer.get("enabledWith")
+        and layer.get("choiceGroup") != "satellite"
+    )
+
+
 VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
     product_id: (
         {
-            "id": "operational-full-v1",
-            "optionalLayers": (
-                "smoke",
-                "radar-rain",
-                "lightning-trail" if product_id.startswith("bc-") else "glm-lightning-trail",
-                "hotspots",
-                "model-mslp",
-                "model-hgt500",
-            ),
+            "id": "operational-default-v1",
+            "optionalLayers": _default_video_optional_layers(product_id),
         },
         {
             "id": "operational-core-v1",
@@ -763,14 +777,57 @@ VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
 # preset differs from the core only by smoke and fire.
 VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"] = (
     {
-        "id": "operational-full-v1",
-        "optionalLayers": ("smoke", "radar-rain", "lightning-trail", "hotspots"),
+        "id": "operational-default-v1",
+        "optionalLayers": _default_video_optional_layers("bc-south-coast-overlay"),
     },
     {
         "id": "operational-core-v1",
         "optionalLayers": ("radar-rain", "lightning-trail"),
     },
 )
+
+
+def video_composite_layer_ids(
+    product_id: str,
+    satellite_layer_id: str,
+    preset_id: str,
+) -> tuple[str, ...]:
+    """Resolve the one canonical recipe stack for a named video preset."""
+    product = next(
+        (value for value in PRODUCTS if value.get("id") == product_id),
+        None,
+    )
+    preset = next(
+        (
+            value
+            for value in VIDEO_COMPOSITE_PRESETS.get(product_id, ())
+            if value.get("id") == preset_id
+        ),
+        None,
+    )
+    if product is None or preset is None:
+        return ()
+    requested = {
+        str(value) for value in preset.get("optionalLayers", ())
+    }
+    selected: list[str] = []
+    for recipe in product.get("layers", ()):
+        recipe_id = str(recipe.get("id", ""))
+        if not recipe_id:
+            continue
+        enabled_with = str(recipe.get("enabledWith", ""))
+        if enabled_with:
+            if enabled_with in requested:
+                selected.append(recipe_id)
+            continue
+        if recipe.get("choiceGroup") == "satellite":
+            if recipe_id == satellite_layer_id:
+                selected.append(recipe_id)
+            continue
+        if recipe.get("optional") and recipe_id not in requested:
+            continue
+        selected.append(recipe_id)
+    return tuple(selected)
 
 
 LEGENDS: dict[str, dict[str, str]] = {

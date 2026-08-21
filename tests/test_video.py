@@ -14,7 +14,14 @@ from unittest import mock
 
 from PIL import Image, ImageDraw
 
-from radarsat.config import VIDEO_TRACKS_BY_PRODUCT
+from radarsat.composite_video import (
+    _derive_rendition,
+    _render_high_frame,
+    build_composite_profile,
+    prune_composite_sidecar_manifests,
+)
+from radarsat.catalog import build_catalog
+from radarsat.config import PRODUCTS, VIDEO_COMPOSITE_PRESETS, VIDEO_TRACKS_BY_PRODUCT
 from radarsat.video import (
     ProfileSpec,
     VIDEO_FRAME_RATE,
@@ -237,6 +244,60 @@ class VideoSelectionTests(unittest.TestCase):
         )
         self.assertEqual(with_gap[2].encoded_source_layer, "eccc-geocolor")
 
+    def test_bc_msc_range_ignores_noaa_slots_that_are_not_yet_eligible(self) -> None:
+        base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
+        msc = [
+            frame(
+                f"frames/bc/eccc-geocolor/{minute}.webp",
+                base + dt.timedelta(minutes=minute, seconds=21),
+            )
+            for minute in range(0, 61, 10)
+        ]
+        standard = [
+            frame(
+                "frames/bc/raw-visir/70.webp",
+                base + dt.timedelta(minutes=70, seconds=21),
+            )
+        ]
+        catalog = {
+            "domains": {
+                "bc": {
+                    "layers": {
+                        "eccc-geocolor": {"maxAgeMinutes": 35, "frames": msc},
+                        "raw-visir": {"frames": standard},
+                        "raw-visir-native": {"frames": []},
+                    }
+                }
+            }
+        }
+        spec = ProfileSpec(
+            "bc-northeast-overlay",
+            "bc",
+            "eccc-geocolor",
+            {"left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0},
+            64,
+            48,
+            10,
+        )
+
+        selected = _selected_satellite_frames(
+            catalog,
+            spec,
+            1,
+            now=base + dt.timedelta(minutes=75),
+        )
+
+        self.assertEqual(len(selected), 7)
+        self.assertEqual(selected[0].valid_time, base)
+        self.assertEqual(selected[-1].valid_time, base + dt.timedelta(minutes=60))
+        self.assertEqual(
+            selected[-1].valid_time - selected[0].valid_time,
+            dt.timedelta(hours=1),
+        )
+        self.assertTrue(
+            all(item.encoded_source_layer == "eccc-geocolor" for item in selected)
+        )
+
     def test_broad_selection_honours_max_age_and_never_regresses(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
         broad_frames = [
@@ -454,6 +515,22 @@ class VideoSelectionTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is required")
 class VideoBuildTests(unittest.TestCase):
+    def test_operational_default_presets_match_fresh_session_controls(self) -> None:
+        products = {str(product["id"]): product for product in PRODUCTS}
+        for product_id, presets in VIDEO_COMPOSITE_PRESETS.items():
+            product = products[product_id]
+            expected = {
+                str(layer["id"])
+                for layer in product["layers"]
+                if layer.get("optional")
+                and layer.get("defaultEnabled")
+                and not layer.get("enabledWith")
+                and layer.get("choiceGroup") != "satellite"
+            }
+            self.assertEqual(presets[0]["id"], "operational-default-v1")
+            self.assertEqual(set(presets[0]["optionalLayers"]), expected)
+            self.assertEqual(len(presets), 2)
+
     def make_source(self, root: Path) -> tuple[dict[str, object], ProfileSpec]:
         source = root / "source"
         write_rgba(source / "static/bc/base-dark.png", (18, 28, 38, 255), (64, 48))
@@ -649,7 +726,28 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(first_manifest["schemaVersion"], 2)
             self.assertEqual(
                 [item["id"] for item in first_manifest["composites"]],
-                ["operational-full-v1", "operational-core-v1"],
+                [
+                    "operational-default-v1",
+                    "operational-core-v1",
+                ],
+            )
+            default_composite = first_manifest["composites"][0]
+            self.assertEqual(
+                default_composite["layerIds"],
+                [
+                    "base-dark",
+                    "eccc-geocolor",
+                    "smoke",
+                    "radar-coverage",
+                    "radar-rain",
+                    "watersheds",
+                    "transmission-lines",
+                    "boundaries",
+                    "lightning-trail",
+                    "hotspots",
+                    "model-mslp",
+                    "model-hgt500",
+                ],
             )
             composite = first_manifest["composites"][0]
             self.assertEqual(
@@ -739,6 +837,273 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertTrue(protected.is_file())
             self.assertFalse(orphan.exists())
+
+    def test_composite_sidecars_reuse_cached_frames_and_match_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, original_spec = self.make_source(root)
+            layers = catalog["domains"]["bc"]["layers"]
+            layers["eccc-geocolor"] = layers.pop("raw-visir")
+            spec = replace(
+                original_spec,
+                product_id="bc-large-overlay",
+                layer_id="eccc-geocolor",
+            )
+            output = root / "output"
+            now = dt.datetime(2026, 8, 1, 1, tzinfo=UTC)
+
+            with mock.patch(
+                "radarsat.composite_video._render_high_frame",
+                wraps=_render_high_frame,
+            ) as render:
+                first = build_composite_profile(
+                    root / "source",
+                    output,
+                    catalog,
+                    spec,
+                    ffmpeg=str(shutil.which("ffmpeg")),
+                    ranges=(3,),
+                    now=now,
+                )
+                self.assertEqual(render.call_count, 6)
+
+            self.assertEqual(first["status"], "ok")
+            self.assertEqual(len(first["profiles"]), 2)
+            profile = first["profiles"][0]
+            pointer = json.loads((output / profile["pointerPath"]).read_text())
+            self.assertEqual(
+                set(pointer),
+                {
+                    "schemaVersion",
+                    "productId",
+                    "layerId",
+                    "track",
+                    "presetId",
+                    "layerIds",
+                    "rangeHours",
+                    "generation",
+                    "manifestPath",
+                    "generatedAt",
+                    "endValidTime",
+                    "endSourceTime",
+                },
+            )
+            published_profiles = build_catalog(output)["compositeProfiles"]
+            self.assertEqual(
+                len(
+                    published_profiles["bc-large-overlay"]["eccc-geocolor"]["live"]
+                ),
+                2,
+            )
+            manifest = json.loads((output / pointer["manifestPath"]).read_text())
+            self.assertEqual(manifest["schemaVersion"], 1)
+            self.assertEqual(manifest["generation"], pointer["generation"])
+            self.assertEqual(manifest["rangeHours"], 3)
+            self.assertEqual(manifest["boundaryIntervalMultiplier"], 4)
+            self.assertEqual(
+                [value["durationSeconds"] for value in manifest["frames"]],
+                [0.2, 0.2, 0.8],
+            )
+            self.assertEqual(manifest["endValidTime"], "2026-08-01T00:20:00Z")
+            self.assertEqual(manifest["endSourceTime"], "2026-08-01T00:20:00Z")
+            self.assertIn("sourceTimes", manifest["frames"][0])
+            self.assertEqual(
+                manifest["frames"][0]["layerSourceTimes"]["eccc-geocolor"],
+                "2026-08-01T00:00:00Z",
+            )
+            media = output / manifest["renditions"][0]["media"]["path"]
+            packets = subprocess.run(
+                [
+                    str(shutil.which("ffprobe")),
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "packet=pts_time,duration_time",
+                    "-of",
+                    "json",
+                    str(media),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(len(json.loads(packets.stdout)["packets"]), 3)
+
+            # The legacy shared-media maintenance pass also scans the
+            # composite-* tree.  A sidecar manifest must therefore protect its
+            # exact MP4 even though it is not part of video-manifests.
+            orphan = media.with_name("20260801T0020Z-deadbeefdead.mp4")
+            orphan.write_bytes(b"orphan")
+            old = (now - dt.timedelta(hours=1)).timestamp()
+            os.utime(orphan, (old, old))
+            prune_shared_video_orphans(
+                output,
+                now=now + dt.timedelta(hours=2),
+            )
+            self.assertTrue(media.is_file())
+            self.assertFalse(orphan.exists())
+
+            manifest_path = output / pointer["manifestPath"]
+            range_root = manifest_path.parent
+            # Same-anchor generation hashes deliberately sort opposite to
+            # commit order. Retention must use generatedAt, never the hash.
+            previous = range_root / "20260801T0020Z-000000000000.json"
+            expired = range_root / "20260801T0020Z-ffffffffffff.json"
+            previous_payload = dict(manifest)
+            previous_payload.update({
+                "generation": previous.stem,
+                "generatedAt": "2026-08-01T00:50:00Z",
+            })
+            previous.write_text(json.dumps(previous_payload))
+            expired_payload = dict(manifest)
+            expired_payload.update({
+                "generation": expired.stem,
+                "generatedAt": "2026-08-01T00:40:00Z",
+            })
+            expired.write_text(json.dumps(expired_payload))
+            old = (now - dt.timedelta(hours=1)).timestamp()
+            os.utime(previous, (old, old))
+            os.utime(expired, (old, old))
+            self.assertEqual(
+                prune_composite_sidecar_manifests(
+                    output,
+                    now=now + dt.timedelta(hours=2),
+                ),
+                1,
+            )
+            self.assertTrue(manifest_path.is_file())
+            self.assertTrue(previous.is_file())
+            self.assertFalse(expired.exists())
+
+            with mock.patch(
+                "radarsat.composite_video._render_high_frame",
+                wraps=_render_high_frame,
+            ) as render:
+                second = build_composite_profile(
+                    root / "source",
+                    output,
+                    catalog,
+                    spec,
+                    ffmpeg=str(shutil.which("ffmpeg")),
+                    ranges=(3,),
+                    now=now + dt.timedelta(minutes=1),
+                )
+                self.assertEqual(render.call_count, 0)
+            self.assertEqual(
+                {value["status"] for value in second["profiles"]},
+                {"unchanged"},
+            )
+            self.assertEqual(
+                len(list((output / "composite-frame-cache").rglob("*.png"))),
+                6,
+            )
+
+    def test_composite_sidecar_failure_preserves_last_good_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, original_spec = self.make_source(root)
+            layers = catalog["domains"]["bc"]["layers"]
+            layers["eccc-geocolor"] = layers.pop("raw-visir")
+            spec = replace(
+                original_spec,
+                product_id="bc-large-overlay",
+                layer_id="eccc-geocolor",
+            )
+            output = root / "output"
+            first = build_composite_profile(
+                root / "source",
+                output,
+                catalog,
+                spec,
+                ffmpeg=str(shutil.which("ffmpeg")),
+                ranges=(3,),
+                now=dt.datetime(2026, 8, 1, 1, tzinfo=UTC),
+            )
+            pointers = {
+                value["pointerPath"]: (output / value["pointerPath"]).read_bytes()
+                for value in first["profiles"]
+            }
+
+            boundary = root / "source/static/bc/boundaries.png"
+            write_rgba(boundary, (255, 0, 0, 255), (64, 48))
+            stat = boundary.stat()
+            os.utime(boundary, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+            with mock.patch(
+                "radarsat.composite_video._encode_vfr_mp4",
+                side_effect=RuntimeError("synthetic encoder failure"),
+            ):
+                failed = build_composite_profile(
+                    root / "source",
+                    output,
+                    catalog,
+                    spec,
+                    ffmpeg=str(shutil.which("ffmpeg")),
+                    ranges=(3,),
+                    now=dt.datetime(2026, 8, 1, 1, 10, tzinfo=UTC),
+                )
+
+            self.assertEqual(failed["status"], "warning")
+            self.assertEqual(len(failed["failures"]), 2)
+            for relative, previous in pointers.items():
+                self.assertEqual((output / relative).read_bytes(), previous)
+
+    def test_composite_prune_retires_an_unconfigured_preset_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            group = (
+                output
+                / "composite-manifests/bc-large-overlay/eccc-geocolor/live"
+                / "retired-preset-v1/3"
+            )
+            group.mkdir(parents=True)
+            generation = "20260801T0000Z-abcdef012345"
+            manifest = group / f"{generation}.json"
+            manifest.write_text(json.dumps({
+                "generation": generation,
+                "generatedAt": "2026-08-01T00:00:00Z",
+            }))
+            pointer = (
+                output
+                / "composite-index/bc-large-overlay/eccc-geocolor/live"
+                / "retired-preset-v1/3.json"
+            )
+            pointer.parent.mkdir(parents=True)
+            pointer.write_text(json.dumps({
+                "generation": generation,
+                "manifestPath": manifest.relative_to(output).as_posix(),
+            }))
+            old = dt.datetime(2026, 8, 1, tzinfo=UTC).timestamp()
+            os.utime(manifest, (old, old))
+            os.utime(pointer, (old, old))
+
+            self.assertEqual(
+                prune_composite_sidecar_manifests(
+                    output,
+                    now=dt.datetime(2026, 8, 1, 1, tzinfo=UTC),
+                ),
+                1,
+            )
+            self.assertFalse(manifest.exists())
+            self.assertFalse(pointer.exists())
+
+    def test_efficient_cache_is_derived_from_high_composite(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            high = root / "high.png"
+            image = Image.new("RGB", (64, 64), (255, 255, 255))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((0, 0, 63, 47), fill=(20, 80, 160))
+            image.save(high)
+            destination = root / "efficient.png"
+
+            _derive_rendition(high, 48, 32, 24, destination)
+
+            with Image.open(destination) as derived:
+                self.assertEqual(derived.size, (32, 40))
+                self.assertEqual(derived.getpixel((0, 39)), (255, 255, 255))
+                self.assertEqual(derived.getpixel((16, 12)), (20, 80, 160))
 
     def test_nonpilot_profile_keeps_dynamic_proxy_fallback_only(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

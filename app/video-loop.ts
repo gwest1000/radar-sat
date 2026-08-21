@@ -3,6 +3,15 @@ export type VideoProfilePointer = {
   manifestPath: string;
 };
 
+export type CompositeProfilePointer = VideoProfilePointer & {
+  presetId: string;
+  layerIds: string[];
+  rangeHours: number;
+  generatedAt: string;
+  endValidTime: string;
+  endSourceTime: string;
+};
+
 export type VideoProxy = {
   path: string;
   width: number;
@@ -77,6 +86,35 @@ export type VideoCompositePreset = {
   ranges: VideoCompositeRange[];
 };
 
+export type CompositeLoopFrame = {
+  validTime: string;
+  sourceValidTime: string;
+  sourceTimes?: Record<string, string>;
+  layerSourceTimes?: Record<string, string | null>;
+  durationSeconds: number;
+};
+
+export type CompositeLoopManifest = {
+  schemaVersion: 1;
+  generation: string;
+  generatedAt: string;
+  productId: string;
+  domainId: string;
+  layerId: string;
+  track: "live" | "day" | "archive";
+  presetId: string;
+  layerIds: string[];
+  rangeHours: number;
+  cadenceMinutes: number;
+  viewport: Record<string, number>;
+  mediaViewport: Record<string, number>;
+  endValidTime: string;
+  endSourceTime: string;
+  boundaryIntervalMultiplier: 4;
+  frames: CompositeLoopFrame[];
+  renditions: VideoCompositeRendition[];
+};
+
 export type VideoLoopManifest = {
   schemaVersion: 1 | 2;
   generation: string;
@@ -100,6 +138,7 @@ export type VideoLoopManifest = {
 
 const MAX_MANIFEST_CACHE_ENTRIES = 8;
 const manifestCache = new Map<string, Promise<VideoLoopManifest>>();
+const compositeManifestCache = new Map<string, Promise<CompositeLoopManifest>>();
 
 function finitePositive(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -204,6 +243,26 @@ function validMedia(value: unknown, transport?: unknown): value is VideoMedia {
       && Number.isInteger(segment.firstFrame)
       && Number.isInteger(segment.lastFrame)
     ));
+}
+
+function validLayerIds(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.length > 0
+    && value.every((id) => typeof id === "string" && id.length > 0)
+    && new Set(value).size === value.length;
+}
+
+function validTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function validSourceTimes(value: unknown, nullable: boolean): value is Record<string, string | null> {
+  if (value === undefined) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value).every(([key, timestamp]) => (
+    Boolean(key)
+    && ((nullable && timestamp === null) || validTimestamp(timestamp))
+  ));
 }
 
 function validCompositePreset(
@@ -363,6 +422,217 @@ export function loadVideoLoopManifest(url: string): Promise<VideoLoopManifest> {
     manifestCache.delete(oldest);
   }
   return request;
+}
+
+export function parseCompositeProfilePointer(value: unknown): CompositeProfilePointer {
+  if (!value || typeof value !== "object") {
+    throw new Error("Composite profile pointer is not an object.");
+  }
+  const pointer = value as Partial<CompositeProfilePointer>;
+  if (
+    typeof pointer.generation !== "string"
+    || !pointer.generation
+    || typeof pointer.manifestPath !== "string"
+    || !pointer.manifestPath
+    || typeof pointer.presetId !== "string"
+    || !pointer.presetId
+    || !validLayerIds(pointer.layerIds)
+    || !finitePositive(pointer.rangeHours)
+    || !validTimestamp(pointer.generatedAt)
+    || !validTimestamp(pointer.endValidTime)
+    || !validTimestamp(pointer.endSourceTime)
+  ) {
+    throw new Error("Composite profile pointer has an unsupported schema.");
+  }
+  return pointer as CompositeProfilePointer;
+}
+
+export function matchingCompositeProfile(
+  values: readonly unknown[],
+  layerIds: readonly string[],
+  rangeHours: number,
+): CompositeProfilePointer | null {
+  const selected = new Set(layerIds);
+  for (const value of values) {
+    let pointer: CompositeProfilePointer;
+    try {
+      pointer = parseCompositeProfilePointer(value);
+    } catch {
+      continue;
+    }
+    if (
+      pointer.rangeHours === rangeHours
+      && pointer.layerIds.length === selected.size
+      && pointer.layerIds.every((id) => selected.has(id))
+    ) return pointer;
+  }
+  return null;
+}
+
+export function parseCompositeLoopManifest(value: unknown): CompositeLoopManifest {
+  if (!value || typeof value !== "object") {
+    throw new Error("Composite loop manifest is not an object.");
+  }
+  const manifest = value as Partial<CompositeLoopManifest>;
+  if (
+    manifest.schemaVersion !== 1
+    || typeof manifest.generation !== "string"
+    || !manifest.generation
+    || !validTimestamp(manifest.generatedAt)
+    || typeof manifest.productId !== "string"
+    || !manifest.productId
+    || typeof manifest.domainId !== "string"
+    || !manifest.domainId
+    || typeof manifest.layerId !== "string"
+    || !manifest.layerId
+    || !["live", "day", "archive"].includes(String(manifest.track))
+    || typeof manifest.presetId !== "string"
+    || !manifest.presetId
+    || !validLayerIds(manifest.layerIds)
+    || !finitePositive(manifest.rangeHours)
+    || !finitePositive(manifest.cadenceMinutes)
+    || !validViewport(manifest.viewport)
+    || !validViewport(manifest.mediaViewport)
+    || !validTimestamp(manifest.endValidTime)
+    || !validTimestamp(manifest.endSourceTime)
+    || manifest.boundaryIntervalMultiplier !== 4
+    || !Array.isArray(manifest.frames)
+    || manifest.frames.length < 2
+    || !Array.isArray(manifest.renditions)
+    || !manifest.renditions.length
+  ) {
+    throw new Error("Composite loop manifest has an unsupported schema.");
+  }
+  if (
+    manifest.mediaViewport.left !== manifest.viewport.left
+    || manifest.mediaViewport.top !== manifest.viewport.top
+    || manifest.mediaViewport.width !== manifest.viewport.width
+    || manifest.mediaViewport.height !== manifest.viewport.height
+  ) {
+    throw new Error("Composite loop manifest viewport does not match its product.");
+  }
+  let previousValidTime = -Infinity;
+  let previousSourceTime = -Infinity;
+  for (const frame of manifest.frames) {
+    if (
+      !frame
+      || typeof frame !== "object"
+      || !validTimestamp(frame.validTime)
+      || !validTimestamp(frame.sourceValidTime)
+      || !finitePositive(frame.durationSeconds)
+      || !validSourceTimes(frame.sourceTimes, false)
+      || !validSourceTimes(frame.layerSourceTimes, true)
+    ) {
+      throw new Error("Composite loop manifest contains an invalid frame.");
+    }
+    const validTime = Date.parse(frame.validTime);
+    const sourceTime = Date.parse(frame.sourceValidTime);
+    if (validTime <= previousValidTime || sourceTime < previousSourceTime) {
+      throw new Error("Composite loop manifest times are not monotonic.");
+    }
+    previousValidTime = validTime;
+    previousSourceTime = sourceTime;
+  }
+  const finalFrame = manifest.frames[manifest.frames.length - 1];
+  if (
+    Date.parse(manifest.endValidTime) !== Date.parse(finalFrame.validTime)
+    || Date.parse(manifest.endSourceTime) !== Date.parse(finalFrame.sourceValidTime)
+  ) {
+    throw new Error("Composite loop manifest endpoint does not match its final frame.");
+  }
+  if (!manifest.renditions.every((value) => (
+    Boolean(value)
+    && typeof value.id === "string"
+    && Boolean(value.id)
+    && validMedia(value.media, value.media?.mimeType === "application/vnd.apple.mpegurl" ? "hls-ts" : "progressive-mp4")
+  ))) {
+    throw new Error("Composite loop manifest contains an invalid rendition.");
+  }
+  return manifest as CompositeLoopManifest;
+}
+
+export function loadCompositeLoopManifest(url: string): Promise<CompositeLoopManifest> {
+  const existing = compositeManifestCache.get(url);
+  if (existing) {
+    compositeManifestCache.delete(url);
+    compositeManifestCache.set(url, existing);
+    return existing;
+  }
+  const request = fetch(url, { cache: "force-cache", mode: "cors" })
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`Composite manifest returned ${response.status}.`);
+      return parseCompositeLoopManifest(await response.json());
+    })
+    .catch((error) => {
+      if (compositeManifestCache.get(url) === request) compositeManifestCache.delete(url);
+      throw error;
+    });
+  compositeManifestCache.set(url, request);
+  while (compositeManifestCache.size > MAX_MANIFEST_CACHE_ENTRIES) {
+    const oldest = compositeManifestCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    compositeManifestCache.delete(oldest);
+  }
+  return request;
+}
+
+export function compositeLoopVideoManifest(
+  manifest: CompositeLoopManifest,
+  preferredRendition: "efficient" | "high" | "auto" = "auto",
+): { manifest: VideoLoopManifest; presetId: string; renditionId: string } | null {
+  const rendition = preferredRendition === "efficient"
+    ? manifest.renditions.find((candidate) => candidate.id === "efficient")
+      ?? manifest.renditions[0]
+    : preferredRendition === "high"
+      ? manifest.renditions.find((candidate) => candidate.id === "high")
+        ?? manifest.renditions[manifest.renditions.length - 1]
+      : manifest.renditions[manifest.renditions.length - 1];
+  if (!rendition) return null;
+  let pts = 0;
+  const frames: VideoManifestFrame[] = manifest.frames.map((frame, index) => {
+    const result: VideoManifestFrame = {
+      index,
+      validTime: frame.validTime,
+      sourceValidTime: frame.sourceValidTime,
+      sourceTimes: frame.sourceTimes,
+      encodedSourceLayer: manifest.layerId,
+      sourcePath: "",
+      sourceFetchedAt: manifest.generatedAt,
+      ptsSeconds: pts,
+      durationSeconds: frame.durationSeconds,
+      proxyLayers: Object.entries(frame.layerSourceTimes ?? {}).map(([id, sourceValidTime]) => ({
+        id,
+        renderId: id,
+        sourceKey: `composite:${id}:${sourceValidTime ?? "static"}`,
+        sourceValidTime,
+      })),
+    };
+    pts += frame.durationSeconds;
+    return result;
+  });
+  return {
+    presetId: manifest.presetId,
+    renditionId: rendition.id,
+    manifest: {
+      schemaVersion: 2,
+      generation: manifest.generation,
+      generatedAt: manifest.generatedAt,
+      productId: manifest.productId,
+      layerId: manifest.layerId,
+      track: manifest.track,
+      transport: rendition.media.mimeType === "application/vnd.apple.mpegurl"
+        ? "hls-ts"
+        : "progressive-mp4",
+      cadenceMinutes: manifest.cadenceMinutes,
+      width: rendition.media.width,
+      height: rendition.media.contentHeight ?? rendition.media.height,
+      viewport: manifest.viewport,
+      mediaViewport: manifest.mediaViewport,
+      media: rendition.media,
+      frames,
+      proxies: {},
+    },
+  };
 }
 
 export function sourceCacheKey(path: string, revision: string): string {

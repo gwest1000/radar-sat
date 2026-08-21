@@ -25,6 +25,7 @@ from .config import (
     VIDEO_EXACT_RANGES,
     VIDEO_TRACKS_BY_PRODUCT,
     VIEWPORTS,
+    video_composite_layer_ids,
 )
 
 
@@ -421,6 +422,8 @@ def _timeline(
     frames: Sequence[Mapping[str, Any]],
     cadence_minutes: int,
     hours: float,
+    *,
+    newest: dt.datetime | None = None,
 ) -> list[dt.datetime]:
     parsed = sorted(
         value
@@ -430,8 +433,14 @@ def _timeline(
     if not parsed:
         return []
     interval_seconds = cadence_minutes * 60
-    newest_epoch = math.floor(parsed[-1].timestamp() / interval_seconds) * interval_seconds
-    newest = dt.datetime.fromtimestamp(newest_epoch, UTC)
+    if newest is None:
+        newest_epoch = (
+            math.floor(parsed[-1].timestamp() / interval_seconds)
+            * interval_seconds
+        )
+        newest = dt.datetime.fromtimestamp(newest_epoch, UTC)
+    else:
+        newest = newest.astimezone(UTC)
     requested_start = newest - dt.timedelta(hours=hours)
     # A scan that starts just after a nominal boundary still belongs to that
     # boundary.  Keep the first such slot on the timeline so the same two-minute
@@ -446,6 +455,53 @@ def _timeline(
         values.append(current)
         current += dt.timedelta(minutes=cadence_minutes)
     return values
+
+
+def _newest_msc_first_slot(
+    msc_frames: Sequence[Mapping[str, Any]],
+    native_noaa_frames: Sequence[Mapping[str, Any]],
+    standard_noaa_frames: Sequence[Mapping[str, Any]],
+    cadence_minutes: int,
+    reference_now: dt.datetime,
+) -> dt.datetime | None:
+    """Return the newest satellite slot eligible for an MSC-first loop.
+
+    NOAA observations that are newer than MSC normally extend the union of
+    available source timestamps.  They must not move an exact loop's cutoff,
+    however, until the corresponding MSC slot has actually missed its
+    35-minute availability deadline.  Otherwise every early NOAA arrival
+    drops an old MSC frame and rebuilds a progressively shorter loop while its
+    visible endpoint remains unchanged.
+    """
+    parsed = sorted(
+        value
+        for frame in (*msc_frames, *native_noaa_frames, *standard_noaa_frames)
+        if (value := _parse_time(frame.get("validTime"))) is not None
+    )
+    if not parsed:
+        return None
+    interval_seconds = cadence_minutes * 60
+    newest_epoch = (
+        math.floor(parsed[-1].timestamp() / interval_seconds)
+        * interval_seconds
+    )
+    oldest_epoch = (
+        math.ceil((parsed[0].timestamp() - 120) / interval_seconds)
+        * interval_seconds
+    )
+    current = dt.datetime.fromtimestamp(newest_epoch, UTC)
+    oldest = dt.datetime.fromtimestamp(oldest_epoch, UTC)
+    deadline = dt.timedelta(minutes=35)
+    while current >= oldest:
+        if _nearest(msc_frames, current, 2) is not None:
+            return current
+        if reference_now - current >= deadline and (
+            _nearest(native_noaa_frames, current, 2) is not None
+            or _nearest(standard_noaa_frames, current, 2) is not None
+        ):
+            return current
+        current -= dt.timedelta(minutes=cadence_minutes)
+    return None
 
 
 def _selected_satellite_frames(
@@ -482,9 +538,27 @@ def _selected_satellite_frames(
         if isinstance(broad_max_age_value, (int, float))
         else None
     )
-    selected: list[SelectedFrame] = []
     reference_now = (now or dt.datetime.now(UTC)).astimezone(UTC)
-    for valid_time in _timeline(timeline_frames, spec.cadence_minutes, hours):
+    timeline_endpoint = (
+        _newest_msc_first_slot(
+            anchor_frames,
+            native_frames,
+            standard_frames,
+            spec.cadence_minutes,
+            reference_now,
+        )
+        if msc_first
+        else None
+    )
+    if msc_first and timeline_endpoint is None:
+        return []
+    selected: list[SelectedFrame] = []
+    for valid_time in _timeline(
+        timeline_frames,
+        spec.cadence_minutes,
+        hours,
+        newest=timeline_endpoint,
+    ):
         if msc_first:
             msc = _nearest(anchor_frames, valid_time, 2)
             if msc is not None:
@@ -825,27 +899,20 @@ def _composite_layer_ids(
     optional_layer_ids: Iterable[str],
 ) -> tuple[str, ...]:
     """Resolve an exact operational recipe stack from product configuration."""
-    product = _product(spec.product_id)
-    recipes = list(product.get("layers", []))
-    requested = set(optional_layer_ids)
-    selected: list[str] = []
-    for recipe in recipes:
-        recipe_id = str(recipe.get("id", ""))
-        if not recipe_id:
-            continue
-        enabled_with = str(recipe.get("enabledWith", ""))
-        if enabled_with:
-            if enabled_with in requested:
-                selected.append(recipe_id)
-            continue
-        if recipe_id in SATELLITE_LAYER_IDS:
-            if recipe_id == spec.layer_id:
-                selected.append(recipe_id)
-            continue
-        if recipe.get("optional") and recipe_id not in requested:
-            continue
-        selected.append(recipe_id)
-    return tuple(selected)
+    # Keep the compatibility helper for existing callers while delegating the
+    # canonical recipe resolution to config, where catalog and publisher
+    # validation can use the same logic without a catalog↔video import cycle.
+    requested = tuple(str(value) for value in optional_layer_ids)
+    preset_id = next(
+        (
+            str(value["id"])
+            for value in VIDEO_COMPOSITE_PRESETS.get(spec.product_id, ())
+            if tuple(str(item) for item in value.get("optionalLayers", ()))
+            == requested
+        ),
+        "",
+    )
+    return video_composite_layer_ids(spec.product_id, spec.layer_id, preset_id)
 
 
 def _composite_presets(spec: ProfileSpec) -> tuple[tuple[str, tuple[str, ...]], ...]:
@@ -2108,6 +2175,15 @@ def _manifest_dependencies(output_root: Path, manifests: Iterable[Path]) -> set[
                     for rendition in renditions:
                         if isinstance(rendition, Mapping):
                             media_values.append(rendition.get("media"))
+        # Independently published exact-range composite sidecars put their
+        # renditions directly on the immutable manifest.  Treat them as equal
+        # dependencies so legacy shared-media maintenance can never prune an
+        # active sidecar MP4 out from underneath the catalog.
+        renditions = manifest.get("renditions")
+        if isinstance(renditions, list):
+            for rendition in renditions:
+                if isinstance(rendition, Mapping):
+                    media_values.append(rendition.get("media"))
         for media in media_values:
             if not isinstance(media, Mapping) or not media.get("path"):
                 continue
@@ -2216,10 +2292,11 @@ def prune_shared_video_orphans(
     output_root = output_root.resolve()
     current = (now or dt.datetime.now(UTC)).timestamp()
     grace_seconds = LOCAL_ORPHAN_GRACE_HOURS * 3600
-    all_manifest_dependencies = _manifest_dependencies(
-        output_root,
-        (output_root / "video-manifests").rglob("*.json"),
-    )
+    manifests = [
+        *(output_root / "video-manifests").rglob("*.json"),
+        *(output_root / "composite-manifests").rglob("*.json"),
+    ]
+    all_manifest_dependencies = _manifest_dependencies(output_root, manifests)
     removed = 0
     videos_root = output_root / "videos"
     if videos_root.exists():

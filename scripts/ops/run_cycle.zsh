@@ -8,6 +8,7 @@ source "${PROJECT_ROOT}/scripts/ops/runtime_paths.zsh"
 STATE_ROOT="${RADARSAT_STATE_ROOT:-${PROJECT_ROOT}/var}"
 LOCK_DIR="${STATE_ROOT}/run/cycle.lock"
 LOCK_OWNER="${LOCK_DIR}/pid"
+PUBLISHER="${RADARSAT_CYCLE_PUBLISHER:-${PROJECT_ROOT}/scripts/ops/publish_locked.zsh}"
 
 mkdir -p "${STATE_ROOT}/run" "${STATE_ROOT}/status" "${PROJECT_ROOT}/logs" \
   "${PROJECT_ROOT}/.cache/matplotlib"
@@ -149,10 +150,7 @@ fi
 # That legacy path can take several minutes under memory pressure and must not
 # hold the default ten-minute BC view behind it.
 if (( live_satellite_refresh == 1 )); then
-  if ! "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/publish_r2.py" \
-    --root "${OUTPUT_ROOT}" \
-    --state-path "${STATE_ROOT}/state/r2-publish.sqlite3" \
-    --status-path "${STATE_ROOT}/status/publish.json"; then
+  if ! "${PUBLISHER}"; then
     print -u2 "Warning: early live-satellite R2 publication failed; continuing the primary cycle."
   fi
 fi
@@ -186,10 +184,7 @@ else
   print -u2 "Warning: skipping raw spool prune because primary ingest did not complete."
 fi
 
-"${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/publish_r2.py" \
-  --root "${OUTPUT_ROOT}" \
-  --state-path "${STATE_ROOT}/state/r2-publish.sqlite3" \
-  --status-path "${STATE_ROOT}/status/publish.json"
+"${PUBLISHER}"
 
 if (( primary_ingest_status != 0 )); then
   exit "${primary_ingest_status}"

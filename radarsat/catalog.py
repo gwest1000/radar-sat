@@ -13,8 +13,12 @@ from .config import (
     LAYERS,
     LEGENDS,
     PRODUCTS,
+    VIDEO_ARCHIVE_PRODUCTS,
+    VIDEO_COMPOSITE_PRESETS,
+    VIDEO_EXACT_RANGES,
     VIDEO_TRACKS_BY_PRODUCT,
     VIEWPORTS,
+    video_composite_layer_ids,
 )
 
 
@@ -281,6 +285,237 @@ def read_video_profiles(root: Path) -> dict[str, Any]:
     return video_profiles
 
 
+def _configured_composite_presets(product_id: str) -> set[str]:
+    return {
+        str(value.get("id"))
+        for value in VIDEO_COMPOSITE_PRESETS.get(product_id, ())
+        if isinstance(value, dict) and isinstance(value.get("id"), str)
+    }
+
+
+def _valid_composite_manifest_pointer(
+    root: Path,
+    product_id: str,
+    layer_id: str,
+    track: str,
+    preset_id: str,
+    range_hours: int,
+    pointer: object,
+) -> dict[str, Any] | None:
+    """Validate one independently publishable exact-composite pointer."""
+    if not isinstance(pointer, dict):
+        return None
+    generation = pointer.get("generation")
+    manifest_value = pointer.get("manifestPath")
+    layer_ids = pointer.get("layerIds")
+    expected_layer_ids = video_composite_layer_ids(
+        product_id,
+        layer_id,
+        preset_id,
+    )
+    if (
+        not isinstance(generation, str)
+        or not VIDEO_GENERATION_RE.fullmatch(generation)
+        or not isinstance(manifest_value, str)
+        or pointer.get("presetId") != preset_id
+        or pointer.get("rangeHours") != range_hours
+        or not isinstance(layer_ids, list)
+        or not layer_ids
+        or any(not isinstance(value, str) or not value for value in layer_ids)
+        or len(set(layer_ids)) != len(layer_ids)
+        or tuple(layer_ids) != expected_layer_ids
+    ):
+        return None
+    relative = Path(manifest_value)
+    expected_parts = (
+        "composite-manifests",
+        product_id,
+        layer_id,
+        track,
+        preset_id,
+        str(range_hours),
+        f"{generation}.json",
+    )
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or relative.parts != expected_parts
+        or relative.as_posix() != manifest_value
+    ):
+        return None
+    manifest = root / relative
+    try:
+        if (
+            manifest.is_symlink()
+            or not manifest.resolve().is_relative_to(root.resolve())
+            or not manifest.is_file()
+            or manifest.stat().st_size <= 0
+        ):
+            return None
+        payload = json.loads(manifest.read_bytes())
+    except (OSError, json.JSONDecodeError):
+        return None
+    header_fields = (
+        ("schemaVersion", 1),
+        ("generation", generation),
+        ("productId", product_id),
+        ("layerId", layer_id),
+        ("track", track),
+        ("presetId", preset_id),
+        ("rangeHours", range_hours),
+        ("layerIds", layer_ids),
+    )
+    if not isinstance(payload, dict) or any(
+        payload.get(key) != expected for key, expected in header_fields
+    ):
+        return None
+    generated_at = pointer.get("generatedAt")
+    end_valid_time = pointer.get("endValidTime")
+    end_source_time = pointer.get("endSourceTime")
+    if any(
+        _parse_frame_time(value) is None
+        for value in (generated_at, end_valid_time, end_source_time)
+    ):
+        return None
+    return {
+        "presetId": preset_id,
+        "layerIds": list(layer_ids),
+        "rangeHours": range_hours,
+        "generation": generation,
+        "manifestPath": manifest_value,
+        "generatedAt": str(generated_at),
+        "endValidTime": str(end_valid_time),
+        "endSourceTime": str(end_source_time),
+    }
+
+
+def read_composite_profiles(root: Path) -> dict[str, Any]:
+    """Read independently committed common-loop pointers.
+
+    These compact profiles deliberately do not depend on the legacy HLS or
+    published overlay-proxy bundle. A current common loop can therefore be
+    discovered even while the dynamic fallback is rebuilding or repairing.
+    """
+    index_root = root / "composite-index"
+    if not index_root.is_dir():
+        return {}
+    known_layers = _known_product_layers()
+    result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {}
+    for index_path in sorted(index_root.rglob("*.json")):
+        try:
+            if index_path.is_symlink() or not index_path.is_file():
+                continue
+            pointer = json.loads(index_path.read_bytes())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(pointer, dict) or pointer.get("schemaVersion") != 1:
+            continue
+        product_id = pointer.get("productId")
+        layer_id = pointer.get("layerId")
+        track = pointer.get("track")
+        preset_id = pointer.get("presetId")
+        range_hours = pointer.get("rangeHours")
+        if (
+            not isinstance(product_id, str)
+            or not isinstance(layer_id, str)
+            or PUBLIC_VIDEO_LAYERS.get(product_id) != layer_id
+            or layer_id not in known_layers.get(product_id, ())
+            or not isinstance(track, str)
+            or track not in VIDEO_TRACKS_BY_PRODUCT.get(product_id, ())
+            or not isinstance(preset_id, str)
+            or preset_id not in _configured_composite_presets(product_id)
+            or not isinstance(range_hours, int)
+            or (
+                range_hours not in VIDEO_EXACT_RANGES.get(product_id, ())
+                and not (
+                    range_hours == 168
+                    and product_id in VIDEO_ARCHIVE_PRODUCTS
+                )
+            )
+        ):
+            continue
+        expected_track = "archive" if range_hours == 168 else "day" if range_hours == 24 else "live"
+        if track != expected_track:
+            continue
+        expected_index = (
+            index_root
+            / product_id
+            / layer_id
+            / track
+            / preset_id
+            / f"{range_hours}.json"
+        )
+        try:
+            if index_path.resolve() != expected_index.resolve():
+                continue
+        except OSError:
+            continue
+        validated = _valid_composite_manifest_pointer(
+            root,
+            product_id,
+            layer_id,
+            track,
+            preset_id,
+            range_hours,
+            pointer,
+        )
+        if validated is None:
+            continue
+        result.setdefault(product_id, {}).setdefault(layer_id, {}).setdefault(
+            track, []
+        ).append(validated)
+    for layers in result.values():
+        for tracks in layers.values():
+            for pointers in tracks.values():
+                pointers.sort(
+                    key=lambda value: (
+                        int(value["rangeHours"]),
+                        str(value["presetId"]),
+                    )
+                )
+    return result
+
+
+def _retire_replaced_legacy_profiles(
+    video_profiles: dict[str, Any],
+    composite_profiles: dict[str, Any],
+) -> None:
+    """Drop bulky live/day HLS once a complete exact preset pair exists.
+
+    Custom layer selections still fall through to the lossless image archive.
+    Keeping the legacy proxy/HLS bundle alongside every progressive range
+    would otherwise consume several gigabytes and prevent the bucket from
+    retaining the current and previous exact generations below its free-tier
+    ceiling. Archive HLS remains the seven-day playback path.
+    """
+    for product_id, layers in list(video_profiles.items()):
+        configured = _configured_composite_presets(product_id)
+        for layer_id, tracks in list(layers.items()):
+            composite_tracks = (
+                composite_profiles.get(product_id, {}).get(layer_id, {})
+            )
+            for track in tuple(tracks):
+                if track not in {"live", "day"}:
+                    continue
+                by_range: dict[int, set[str]] = {}
+                for pointer in composite_tracks.get(track, ()):
+                    if not isinstance(pointer, dict):
+                        continue
+                    hours = pointer.get("rangeHours")
+                    preset_id = pointer.get("presetId")
+                    if isinstance(hours, int) and isinstance(preset_id, str):
+                        by_range.setdefault(hours, set()).add(preset_id)
+                if configured and any(
+                    configured.issubset(presets)
+                    for presets in by_range.values()
+                ):
+                    tracks.pop(track, None)
+            if not tracks:
+                layers.pop(layer_id, None)
+        if not layers:
+            video_profiles.pop(product_id, None)
+
+
 def _canonical_five_minute_frames(
     domain_id: str,
     layer_id: str,
@@ -484,9 +719,13 @@ def build_catalog(root: Path) -> dict[str, Any]:
             "GeoBC": "https://catalogue.data.gov.bc.ca/dataset/transmission-lines",
         },
     }
+    composite_profiles = read_composite_profiles(root)
     video_profiles = read_video_profiles(root)
+    _retire_replaced_legacy_profiles(video_profiles, composite_profiles)
     if video_profiles:
         catalog["videoProfiles"] = video_profiles
+    if composite_profiles:
+        catalog["compositeProfiles"] = composite_profiles
     return catalog
 
 

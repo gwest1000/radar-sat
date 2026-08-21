@@ -19,8 +19,13 @@ import {
   VideoCompositeStage,
 } from "./video-composite-stage";
 import {
+  CompositeLoopManifest,
+  CompositeProfilePointer,
+  compositeLoopVideoManifest,
   exactCompositeManifest,
+  loadCompositeLoopManifest,
   loadVideoLoopManifest,
+  matchingCompositeProfile,
   selectVideoFrames,
   sourceCacheKey,
   supportsVideoLoop,
@@ -159,6 +164,11 @@ type Catalog = {
     day?: VideoProfilePointer;
     archive?: VideoProfilePointer;
   }>>;
+  compositeProfiles?: Record<string, Record<string, {
+    live?: CompositeProfilePointer[];
+    day?: CompositeProfilePointer[];
+    archive?: CompositeProfilePointer[];
+  }>>;
 };
 
 type LiveEdgeIndex = {
@@ -210,6 +220,13 @@ const REGIONAL_PRODUCT_KEYS: Record<string, string> = {
   "bc-south-coast-overlay": "south-coast",
 };
 const SAME_SLOT_TOLERANCE_MS = 2 * 60_000;
+const COMPOSITE_FRESHNESS_MINUTES: Record<number, number> = {
+  3: 20,
+  6: 25,
+  12: 40,
+  24: 40,
+  168: 70,
+};
 const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
 const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
   left: `${BC_ON_NORTH_AMERICA.left * 100}%`,
@@ -928,6 +945,14 @@ function sameLayerSet(left: readonly string[], right: readonly string[]): boolea
   return expected.size === right.length
     && new Set(left).size === left.length
     && left.every((id) => expected.has(id));
+}
+
+function exactCompositeSelectionKey(
+  source: "sidecar" | "legacy",
+  selection: NonNullable<ReturnType<typeof compositeLoopVideoManifest>>,
+): string {
+  return `${source}/${selection.manifest.generation}/${selection.presetId}`
+    + `/${selection.renditionId}/${selection.manifest.media.path}`;
 }
 
 function normalizeLayerChoices(
@@ -1735,7 +1760,11 @@ export function RadarViewer() {
   const [pageVisible, setPageVisible] = useState(true);
   const [loadedVideoManifest, setLoadedVideoManifest] = useState<VideoLoopManifest | null>(null);
   const [pendingVideoManifest, setPendingVideoManifest] = useState<VideoLoopManifest | null>(null);
+  const [loadedCompositeManifest, setLoadedCompositeManifest] = useState<CompositeLoopManifest | null>(null);
+  const [pendingCompositeManifest, setPendingCompositeManifest] = useState<CompositeLoopManifest | null>(null);
   const [failedVideoGeneration, setFailedVideoGeneration] = useState("");
+  const [failedCompositeGeneration, setFailedCompositeGeneration] = useState("");
+  const [acceptedCompositeGeneration, setAcceptedCompositeGeneration] = useState("");
   const [videoFallbackReason, setVideoFallbackReason] = useState("");
   const [failedDefaultComposite, setFailedDefaultComposite] = useState<{
     key: string;
@@ -1750,6 +1779,9 @@ export function RadarViewer() {
   const playbackStatusLinesRef = useRef<PlaybackStatusLinesHandle>(null);
   const loadedVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const pendingVideoManifestRef = useRef<VideoLoopManifest | null>(null);
+  const loadedCompositeManifestRef = useRef<CompositeLoopManifest | null>(null);
+  const pendingCompositeManifestRef = useRef<CompositeLoopManifest | null>(null);
+  const pendingMediaReadyKeyRef = useRef("");
   const fullCatalogLoadRef = useRef("");
   const preferencesRef = useRef<ViewerPreferences>({
     productId: "bc-large-overlay",
@@ -1975,6 +2007,10 @@ export function RadarViewer() {
   }, [loadedVideoManifest]);
 
   useEffect(() => {
+    loadedCompositeManifestRef.current = loadedCompositeManifest;
+  }, [loadedCompositeManifest]);
+
+  useEffect(() => {
     // A visible loop keeps playing on a second monitor even while another
     // browser window or application has focus. Only a genuinely hidden tab is
     // paused to avoid spending decode work on an image nobody can see.
@@ -2038,6 +2074,19 @@ export function RadarViewer() {
       ? "archive"
       : "live";
   const videoLayerId = activeAnchorId;
+  const enabledVideoLayerIds = useMemo(() => product?.layers
+    .filter((recipe) => isProductLayerEnabled(recipe, optionalLayers, product.layers))
+    .map((recipe) => recipe.id) ?? [], [optionalLayers, product]);
+  const compositePointer = product && videoLayerId
+    ? matchingCompositeProfile(
+        catalog?.compositeProfiles?.[product.id]?.[videoLayerId]?.[videoTrack] ?? [],
+        enabledVideoLayerIds,
+        effectiveRangeHours,
+      )
+    : null;
+  const compositePointerKey = compositePointer
+    ? `${product?.id}/${videoLayerId}/${videoTrack}/${compositePointer.presetId}/${effectiveRangeHours}h/${compositePointer.generation}/${compositePointer.manifestPath}`
+    : "";
   const videoPointer = product && videoLayerId
     ? catalog?.videoProfiles?.[product.id]?.[videoLayerId]?.[videoTrack]
     : undefined;
@@ -2088,6 +2137,87 @@ export function RadarViewer() {
     return () => { cancelled = true; };
   }, [catalogBase, failedVideoGeneration, product, videoLayerId, videoPointer, videoPointerKey, videoTrack]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (
+      !compositePointer
+      || !videoLayerId
+      || !product
+      || failedCompositeGeneration === compositePointer.generation
+    ) return;
+    const manifestUrl = absoluteUrl(compositePointer.manifestPath, catalogBase);
+    void loadCompositeLoopManifest(manifestUrl).then((manifest) => {
+      if (cancelled) return;
+      if (
+        manifest.generation !== compositePointer.generation
+        || manifest.productId !== product.id
+        || manifest.layerId !== videoLayerId
+        || manifest.track !== videoTrack
+        || manifest.presetId !== compositePointer.presetId
+        || manifest.rangeHours !== effectiveRangeHours
+        || !sameLayerSet(manifest.layerIds, compositePointer.layerIds)
+        || Date.parse(manifest.generatedAt) !== Date.parse(compositePointer.generatedAt)
+        || Date.parse(manifest.endValidTime) !== Date.parse(compositePointer.endValidTime)
+        || Date.parse(manifest.endSourceTime) !== Date.parse(compositePointer.endSourceTime)
+        || !manifest.renditions.some((rendition) => supportsVideoLoop(rendition.media.mimeType))
+      ) {
+        throw new Error("Composite profile does not match the selected loop.");
+      }
+      const active = loadedCompositeManifestRef.current;
+      if (
+        active
+        && active.productId === manifest.productId
+        && active.layerId === manifest.layerId
+        && active.track === manifest.track
+        && active.presetId === manifest.presetId
+        && active.rangeHours === manifest.rangeHours
+        && active.generation !== manifest.generation
+      ) {
+        pendingCompositeManifestRef.current = manifest;
+        setPendingCompositeManifest(manifest);
+      } else {
+        pendingCompositeManifestRef.current = null;
+        setPendingCompositeManifest(null);
+        setLoadedCompositeManifest(manifest);
+      }
+      setFailedCompositeGeneration("");
+      setVideoFallbackReason("");
+    }).catch((reason) => {
+      if (!cancelled) {
+        setFailedCompositeGeneration(compositePointer.generation);
+        setVideoFallbackReason(
+          reason instanceof Error ? reason.message : "Composite manifest failed.",
+        );
+      }
+    });
+    return () => { cancelled = true; };
+  }, [
+    catalogBase,
+    compositePointer,
+    compositePointerKey,
+    effectiveRangeHours,
+    failedCompositeGeneration,
+    product,
+    videoLayerId,
+    videoTrack,
+  ]);
+
+  useEffect(() => {
+    const pending = pendingCompositeManifestRef.current;
+    if (!pending) return;
+    if (
+      compositePointer
+      && pending.generation === compositePointer.generation
+      && pending.productId === product?.id
+      && pending.layerId === videoLayerId
+      && pending.track === videoTrack
+      && pending.presetId === compositePointer.presetId
+      && pending.rangeHours === effectiveRangeHours
+    ) return;
+    pendingCompositeManifestRef.current = null;
+    setPendingCompositeManifest(null);
+  }, [compositePointer, compositePointerKey, effectiveRangeHours, product?.id, videoLayerId, videoTrack]);
+
   const fallbackAnchorFrames = useMemo(() => {
     if (!liveEdgeDomain || !product) return [];
     const frames = activeAnchorId === "raw-visir-5min"
@@ -2105,6 +2235,19 @@ export function RadarViewer() {
       product.archiveFrameIntervalMinutes,
     );
   }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, product]);
+
+  const compositePointerFreshEnough = useMemo(() => {
+    if (!compositePointer || !fallbackAnchorFrames.length) return Boolean(compositePointer);
+    const newestFallback = fallbackAnchorFrames[fallbackAnchorFrames.length - 1];
+    const imageNewest = newestFallback
+      ? Date.parse(actualSourceTime(activeAnchorId, newestFallback))
+      : NaN;
+    const compositeNewest = Date.parse(compositePointer.endSourceTime);
+    if (!Number.isFinite(imageNewest) || !Number.isFinite(compositeNewest)) return false;
+    const allowanceMinutes = COMPOSITE_FRESHNESS_MINUTES[effectiveRangeHours]
+      ?? Math.max(20, Math.ceil(effectiveRangeHours / 24) * 10);
+    return imageNewest - compositeNewest <= allowanceMinutes * 60_000 + SAME_SLOT_TOLERANCE_MS;
+  }, [activeAnchorId, compositePointer, effectiveRangeHours, fallbackAnchorFrames]);
 
   const videoFreshEnough = useMemo(() => {
     if (!loadedVideoManifest || !fallbackAnchorFrames.length || !product) return true;
@@ -2129,6 +2272,48 @@ export function RadarViewer() {
     return imageNewest - videoNewest <= hotEdgeAllowance + SAME_SLOT_TOLERANCE_MS;
   }, [activeAnchorId, fallbackAnchorFrames, liveEdgeIndex, loadedVideoManifest, product]);
 
+  const compositeFreshEnough = useMemo(() => {
+    if (!loadedCompositeManifest || !fallbackAnchorFrames.length) return true;
+    const newestFallback = fallbackAnchorFrames[fallbackAnchorFrames.length - 1];
+    const imageNewest = newestFallback
+      ? Date.parse(actualSourceTime(activeAnchorId, newestFallback))
+      : NaN;
+    const compositeNewest = Date.parse(loadedCompositeManifest.endSourceTime);
+    if (!Number.isFinite(imageNewest) || !Number.isFinite(compositeNewest)) return false;
+    const allowanceMinutes = COMPOSITE_FRESHNESS_MINUTES[effectiveRangeHours]
+      ?? Math.max(20, Math.ceil(effectiveRangeHours / 24) * 10);
+    return imageNewest - compositeNewest <= allowanceMinutes * 60_000 + SAME_SLOT_TOLERANCE_MS;
+  }, [activeAnchorId, effectiveRangeHours, fallbackAnchorFrames, loadedCompositeManifest]);
+
+  const candidateCompositeManifest = useMemo(() => (
+    loadedCompositeManifest
+      && compositePointer
+      && loadedCompositeManifest.productId === product?.id
+      && loadedCompositeManifest.layerId === videoLayerId
+      && loadedCompositeManifest.track === videoTrack
+      && loadedCompositeManifest.presetId === compositePointer.presetId
+      && loadedCompositeManifest.rangeHours === effectiveRangeHours
+      && sameLayerSet(loadedCompositeManifest.layerIds, enabledVideoLayerIds)
+      && (
+        compositeFreshEnough
+        || acceptedCompositeGeneration === loadedCompositeManifest.generation
+      )
+      && failedCompositeGeneration !== loadedCompositeManifest.generation
+      ? loadedCompositeManifest
+      : null
+  ), [
+    acceptedCompositeGeneration,
+    compositeFreshEnough,
+    compositePointer,
+    enabledVideoLayerIds,
+    effectiveRangeHours,
+    failedCompositeGeneration,
+    loadedCompositeManifest,
+    product?.id,
+    videoLayerId,
+    videoTrack,
+  ]);
+
   const candidateVideoManifest = useMemo(() => (
     loadedVideoManifest
       && videoPointer
@@ -2141,17 +2326,16 @@ export function RadarViewer() {
       ? loadedVideoManifest
       : null
   ), [failedVideoGeneration, loadedVideoManifest, product?.id, videoFreshEnough, videoLayerId, videoPointer, videoTrack]);
-  const enabledVideoLayerIds = useMemo(() => product?.layers
-    .filter((recipe) => isProductLayerEnabled(recipe, optionalLayers, product.layers))
-    .map((recipe) => recipe.id) ?? [], [optionalLayers, product]);
-  const highExactComposite = useMemo(() => candidateVideoManifest
-    ? exactCompositeManifest(
-        candidateVideoManifest,
-        enabledVideoLayerIds,
-        effectiveRangeHours,
-        "high",
-      )
-    : null, [candidateVideoManifest, effectiveRangeHours, enabledVideoLayerIds]);
+  const highExactComposite = useMemo(() => candidateCompositeManifest
+    ? compositeLoopVideoManifest(candidateCompositeManifest, "high")
+    : candidateVideoManifest
+      ? exactCompositeManifest(
+          candidateVideoManifest,
+          enabledVideoLayerIds,
+          effectiveRangeHours,
+          "high",
+        )
+      : null, [candidateCompositeManifest, candidateVideoManifest, effectiveRangeHours, enabledVideoLayerIds]);
   useEffect(() => {
     let cancelled = false;
     const media = highExactComposite?.manifest.media;
@@ -2189,7 +2373,13 @@ export function RadarViewer() {
   const requestedRendition = playbackQuality === "auto"
     ? automaticRendition
     : playbackQuality;
-  const exactComposite = useMemo(() => candidateVideoManifest
+  const sidecarExactComposite = useMemo(() => candidateCompositeManifest
+    ? compositeLoopVideoManifest(candidateCompositeManifest, requestedRendition)
+    : null, [candidateCompositeManifest, requestedRendition]);
+  const sidecarExactCompositeKey = sidecarExactComposite
+    ? `sidecar/${sidecarExactComposite.manifest.generation}/${sidecarExactComposite.presetId}/${sidecarExactComposite.renditionId}/${sidecarExactComposite.manifest.media.path}`
+    : "";
+  const legacyExactComposite = useMemo(() => candidateVideoManifest
     ? exactCompositeManifest(
         candidateVideoManifest,
         enabledVideoLayerIds,
@@ -2197,14 +2387,46 @@ export function RadarViewer() {
         requestedRendition,
       )
     : null, [candidateVideoManifest, effectiveRangeHours, enabledVideoLayerIds, requestedRendition]);
-  const pendingExactComposite = useMemo(() => pendingVideoManifest
+  const legacyExactCompositeKey = legacyExactComposite
+    ? `legacy/${legacyExactComposite.manifest.generation}/${legacyExactComposite.presetId}/${legacyExactComposite.renditionId}/${legacyExactComposite.manifest.media.path}`
+    : "";
+  const exactComposite = sidecarExactComposite
+    && sidecarExactCompositeKey !== failedDefaultComposite?.key
+    ? sidecarExactComposite
+    : legacyExactComposite
+      && legacyExactCompositeKey !== failedDefaultComposite?.key
+      ? legacyExactComposite
+      : null;
+  const exactCompositeKey = exactComposite === sidecarExactComposite
+    ? sidecarExactCompositeKey
+    : exactComposite === legacyExactComposite
+      ? legacyExactCompositeKey
+      : "";
+  const pendingSidecarExactComposite = useMemo(() => pendingCompositeManifest
+    ? compositeLoopVideoManifest(pendingCompositeManifest, requestedRendition)
+    : null, [pendingCompositeManifest, requestedRendition]);
+  const pendingLegacyExactComposite = pendingVideoManifest
     ? exactCompositeManifest(
         pendingVideoManifest,
         enabledVideoLayerIds,
         effectiveRangeHours,
         requestedRendition,
       )
-    : null, [effectiveRangeHours, enabledVideoLayerIds, pendingVideoManifest, requestedRendition]);
+    : null;
+  const pendingExactComposite = pendingSidecarExactComposite ?? pendingLegacyExactComposite;
+  const pendingExactCompositeKey = pendingExactComposite
+    ? exactCompositeSelectionKey(
+        pendingExactComposite === pendingSidecarExactComposite ? "sidecar" : "legacy",
+        pendingExactComposite,
+      )
+    : "";
+  useEffect(() => {
+    // A new source/rendition must prove that it can produce a future frame of
+    // video before it is eligible for an atomic loop-boundary handoff. Hidden
+    // tabs discard this proof and establish it again when their preloader is
+    // mounted on return.
+    pendingMediaReadyKeyRef.current = "";
+  }, [pageVisible, pendingExactCompositeKey]);
   const candidateDefaultComposite = candidateVideoManifest?.defaultComposite;
   const candidateDefaultCompositeKey = candidateDefaultComposite && candidateVideoManifest
     ? `${candidateVideoManifest.generation}/${candidateDefaultComposite.id}/${candidateDefaultComposite.media.path}`
@@ -2214,12 +2436,7 @@ export function RadarViewer() {
     && sameLayerSet(enabledVideoLayerIds, candidateDefaultComposite.layerIds)
     ? candidateDefaultComposite
     : undefined;
-  const exactCompositeKey = exactComposite
-    ? `${exactComposite.manifest.generation}/${exactComposite.presetId}/${exactComposite.renditionId}/${exactComposite.manifest.media.path}`
-    : "";
-  const activeExactComposite = exactCompositeKey !== failedDefaultComposite?.key
-    ? exactComposite
-    : null;
+  const activeExactComposite = exactComposite;
   const activeComposite = useMemo(() => activeExactComposite
     ? {
         id: `${activeExactComposite.presetId}:${activeExactComposite.renditionId}`,
@@ -2363,9 +2580,23 @@ export function RadarViewer() {
       && loadedVideoManifest.layerId === videoLayerId
       && loadedVideoManifest.track === videoTrack
     );
-    const needsFullCatalog = !videoPointer
+    const selectedCompositeManifestLoaded = Boolean(
+      loadedCompositeManifest
+      && compositePointer
+      && loadedCompositeManifest.generation === compositePointer.generation
+      && loadedCompositeManifest.productId === product.id
+      && loadedCompositeManifest.layerId === videoLayerId
+      && loadedCompositeManifest.track === videoTrack
+      && loadedCompositeManifest.presetId === compositePointer.presetId
+      && loadedCompositeManifest.rangeHours === effectiveRangeHours
+    );
+    const compositeUnavailable = !compositePointer
+      || failedCompositeGeneration === compositePointer.generation
+      || (selectedCompositeManifestLoaded && (!compositeFreshEnough || !videoModeReady));
+    const legacyUnavailable = !videoPointer
       || failedVideoGeneration === videoPointer.generation
       || (selectedManifestLoaded && (!videoFreshEnough || !videoModeReady));
+    const needsFullCatalog = compositeUnavailable && legacyUnavailable;
     if (!needsFullCatalog) return;
 
     const fullCatalogUrl = absoluteUrl(catalog.fullCatalogPath, catalogBase);
@@ -2398,7 +2629,12 @@ export function RadarViewer() {
   }, [
     catalog,
     catalogBase,
+    compositeFreshEnough,
+    compositePointer,
+    effectiveRangeHours,
+    failedCompositeGeneration,
     failedVideoGeneration,
+    loadedCompositeManifest,
     loadedVideoManifest,
     product,
     videoFreshEnough,
@@ -2628,6 +2864,13 @@ export function RadarViewer() {
   }, []);
 
   const handleVideoFramePresented = useCallback((index: number) => {
+    if (
+      activeExactComposite === sidecarExactComposite
+      && sidecarExactComposite
+      && acceptedCompositeGeneration !== sidecarExactComposite.manifest.generation
+    ) {
+      setAcceptedCompositeGeneration(sidecarExactComposite.manifest.generation);
+    }
     presentedVideoIndexRef.current = index;
     // React's frame index is deliberately throttled while H.264 is playing so
     // the whole viewer does not rerender for every weather frame. The rapid
@@ -2663,7 +2906,18 @@ export function RadarViewer() {
         `${product.title}, valid ${utcClock(displayedFrame.validTime)} UTC. ${times}`,
       );
     }
-  }, [anchorFrames.length, liveEdgeSourceTimes, liveEdgeState, product, videoAnchorFrames, videoHudSourceTimes, videoPlans]);
+  }, [
+    acceptedCompositeGeneration,
+    activeExactComposite,
+    anchorFrames.length,
+    liveEdgeSourceTimes,
+    liveEdgeState,
+    product,
+    sidecarExactComposite,
+    videoAnchorFrames,
+    videoHudSourceTimes,
+    videoPlans,
+  ]);
 
   const togglePlayback = useCallback(() => {
     if (isAnimating && videoModeReady) {
@@ -2677,8 +2931,16 @@ export function RadarViewer() {
     setFailedVideoGeneration(generation);
   }, []);
 
-  const activeVideoGeneration = candidateVideoManifest?.generation ?? "";
+  const activeVideoGeneration = playbackVideoManifest?.generation ?? "";
   const handleActiveVideoFailure = useCallback((message: string) => {
+    const pendingComposite = pendingCompositeManifestRef.current;
+    if (pendingComposite && pendingComposite.generation !== activeVideoGeneration) {
+      pendingCompositeManifestRef.current = null;
+      setPendingCompositeManifest(null);
+      loadedCompositeManifestRef.current = pendingComposite;
+      setLoadedCompositeManifest(pendingComposite);
+      return;
+    }
     const pending = pendingVideoManifestRef.current;
     if (pending && pending.generation !== activeVideoGeneration) {
       pendingVideoManifestRef.current = null;
@@ -2704,14 +2966,65 @@ export function RadarViewer() {
   ]);
 
   const handleVideoLoopBoundary = useCallback(() => {
+    const pendingComposite = pendingCompositeManifestRef.current;
+    if (pendingComposite) {
+      const selection = compositeLoopVideoManifest(pendingComposite, requestedRendition);
+      const readyKey = selection ? exactCompositeSelectionKey("sidecar", selection) : "";
+      if (
+        !selection
+        || pendingMediaReadyKeyRef.current !== readyKey
+      ) return;
+      pendingMediaReadyKeyRef.current = "";
+      pendingCompositeManifestRef.current = null;
+      setPendingCompositeManifest(null);
+      loadedCompositeManifestRef.current = pendingComposite;
+      setLoadedCompositeManifest(pendingComposite);
+      setFrameIndex(0);
+      return;
+    }
     const pending = pendingVideoManifestRef.current;
-    if (!pending) return;
+    const pendingSelection = pending
+      ? exactCompositeManifest(
+          pending,
+          enabledVideoLayerIds,
+          effectiveRangeHours,
+          requestedRendition,
+        )
+      : null;
+    if (
+      pendingSelection
+      && pendingMediaReadyKeyRef.current
+        !== exactCompositeSelectionKey("legacy", pendingSelection)
+    ) return;
+    let retiredStaleComposite = false;
+    const activeCompositeManifest = loadedCompositeManifestRef.current;
+    if (
+      activeCompositeManifest
+      && acceptedCompositeGeneration === activeCompositeManifest.generation
+      && !compositeFreshEnough
+    ) {
+      setAcceptedCompositeGeneration("");
+      loadedCompositeManifestRef.current = null;
+      setLoadedCompositeManifest(null);
+      retiredStaleComposite = true;
+    }
+    if (!pending) {
+      if (retiredStaleComposite) setFrameIndex(0);
+      return;
+    }
+    pendingMediaReadyKeyRef.current = "";
     pendingVideoManifestRef.current = null;
     setPendingVideoManifest(null);
     loadedVideoManifestRef.current = pending;
     setLoadedVideoManifest(pending);
     setFrameIndex(0);
-  }, []);
+  }, [
+    acceptedCompositeGeneration,
+    compositeFreshEnough,
+    effectiveRangeHours,
+    enabledVideoLayerIds,
+    requestedRendition,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3064,7 +3377,16 @@ export function RadarViewer() {
   const playbackQualityOption = PLAYBACK_QUALITY_OPTIONS.find(
     (option) => option.id === playbackQuality,
   ) ?? PLAYBACK_QUALITY_OPTIONS[0];
-  const playbackBuildStatus = activeComposite
+  const prebuiltSelectionOffered = Boolean(
+    activeComposite
+    || (
+      compositePointer
+      && compositePointerFreshEnough
+      && failedCompositeGeneration !== compositePointer.generation
+      && sidecarExactCompositeKey !== failedDefaultComposite?.key
+    ),
+  );
+  const playbackBuildStatus = prebuiltSelectionOffered
     ? videoModeReady
       ? {
           mode: "prebuilt",
@@ -3257,12 +3579,27 @@ export function RadarViewer() {
           >
             {pageVisible && pendingExactComposite?.manifest.media.mimeType.startsWith("video/mp4") && (
               <video
+                key={pendingExactCompositeKey}
                 className="pending-video-preload"
                 src={absoluteUrl(pendingExactComposite.manifest.media.path, catalogBase)}
+                data-pending-media-key={pendingExactCompositeKey}
                 crossOrigin="anonymous"
                 muted
                 playsInline
                 preload="auto"
+                onCanPlay={(event) => {
+                  const key = event.currentTarget.dataset.pendingMediaKey ?? "";
+                  if (
+                    key === pendingExactCompositeKey
+                    && event.currentTarget.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+                  ) pendingMediaReadyKeyRef.current = key;
+                }}
+                onError={(event) => {
+                  const key = event.currentTarget.dataset.pendingMediaKey ?? "";
+                  if (pendingMediaReadyKeyRef.current === key) {
+                    pendingMediaReadyKeyRef.current = "";
+                  }
+                }}
                 aria-hidden="true"
               />
             )}

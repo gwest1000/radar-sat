@@ -192,6 +192,35 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(styles, /\.video-loop-decoder/);
 });
 
+test("prefers exact-range composite sidecars and fails open to legacy playback", async () => {
+  const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
+  const videoLoop = await readFile(new URL("../app/video-loop.ts", import.meta.url), "utf8");
+
+  assert.match(videoLoop, /export type CompositeProfilePointer/);
+  assert.match(videoLoop, /export type CompositeLoopManifest/);
+  assert.match(videoLoop, /export function parseCompositeLoopManifest/);
+  assert.match(videoLoop, /export function matchingCompositeProfile/);
+  assert.match(videoLoop, /pointer\.rangeHours === rangeHours/);
+  assert.match(videoLoop, /pointer\.layerIds\.every\(\(id\) => selected\.has\(id\)\)/);
+  assert.match(videoLoop, /manifest\.endValidTime[\s\S]*finalFrame\.validTime/);
+  assert.match(videoLoop, /manifest\.endSourceTime[\s\S]*finalFrame\.sourceValidTime/);
+  assert.match(videoLoop, /export function compositeLoopVideoManifest/);
+  assert.match(videoLoop, /proxies: \{\}/);
+
+  assert.match(viewer, /compositeProfiles\?: Record/);
+  assert.match(viewer, /matchingCompositeProfile\([\s\S]*enabledVideoLayerIds,[\s\S]*effectiveRangeHours/);
+  assert.match(viewer, /COMPOSITE_FRESHNESS_MINUTES[\s\S]*3: 20[\s\S]*6: 25[\s\S]*12: 40[\s\S]*24: 40[\s\S]*168: 70/);
+  assert.match(viewer, /const exactComposite = sidecarExactComposite[\s\S]*legacyExactComposite/);
+  assert.match(viewer, /const needsFullCatalog = compositeUnavailable && legacyUnavailable/);
+  assert.match(viewer, /pendingCompositeManifestRef\.current[\s\S]*handleVideoLoopBoundary/);
+  assert.match(viewer, /acceptedCompositeGeneration === loadedCompositeManifest\.generation/);
+  assert.match(viewer, /retiredStaleComposite[\s\S]*setLoadedCompositeManifest\(null\)/);
+  assert.match(viewer, /pendingMediaReadyKeyRef\.current !== readyKey/);
+  assert.match(viewer, /exactCompositeSelectionKey\("legacy", pendingSelection\)/);
+  assert.match(viewer, /onCanPlay=\{\(event\) => \{[\s\S]*HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.match(viewer, /key=\{pendingExactCompositeKey\}/);
+});
+
 test("exposes stable layer-control targets for deterministic toggles", async () => {
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
   assert.match(viewer, /htmlFor=\{`layer-\$\{product\.id\}-\$\{layer\.id\}`\}/);

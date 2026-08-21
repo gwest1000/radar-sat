@@ -201,8 +201,21 @@ def add_v2_exact_composite_profile(root: Path) -> set[str]:
     exact.parent.mkdir(parents=True, exist_ok=True)
     exact.write_bytes(b"exact-vfr-composite-mp4")
     payload["composites"] = [{
-        "id": "operational-full-v1",
-        "layerIds": ["base-dark", layer_id, "radar-rain", "lightning-trail"],
+        "id": "operational-default-v1",
+        "layerIds": [
+            "base-dark",
+            layer_id,
+            "smoke",
+            "radar-coverage",
+            "radar-rain",
+            "watersheds",
+            "transmission-lines",
+            "boundaries",
+            "lightning-trail",
+            "hotspots",
+            "model-mslp",
+            "model-hgt500",
+        ],
         "mediaViewport": viewport,
         "ranges": [{
             "hours": 3,
@@ -227,6 +240,113 @@ def add_v2_exact_composite_profile(root: Path) -> set[str]:
     }]
     manifest_path.write_text(json.dumps(payload))
     return {*expected, exact_relative}
+
+
+def add_composite_sidecar(
+    root: Path,
+    generation: str = "20260720T2340Z-abcdef012345",
+    *,
+    generated_at: str = "2026-07-20T23:42:00Z",
+) -> set[str]:
+    product_id = "bc-northeast-overlay"
+    layer_id = "eccc-geocolor"
+    track = "live"
+    preset_id = "operational-core-v1"
+    range_hours = 3
+    media_generation = f"{generation[:14]}-{generation.rsplit('-', 1)[-1]}"
+    media_relative = (
+        f"videos/composite-{product_id}/{layer_id}/{track}/"
+        f"exact-{range_hours}h/display/{media_generation}.mp4"
+    )
+    manifest_relative = (
+        f"composite-manifests/{product_id}/{layer_id}/{track}/"
+        f"{preset_id}/{range_hours}/{generation}.json"
+    )
+    media = root / media_relative
+    media.parent.mkdir(parents=True, exist_ok=True)
+    media.write_bytes(b"independent-exact-composite")
+    layer_ids = [
+        "base-dark",
+        layer_id,
+        "radar-coverage",
+        "radar-rain",
+        "watersheds",
+        "transmission-lines",
+        "boundaries",
+        "lightning-trail",
+        "model-mslp",
+        "model-hgt500",
+    ]
+    frames = [
+        {
+            "validTime": "2026-07-20T23:30:00Z",
+            "sourceValidTime": "2026-07-20T23:20:00Z",
+            "sourceTimes": {"MSC GeoColor": "2026-07-20T23:20:00Z"},
+            "layerSourceTimes": {"radar-rain": "2026-07-20T23:24:00Z"},
+            "durationSeconds": 0.2,
+        },
+        {
+            "validTime": "2026-07-20T23:40:00Z",
+            "sourceValidTime": "2026-07-20T23:30:00Z",
+            "sourceTimes": {"MSC GeoColor": "2026-07-20T23:30:00Z"},
+            "layerSourceTimes": {"radar-rain": "2026-07-20T23:36:00Z"},
+            "durationSeconds": 0.8,
+        },
+    ]
+    manifest = root / manifest_relative
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({
+        "schemaVersion": 1,
+        "generation": generation,
+        "generatedAt": generated_at,
+        "productId": product_id,
+        "domainId": "bc",
+        "layerId": layer_id,
+        "track": track,
+        "presetId": preset_id,
+        "layerIds": layer_ids,
+        "rangeHours": range_hours,
+        "cadenceMinutes": 10,
+        "viewport": {"left": 0.4, "top": 0.15, "width": 0.5, "height": 0.44},
+        "mediaViewport": {"left": 0.4, "top": 0.15, "width": 0.5, "height": 0.44},
+        "endValidTime": frames[-1]["validTime"],
+        "endSourceTime": frames[-1]["sourceValidTime"],
+        "boundaryIntervalMultiplier": 4,
+        "frames": frames,
+        "renditions": [{
+            "id": "display",
+            "media": {
+                "path": media_relative,
+                "mimeType": "video/mp4",
+                "codec": "avc1",
+                "width": 1200,
+                "height": 816,
+                "contentHeight": 800,
+                "byteLength": media.stat().st_size,
+                "sha256": hashlib.sha256(media.read_bytes()).hexdigest(),
+            },
+        }],
+    }))
+    catalog_path = root / "catalog.json"
+    catalog = json.loads(catalog_path.read_text())
+    catalog.setdefault("products", []).append({
+        "id": product_id,
+        "layers": [{"id": value} for value in layer_ids],
+    })
+    catalog["compositeProfiles"] = {
+        product_id: {layer_id: {track: [{
+            "presetId": preset_id,
+            "layerIds": layer_ids,
+            "rangeHours": range_hours,
+            "generation": generation,
+            "manifestPath": manifest_relative,
+            "generatedAt": generated_at,
+            "endValidTime": frames[-1]["validTime"],
+            "endSourceTime": frames[-1]["sourceValidTime"],
+        }]}}
+    }
+    catalog_path.write_text(json.dumps(catalog))
+    return {manifest_relative, media_relative}
 
 
 def add_hls_video_profile(
@@ -855,6 +975,68 @@ class PublisherTests(unittest.TestCase):
             self.assertFalse(any(item.key.startswith("videos/") for item in objects))
             self.assertFalse(any(item.key.startswith("video-manifests/") for item in objects))
 
+    def test_independent_composite_sidecar_is_published_without_proxies(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_composite_sidecar(root)
+
+            objects, payload = discover_objects(root)
+
+            published = json.loads(payload)
+            pointer = published["compositeProfiles"]["bc-northeast-overlay"][
+                "eccc-geocolor"
+            ]["live"][0]
+            self.assertEqual(pointer["rangeHours"], 3)
+            keys = {item.key for item in objects}
+            self.assertTrue(expected.issubset(keys))
+            self.assertFalse(any(key.startswith("video-proxies/") for key in keys))
+
+    def test_incomplete_composite_sidecar_fails_open_to_images(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_composite_sidecar(root)
+            media = next(key for key in expected if key.endswith(".mp4"))
+            (root / media).unlink()
+
+            objects, payload = discover_objects(root)
+
+            self.assertNotIn("compositeProfiles", json.loads(payload))
+            self.assertTrue(any(item.key.startswith("frames/") for item in objects))
+            self.assertFalse(any(item.key.startswith("composite-manifests/") for item in objects))
+
+    def test_composite_sidecar_rejects_valid_preset_with_noncanonical_layers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            now = dt.datetime(2026, 7, 20, 23, 42, tzinfo=UTC)
+            make_archive(root, now)
+            expected = add_composite_sidecar(root)
+            manifest_relative = next(
+                key for key in expected if key.startswith("composite-manifests/")
+            )
+            manifest = root / manifest_relative
+            payload = json.loads(manifest.read_text())
+            payload["layerIds"].remove("model-hgt500")
+            manifest.write_text(json.dumps(payload))
+            catalog_path = root / "catalog.json"
+            catalog = json.loads(catalog_path.read_text())
+            pointer = catalog["compositeProfiles"]["bc-northeast-overlay"][
+                "eccc-geocolor"
+            ]["live"][0]
+            pointer["layerIds"] = payload["layerIds"]
+            catalog_path.write_text(json.dumps(catalog))
+
+            objects, published_payload = discover_objects(root)
+
+            self.assertNotIn("compositeProfiles", json.loads(published_payload))
+            keys = {item.key for item in objects}
+            self.assertTrue(any(key.startswith("frames/") for key in keys))
+            self.assertFalse(any(key.startswith("composite-manifests/") for key in keys))
+            self.assertFalse(any(key.endswith(".mp4") for key in keys))
+
     def test_existing_video_filter_retains_last_uploaded_generation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -966,6 +1148,35 @@ class PublisherTests(unittest.TestCase):
         self.assertNotIn(current_exact, exact_expired)
         self.assertNotIn(grace_exact, exact_expired)
         self.assertIn(old_exact, exact_expired)
+
+        manifest_prefix = (
+            "composite-manifests/bc-northeast-overlay/eccc-geocolor/live/"
+            "operational-core-v1/3/20260721T1200Z-"
+        )
+        current_manifest = f"{manifest_prefix}888888888888.json"
+        previous_manifest = f"{manifest_prefix}000000000000.json"
+        stale_manifest = f"{manifest_prefix}ffffffffffff.json"
+        manifest_remote = {
+            current_manifest: 1,
+            previous_manifest: 1,
+            stale_manifest: 1,
+        }
+        # Lexical hash order calls the stale ffff generation "newer". R2
+        # LastModified records the actual publication order.
+        manifest_modified = {
+            current_manifest: now - dt.timedelta(minutes=30),
+            previous_manifest: now - dt.timedelta(hours=1),
+            stale_manifest: now - dt.timedelta(hours=2),
+        }
+        manifest_expired = expired_video_keys(
+            manifest_remote,
+            now,
+            desired_keys={current_manifest},
+            modified_at=manifest_modified,
+        )
+        self.assertNotIn(current_manifest, manifest_expired)
+        self.assertNotIn(previous_manifest, manifest_expired)
+        self.assertIn(stale_manifest, manifest_expired)
 
         retired = expired_video_keys(remote, now, modified_at=modified)
         for generation in generations:
@@ -1173,6 +1384,139 @@ class PublisherTests(unittest.TestCase):
                 ("put", "catalog.json"),
                 ("put", "catalog-index.json"),
             ])
+
+    def test_fast_composite_publish_keeps_current_and_true_previous(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 21, 0, tzinfo=UTC)
+            make_archive(root, now)
+            fake = FakeR2()
+            state = base / "state.sqlite3"
+            status = base / "publish.json"
+            generations = (
+                ("20260720T2340Z-ffffffffffff", "2026-07-20T23:47:00Z"),
+                ("20260720T2340Z-000000000000", "2026-07-20T23:48:00Z"),
+                ("20260720T2340Z-888888888888", "2026-07-20T23:49:00Z"),
+            )
+            keys_by_generation: list[set[str]] = []
+            results: list[dict[str, object]] = []
+            for generation, generated_at in generations:
+                keys_by_generation.append(
+                    add_composite_sidecar(
+                        root,
+                        generation,
+                        generated_at=generated_at,
+                    )
+                )
+                results.append(
+                    publish(
+                        root,
+                        self.config(),
+                        state,
+                        status,
+                        client=fake,
+                        now=now,
+                        fast=True,
+                    )
+                )
+
+            self.assertEqual(results[-1]["deleted"], 2)
+            self.assertEqual(results[-1]["precommitDeleted"], 0)
+            self.assertTrue(keys_by_generation[0].isdisjoint(fake.remote))
+            self.assertTrue(keys_by_generation[1].issubset(fake.remote))
+            self.assertTrue(keys_by_generation[2].issubset(fake.remote))
+            catalog_commit = max(
+                index
+                for index, event in enumerate(fake.events)
+                if event == ("put", "catalog-index.json")
+            )
+            cleanup = max(
+                index for index, event in enumerate(fake.events) if event[0] == "delete"
+            )
+            self.assertGreater(cleanup, catalog_commit)
+
+    def test_fast_composite_publish_recovers_before_physical_peak_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "output"
+            root.mkdir()
+            now = dt.datetime(2026, 7, 21, 0, tzinfo=UTC)
+            make_archive(root, now)
+            fake = FakeR2()
+            state = base / "state.sqlite3"
+            status = base / "publish.json"
+
+            oldest = add_composite_sidecar(
+                root,
+                "20260720T2340Z-ffffffffffff",
+                generated_at="2026-07-20T23:20:00Z",
+            )
+            publish(
+                root,
+                self.config(),
+                state,
+                status,
+                client=fake,
+                now=now,
+                fast=True,
+            )
+            previous = add_composite_sidecar(
+                root,
+                "20260720T2340Z-000000000000",
+                generated_at="2026-07-20T23:40:00Z",
+            )
+            publish(
+                root,
+                self.config(),
+                state,
+                status,
+                client=fake,
+                now=now,
+                fast=True,
+            )
+            current = add_composite_sidecar(
+                root,
+                "20260720T2340Z-888888888888",
+                generated_at="2026-07-20T23:50:00Z",
+            )
+            objects, catalog = discover_objects(root)
+            unbounded = size_guard(
+                objects,
+                catalog,
+                fake.remote,
+                self.config(max_bytes=10_000_000),
+            )
+            cap = int(unbounded["peakProjectedBytes"]) - 1
+            constrained = self.config(warn_bytes=1, max_bytes=cap)
+            with self.assertRaises(PublicationSafetyError):
+                size_guard(objects, catalog, fake.remote, constrained)
+
+            fake.events.clear()
+            result = publish(
+                root,
+                constrained,
+                state,
+                status,
+                client=fake,
+                now=now,
+                fast=True,
+            )
+
+            self.assertEqual(result["precommitDeleted"], 2)
+            self.assertEqual(result["deleted"], 2)
+            self.assertLessEqual(result["peakProjectedBytes"], cap)
+            self.assertTrue(oldest.isdisjoint(fake.remote))
+            self.assertTrue(previous.issubset(fake.remote))
+            self.assertTrue(current.issubset(fake.remote))
+            delete_index = next(
+                index for index, event in enumerate(fake.events) if event[0] == "delete"
+            )
+            first_put = next(
+                index for index, event in enumerate(fake.events) if event[0] == "put"
+            )
+            self.assertLess(delete_index, first_put)
 
     def test_fast_publish_retries_frames_rotated_during_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -137,61 +137,124 @@ def inspect_health(
                 )
 
         video_profiles = catalog.get("videoProfiles", {})
+        composite_profiles = catalog.get("compositeProfiles", {})
+        product_configs = {
+            str(value.get("id")): value
+            for value in catalog.get("products", [])
+            if isinstance(value, dict) and isinstance(value.get("id"), str)
+        }
+        freshness_minutes = {3: 20, 6: 25, 12: 40, 24: 40}
         for product_id, layer_id in PUBLIC_VIDEO_LAYERS.items():
-            expected_tracks = {"live"}
-            if 24 in VIDEO_EXACT_RANGES.get(product_id, ()):
-                expected_tracks.add("day")
-            if product_id in VIDEO_ARCHIVE_PRODUCTS:
-                expected_tracks.add("archive")
-            profile = (
-                video_profiles.get(product_id, {})
+            expected_presets = {
+                str(value.get("id"))
+                for value in VIDEO_COMPOSITE_PRESETS.get(product_id, ())
+                if isinstance(value, dict)
+            }
+            product_status: dict[str, object] = {"exact": {}}
+            exact_status = product_status["exact"]
+            product_config = product_configs.get(product_id, {})
+            domain_id = str(product_config.get("domain", ""))
+            source_frames = (
+                catalog.get("domains", {})
+                .get(domain_id, {})
+                .get("layers", {})
                 .get(layer_id, {})
-                if isinstance(video_profiles, dict)
+                .get("frames", [])
+            )
+            newest_source: dt.datetime | None = None
+            if isinstance(source_frames, list) and source_frames:
+                latest_frame = source_frames[-1]
+                if isinstance(latest_frame, dict):
+                    try:
+                        newest_source = parse_utc(str(
+                            latest_frame.get("sourceValidTime")
+                            or latest_frame.get("validTime")
+                        ))
+                    except ValueError:
+                        pass
+            tracks = (
+                composite_profiles.get(product_id, {}).get(layer_id, {})
+                if isinstance(composite_profiles, dict)
                 else {}
             )
-            product_status: dict[str, object] = {}
-            for track in sorted(expected_tracks):
-                pointer = profile.get(track) if isinstance(profile, dict) else None
-                if not isinstance(pointer, dict) or not isinstance(pointer.get("manifestPath"), str):
-                    warnings.append(f"{product_id}/{track} has no operational composite video")
-                    product_status[track] = "missing"
-                    continue
-                manifest_path = output_root / str(pointer["manifestPath"])
-                try:
-                    manifest = read_json(manifest_path)
-                    frames = manifest.get("frames", [])
-                    composites = manifest.get("composites", [])
-                    expected_presets = {
-                        str(value.get("id"))
-                        for value in VIDEO_COMPOSITE_PRESETS.get(product_id, ())
+            for hours in VIDEO_EXACT_RANGES.get(product_id, ()):
+                track = "day" if hours == 24 else "live"
+                pointers = tracks.get(track, []) if isinstance(tracks, dict) else []
+                range_status: dict[str, object] = {}
+                for preset_id in sorted(expected_presets):
+                    pointer = next((
+                        value for value in pointers
                         if isinstance(value, dict)
-                    }
-                    available_presets = {
-                        str(value.get("id"))
-                        for value in composites
-                        if isinstance(value, dict)
-                    } if isinstance(composites, list) else set()
-                    if not isinstance(frames, list) or len(frames) < 2:
-                        raise RuntimeError(f"{manifest_path} contains fewer than two frames")
-                    if not expected_presets.issubset(available_presets):
-                        warnings.append(f"{product_id}/{track} is missing a common composite preset")
-                    latest = parse_utc(str(frames[-1]["sourceValidTime"]))
-                    age_minutes = max(0.0, (now - latest).total_seconds() / 60)
-                    age_limit = 45 if track == "live" else 90 if track == "day" else 150
-                    if age_minutes > age_limit:
-                        warnings.append(
-                            f"{product_id}/{track} video source is {age_minutes:.0f} minutes old "
-                            f"(target {age_limit})"
+                        and value.get("presetId") == preset_id
+                        and value.get("rangeHours") == hours
+                    ), None) if isinstance(pointers, list) else None
+                    label = f"{product_id}/{hours}h/{preset_id}"
+                    if not isinstance(pointer, dict) or not isinstance(pointer.get("manifestPath"), str):
+                        warnings.append(f"{label} has no prebuilt composite")
+                        range_status[preset_id] = "missing"
+                        continue
+                    try:
+                        manifest_path = output_root / str(pointer["manifestPath"])
+                        manifest = read_json(manifest_path)
+                        frames = manifest.get("frames", [])
+                        if not isinstance(frames, list) or len(frames) < 2:
+                            raise RuntimeError(f"{manifest_path} contains fewer than two frames")
+                        end_source = parse_utc(str(pointer["endSourceTime"]))
+                        lag_minutes = max(
+                            0.0,
+                            ((newest_source or end_source) - end_source).total_seconds() / 60,
                         )
-                    product_status[track] = {
-                        "generation": pointer.get("generation"),
-                        "frames": len(frames),
-                        "sourceAgeMinutes": round(age_minutes, 1),
-                        "presets": sorted(available_presets),
-                    }
-                except (RuntimeError, KeyError, TypeError, ValueError) as error:
-                    warnings.append(f"{product_id}/{track} video is invalid: {error}")
-                    product_status[track] = "invalid"
+                        lag_limit = freshness_minutes.get(hours, 40)
+                        if lag_minutes > lag_limit:
+                            warnings.append(
+                                f"{label} trails the newest satellite by {lag_minutes:.0f} minutes "
+                                f"(target {lag_limit})"
+                            )
+                        range_status[preset_id] = {
+                            "generation": pointer.get("generation"),
+                            "frames": len(frames),
+                            "sourceLagMinutes": round(lag_minutes, 1),
+                        }
+                    except (RuntimeError, KeyError, TypeError, ValueError) as error:
+                        warnings.append(f"{label} is invalid: {error}")
+                        range_status[preset_id] = "invalid"
+                if isinstance(exact_status, dict):
+                    exact_status[f"{hours}h"] = range_status
+
+            # Seven-day playback remains on the existing reusable HLS profile
+            # until its CMAF sidecar migration. Monitor it independently.
+            if product_id in VIDEO_ARCHIVE_PRODUCTS:
+                archive_profile = (
+                    video_profiles.get(product_id, {}).get(layer_id, {})
+                    if isinstance(video_profiles, dict)
+                    else {}
+                )
+                pointer = archive_profile.get("archive") if isinstance(archive_profile, dict) else None
+                if not isinstance(pointer, dict) or not isinstance(pointer.get("manifestPath"), str):
+                    warnings.append(f"{product_id}/archive has no operational composite video")
+                    product_status["archive"] = "missing"
+                else:
+                    try:
+                        manifest_path = output_root / str(pointer["manifestPath"])
+                        manifest = read_json(manifest_path)
+                        frames = manifest.get("frames", [])
+                        if not isinstance(frames, list) or len(frames) < 2:
+                            raise RuntimeError(f"{manifest_path} contains fewer than two frames")
+                        latest = parse_utc(str(frames[-1]["sourceValidTime"]))
+                        age_minutes = max(0.0, (now - latest).total_seconds() / 60)
+                        if age_minutes > 150:
+                            warnings.append(
+                                f"{product_id}/archive video source is {age_minutes:.0f} minutes old "
+                                "(target 150)"
+                            )
+                        product_status["archive"] = {
+                            "generation": pointer.get("generation"),
+                            "frames": len(frames),
+                            "sourceAgeMinutes": round(age_minutes, 1),
+                        }
+                    except (RuntimeError, KeyError, TypeError, ValueError) as error:
+                        warnings.append(f"{product_id}/archive video is invalid: {error}")
+                        product_status["archive"] = "invalid"
             video_coverage[product_id] = product_status
     except (RuntimeError, KeyError, ValueError) as error:
         errors.append(str(error))

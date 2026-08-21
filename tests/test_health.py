@@ -60,6 +60,56 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertTrue(any("projected R2 storage" in value for value in result["errors"]))
 
+    def test_exact_sidecar_coverage_is_reported_from_composite_profiles(self) -> None:
+        now = dt.datetime(2026, 8, 20, 23, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            publish = self._fixture(root, now, 1_000_000)
+            catalog_path = root / "catalog.json"
+            catalog = json.loads(catalog_path.read_text())
+            catalog["products"] = [{
+                "id": "bc-large-overlay",
+                "domain": "bc",
+            }]
+            catalog["domains"]["bc"]["layers"]["eccc-geocolor"]["frames"][0][
+                "sourceValidTime"
+            ] = now.isoformat().replace("+00:00", "Z")
+            pointers = []
+            for preset in (
+                "operational-default-v1",
+                "operational-core-v1",
+            ):
+                manifest = root / "composite-manifests" / f"{preset}.json"
+                manifest.parent.mkdir(parents=True, exist_ok=True)
+                manifest.write_text(json.dumps({
+                    "frames": [
+                        {"sourceValidTime": "2026-08-20T22:40:00Z"},
+                        {"sourceValidTime": "2026-08-20T23:00:00Z"},
+                    ]
+                }))
+                pointers.append({
+                    "presetId": preset,
+                    "rangeHours": 3,
+                    "generation": f"20260820T2300Z-{preset[-4:]:0>12}",
+                    "manifestPath": manifest.relative_to(root).as_posix(),
+                    "endSourceTime": "2026-08-20T23:00:00Z",
+                })
+            catalog["compositeProfiles"] = {
+                "bc-large-overlay": {
+                    "eccc-geocolor": {"live": pointers},
+                }
+            }
+            catalog_path.write_text(json.dumps(catalog))
+
+            result = inspect_health(root, publish, now=now)
+
+        exact = result["videoCoverage"]["bc-large-overlay"]["exact"]["3h"]
+        self.assertEqual(exact["operational-default-v1"]["frames"], 2)
+        self.assertEqual(exact["operational-core-v1"]["frames"], 2)
+        self.assertFalse(any(
+            "bc-large-overlay/3h" in warning for warning in result["warnings"]
+        ))
+
 
 if __name__ == "__main__":
     unittest.main()

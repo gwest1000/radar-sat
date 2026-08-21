@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import signal
 
 from radarsat.paths import output_root as default_output_root
 
@@ -12,6 +13,11 @@ from radarsat.video import (
     build_satellite_videos,
     prune_shared_video_orphans,
 )
+
+
+def _terminate(signum: int, _frame: object) -> None:
+    # Let subprocess.run unwind so an active ffmpeg process is killed/reaped.
+    raise SystemExit(128 + signum)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -80,6 +86,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    signal.signal(signal.SIGINT, _terminate)
+    signal.signal(signal.SIGTERM, _terminate)
     args = parse_args(argv)
     output_root = (args.output_root or args.source_root).resolve()
     if args.prune_shared_only:

@@ -21,9 +21,11 @@ from typing import Any, Iterable, Mapping
 
 from .config import (
     DOMAINS,
+    PRODUCTS,
     VIDEO_ARCHIVE_PRODUCTS,
     VIDEO_COMPOSITE_PRESETS,
     VIDEO_EXACT_RANGES,
+    video_composite_layer_ids,
 )
 from .geomet import format_utc
 from .pipeline import write_status
@@ -67,6 +69,7 @@ VIDEO_IMMUTABLE_PREFIXES = (
     "videos/",
     "video-segments/",
     "video-manifests/",
+    "composite-manifests/",
     "video-proxies/",
     "video-static-overlays/",
 )
@@ -632,6 +635,11 @@ def _composite_v2_paths(
             continue
         preset_id = composite.get("id")
         layer_ids = composite.get("layerIds")
+        expected_layer_ids = video_composite_layer_ids(
+            product_id,
+            layer_id,
+            str(preset_id),
+        )
         ranges = composite.get("ranges")
         if (
             not isinstance(preset_id, str)
@@ -644,6 +652,7 @@ def _composite_v2_paths(
                 or re.fullmatch(r"[a-z0-9][a-z0-9-]*", value) is None
                 for value in layer_ids
             )
+            or tuple(layer_ids) != expected_layer_ids
             or composite.get("mediaViewport") != payload.get("viewport")
             or not isinstance(ranges, list)
             or not ranges
@@ -1041,6 +1050,363 @@ def _sanitize_video_profiles(
     return relative_paths
 
 
+def _configured_composite_ids(product_id: str) -> set[str]:
+    return {
+        str(value.get("id"))
+        for value in VIDEO_COMPOSITE_PRESETS.get(product_id, ())
+        if isinstance(value, Mapping) and isinstance(value.get("id"), str)
+    }
+
+
+def _known_product_layer_ids() -> dict[str, set[str]]:
+    result: dict[str, set[str]] = {}
+    for product in PRODUCTS:
+        if not isinstance(product, Mapping) or not isinstance(product.get("id"), str):
+            continue
+        result[str(product["id"])] = {
+            str(layer["id"])
+            for layer in product.get("layers", [])
+            if isinstance(layer, Mapping) and isinstance(layer.get("id"), str)
+        }
+    return result
+
+
+def _composite_pointer_components(
+    product_id: str,
+    layer_id: str,
+    track: str,
+    pointer: object,
+) -> tuple[str, str, int, str] | None:
+    if not isinstance(pointer, Mapping):
+        return None
+    generation = pointer.get("generation")
+    preset_id = pointer.get("presetId")
+    range_hours = pointer.get("rangeHours")
+    manifest_value = _safe_relative_value(pointer.get("manifestPath"))
+    if (
+        not isinstance(generation, str)
+        or not VIDEO_GENERATION_RE.fullmatch(generation)
+        or not isinstance(preset_id, str)
+        or not isinstance(range_hours, int)
+        or isinstance(range_hours, bool)
+        or manifest_value is None
+    ):
+        return None
+    expected = (
+        "composite-manifests",
+        product_id,
+        layer_id,
+        track,
+        preset_id,
+        str(range_hours),
+        f"{generation}.json",
+    )
+    if Path(manifest_value).parts != expected:
+        return None
+    return generation, preset_id, range_hours, manifest_value
+
+
+def _composite_pointer_from_manifest(
+    manifest_relative: str,
+    payload: Mapping[str, object],
+) -> dict[str, object] | None:
+    required_times = ("generatedAt", "endValidTime", "endSourceTime")
+    if any(
+        not isinstance(payload.get(key), str)
+        or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T.*Z", str(payload.get(key)))
+        for key in required_times
+    ):
+        return None
+    layer_ids = payload.get("layerIds")
+    if not isinstance(layer_ids, list):
+        return None
+    return {
+        "presetId": payload.get("presetId"),
+        "layerIds": list(layer_ids),
+        "rangeHours": payload.get("rangeHours"),
+        "generation": payload.get("generation"),
+        "manifestPath": manifest_relative,
+        "generatedAt": payload.get("generatedAt"),
+        "endValidTime": payload.get("endValidTime"),
+        "endSourceTime": payload.get("endSourceTime"),
+    }
+
+
+def _composite_sidecar_paths(
+    root: Path,
+    product_id: str,
+    layer_id: str,
+    track: str,
+    pointer: object,
+) -> tuple[list[str], dict[str, object]] | None:
+    components = _composite_pointer_components(product_id, layer_id, track, pointer)
+    if components is None:
+        return None
+    generation, preset_id, range_hours, manifest_relative = components
+    expected_layer_ids = video_composite_layer_ids(
+        product_id,
+        layer_id,
+        preset_id,
+    )
+    configured_ranges = set(VIDEO_EXACT_RANGES.get(product_id, ()))
+    expected_track = "archive" if range_hours == 168 else "day" if range_hours == 24 else "live"
+    if (
+        track != expected_track
+        or (
+            range_hours not in configured_ranges
+            and not (range_hours == 168 and product_id in VIDEO_ARCHIVE_PRODUCTS)
+        )
+        or preset_id not in _configured_composite_ids(product_id)
+        or not _video_asset_available(root, manifest_relative)
+    ):
+        return None
+    try:
+        payload = json.loads((root / manifest_relative).read_bytes())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(payload, Mapping)
+        or payload.get("schemaVersion") != 1
+        or payload.get("generation") != generation
+        or payload.get("productId") != product_id
+        or payload.get("layerId") != layer_id
+        or payload.get("track") != track
+        or payload.get("presetId") != preset_id
+        or payload.get("rangeHours") != range_hours
+        or payload.get("boundaryIntervalMultiplier") != 4
+    ):
+        return None
+    known_layers = _known_product_layer_ids().get(product_id, set())
+    layer_ids = payload.get("layerIds")
+    if (
+        not isinstance(layer_ids, list)
+        or not layer_ids
+        or len(set(layer_ids)) != len(layer_ids)
+        or any(not isinstance(value, str) or value not in known_layers for value in layer_ids)
+        or tuple(layer_ids) != expected_layer_ids
+    ):
+        return None
+    frames = payload.get("frames")
+    if not isinstance(frames, list) or len(frames) < 2:
+        return None
+    previous_valid = ""
+    for frame in frames:
+        if not isinstance(frame, Mapping):
+            return None
+        valid_time = frame.get("validTime")
+        source_valid_time = frame.get("sourceValidTime")
+        layer_source_times = frame.get("layerSourceTimes", {})
+        if (
+            not isinstance(valid_time, str)
+            or not isinstance(source_valid_time, str)
+            or valid_time <= previous_valid
+            or not isinstance(frame.get("durationSeconds"), (int, float))
+            or isinstance(frame.get("durationSeconds"), bool)
+            or float(frame["durationSeconds"]) <= 0
+            or not isinstance(layer_source_times, Mapping)
+            or any(
+                not isinstance(key, str)
+                or (value is not None and not isinstance(value, str))
+                for key, value in layer_source_times.items()
+            )
+        ):
+            return None
+        previous_valid = valid_time
+    if (
+        payload.get("endValidTime") != frames[-1].get("validTime")
+        or not isinstance(payload.get("endSourceTime"), str)
+    ):
+        return None
+    renditions = payload.get("renditions")
+    if not isinstance(renditions, list) or not renditions:
+        return None
+    paths = [manifest_relative]
+    rendition_ids: set[str] = set()
+    for rendition in renditions:
+        if not isinstance(rendition, Mapping):
+            return None
+        rendition_id = rendition.get("id")
+        media = rendition.get("media")
+        if (
+            rendition_id not in {"display", "efficient", "high"}
+            or rendition_id in rendition_ids
+            or not isinstance(media, Mapping)
+        ):
+            return None
+        rendition_ids.add(str(rendition_id))
+        media_relative = _safe_relative_value(media.get("path"))
+        media_parts = Path(media_relative).parts if media_relative else ()
+        mime = media.get("mimeType")
+        if range_hours <= 24:
+            expected_prefix = (
+                "videos",
+                f"composite-{product_id}",
+                layer_id,
+                track,
+                f"exact-{range_hours}h",
+                rendition_id,
+            )
+            valid_shape = (
+                mime == "video/mp4"
+                and len(media_parts) == 7
+                and media_parts[:6] == expected_prefix
+                and Path(media_parts[6]).suffix == ".mp4"
+                and VIDEO_GENERATION_RE.fullmatch(Path(media_parts[6]).stem) is not None
+            )
+        else:
+            owner = f"composite-{product_id}-{preset_id}"
+            valid_shape = (
+                mime == "application/vnd.apple.mpegurl"
+                and len(media_parts) == 5
+                and media_parts[:4] == ("videos", owner, layer_id, track)
+                and Path(media_parts[4]).suffix == ".m3u8"
+                and VIDEO_GENERATION_RE.fullmatch(Path(media_parts[4]).stem) is not None
+            )
+        if (
+            not valid_shape
+            or media_relative is None
+            or not isinstance(media.get("sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", str(media.get("sha256"))) is None
+            or not _video_asset_available(root, media_relative, media.get("byteLength"))
+        ):
+            return None
+        paths.append(media_relative)
+        if mime == "application/vnd.apple.mpegurl":
+            segments = media.get("segments")
+            if not isinstance(segments, list) or not segments:
+                return None
+            segment_paths: list[str] = []
+            for segment in segments:
+                if not isinstance(segment, Mapping):
+                    return None
+                relative = _safe_relative_value(segment.get("path"))
+                if (
+                    relative is None
+                    or not _video_asset_available(root, relative, segment.get("byteLength"))
+                ):
+                    return None
+                segment_paths.append(relative)
+            try:
+                playlist_root = (root / media_relative).parent
+                referenced = [
+                    (playlist_root / line.strip()).resolve().relative_to(root.resolve()).as_posix()
+                    for line in (root / media_relative).read_text().splitlines()
+                    if line.strip() and not line.lstrip().startswith("#")
+                ]
+            except (OSError, UnicodeDecodeError, ValueError):
+                return None
+            if referenced != segment_paths:
+                return None
+            paths.extend(segment_paths)
+    sanitized = _composite_pointer_from_manifest(manifest_relative, payload)
+    if sanitized is None:
+        return None
+    return paths, sanitized
+
+
+def _sanitize_composite_profiles(
+    root: Path,
+    catalog: dict[str, Any],
+    *,
+    existing_video_keys: set[str] | None = None,
+) -> set[str]:
+    source = catalog.get("compositeProfiles")
+    if not isinstance(source, Mapping):
+        catalog.pop("compositeProfiles", None)
+        return set()
+    sanitized: dict[str, dict[str, dict[str, list[dict[str, object]]]]] = {}
+    paths: set[str] = set()
+    for product_id, layers in source.items():
+        if not isinstance(product_id, str) or not isinstance(layers, Mapping):
+            continue
+        for layer_id, tracks in layers.items():
+            if not isinstance(layer_id, str) or not isinstance(tracks, Mapping):
+                continue
+            for track, pointers in tracks.items():
+                if not isinstance(track, str) or not isinstance(pointers, list):
+                    continue
+                for pointer in pointers:
+                    components = _composite_pointer_components(
+                        product_id, layer_id, track, pointer
+                    )
+                    if components is None:
+                        continue
+                    _, preset_id, range_hours, _ = components
+                    candidates: list[object] = [pointer]
+                    if existing_video_keys is not None:
+                        manifest_dir = (
+                            root
+                            / "composite-manifests"
+                            / product_id
+                            / layer_id
+                            / track
+                            / preset_id
+                            / str(range_hours)
+                        )
+                        try:
+                            manifests = sorted(
+                                manifest_dir.glob("*.json"),
+                                key=lambda value: value.stat().st_mtime_ns,
+                                reverse=True,
+                            )
+                        except OSError:
+                            manifests = []
+                        for manifest in manifests:
+                            try:
+                                payload = json.loads(manifest.read_bytes())
+                            except (OSError, json.JSONDecodeError):
+                                continue
+                            if not isinstance(payload, Mapping):
+                                continue
+                            candidate = _composite_pointer_from_manifest(
+                                manifest.relative_to(root).as_posix(), payload
+                            )
+                            if candidate is not None:
+                                candidates.append(candidate)
+                    selected: tuple[list[str], dict[str, object]] | None = None
+                    seen: set[str] = set()
+                    for candidate in candidates:
+                        candidate_parts = _composite_pointer_components(
+                            product_id, layer_id, track, candidate
+                        )
+                        if candidate_parts is None or candidate_parts[3] in seen:
+                            continue
+                        seen.add(candidate_parts[3])
+                        if existing_video_keys is not None and candidate_parts[3] not in existing_video_keys:
+                            continue
+                        validated = _composite_sidecar_paths(
+                            root, product_id, layer_id, track, candidate
+                        )
+                        if validated is None:
+                            continue
+                        candidate_paths, sanitized_pointer = validated
+                        if existing_video_keys is not None and not set(candidate_paths).issubset(existing_video_keys):
+                            continue
+                        selected = candidate_paths, sanitized_pointer
+                        break
+                    if selected is None:
+                        continue
+                    candidate_paths, sanitized_pointer = selected
+                    bucket = sanitized.setdefault(product_id, {}).setdefault(layer_id, {}).setdefault(track, [])
+                    identity = (
+                        sanitized_pointer["presetId"],
+                        sanitized_pointer["rangeHours"],
+                    )
+                    if any((value["presetId"], value["rangeHours"]) == identity for value in bucket):
+                        continue
+                    bucket.append(sanitized_pointer)
+                    paths.update(candidate_paths)
+    for layers in sanitized.values():
+        for tracks in layers.values():
+            for values in tracks.values():
+                values.sort(key=lambda value: (int(value["rangeHours"]), str(value["presetId"])))
+    if sanitized:
+        catalog["compositeProfiles"] = sanitized
+    else:
+        catalog.pop("compositeProfiles", None)
+    return paths
+
+
 def discover_objects(
     root: Path,
     *,
@@ -1115,6 +1481,11 @@ def discover_objects(
         catalog,
         existing_video_keys=existing_video_keys,
     )
+    composite_paths = _sanitize_composite_profiles(
+        root,
+        catalog,
+        existing_video_keys=existing_video_keys,
+    )
     catalog_bytes = json.dumps(catalog, separators=(",", ":")).encode()
 
     relative_paths: set[str] = set()
@@ -1140,6 +1511,7 @@ def discover_objects(
         if legend.get("path"):
             relative_paths.add(str(legend["path"]))
     relative_paths.update(video_paths)
+    relative_paths.update(composite_paths)
     # The latency-sensitive radar/lightning publisher maintains this small
     # pointer independently of the large catalog.  Include the local copy in
     # ordinary reconciliation so a later full sync preserves it instead of
@@ -1506,11 +1878,104 @@ def _is_exact_composite_media(key: str) -> bool:
     )
 
 
+def _composite_manifest_generation_key(
+    key: str,
+) -> tuple[tuple[str, str, str, str, str], str] | None:
+    parts = Path(key).parts
+    if (
+        len(parts) != 7
+        or parts[0] != "composite-manifests"
+        or parts[3] not in VIDEO_TRACKS
+        or not parts[5].isdigit()
+        or Path(parts[6]).suffix != ".json"
+    ):
+        return None
+    generation = Path(parts[6]).stem
+    if not VIDEO_GENERATION_RE.fullmatch(generation):
+        return None
+    return (parts[1], parts[2], parts[3], parts[4], parts[5]), generation
+
+
 def _generation_time(generation: str) -> dt.datetime:
     match = VIDEO_GENERATION_RE.fullmatch(generation)
     if match is None:
         raise ValueError(f"Invalid video generation: {generation}")
     return dt.datetime.strptime(match.group(1), "%Y%m%dT%H%MZ").replace(tzinfo=UTC)
+
+
+def _composite_generation_commit_time(
+    root: Path | None,
+    group: tuple[str, str, str, str, str],
+    generation: str,
+    *,
+    modified_at: Mapping[str, dt.datetime] | None = None,
+) -> dt.datetime:
+    """Return a sidecar generation's commit/build time, never its hash order."""
+    manifest_key = (
+        "composite-manifests/" + "/".join(group) + f"/{generation}.json"
+    )
+    modified = (modified_at or {}).get(manifest_key)
+    if isinstance(modified, dt.datetime):
+        # R2 LastModified is the closest durable proxy for publication order.
+        return _as_utc(modified)
+    if root is not None:
+        try:
+            payload = json.loads((root / manifest_key).read_bytes())
+            generated = (
+                payload.get("generatedAt")
+                if isinstance(payload, Mapping)
+                else None
+            )
+            if isinstance(generated, str):
+                return dt.datetime.fromisoformat(
+                    generated.replace("Z", "+00:00")
+                ).astimezone(UTC)
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+        try:
+            return dt.datetime.fromtimestamp(
+                (root / manifest_key).stat().st_mtime,
+                tz=UTC,
+            )
+        except OSError:
+            pass
+    # The timestamp prefix remains a safe compatibility fallback.  The
+    # content hash is deliberately never used as a tie-breaker.
+    return _generation_time(generation)
+
+
+def _retained_composite_generations(
+    group: tuple[str, str, str, str, str],
+    generations: Iterable[str],
+    desired_keys: set[str],
+    *,
+    root: Path | None = None,
+    modified_at: Mapping[str, dt.datetime] | None = None,
+) -> set[str]:
+    """Choose the catalog current generation and its immediate predecessor."""
+    prefix = "composite-manifests/" + "/".join(group) + "/"
+    values = set(generations)
+    current = {
+        generation
+        for generation in values
+        if f"{prefix}{generation}.json" in desired_keys
+    }
+    if not current:
+        return set()
+    retained = set(current)
+    candidates = values.difference(retained)
+    ranked = sorted(
+        candidates,
+        key=lambda generation: _composite_generation_commit_time(
+            root,
+            group,
+            generation,
+            modified_at=modified_at,
+        ),
+        reverse=True,
+    )
+    retained.update(ranked[: max(0, VIDEO_MIN_GENERATIONS - len(retained))])
+    return retained
 
 
 def expired_video_keys(
@@ -1522,8 +1987,9 @@ def expired_video_keys(
 ) -> list[str]:
     """Select unreachable video generations after a browser-safe grace.
 
-    For an active product/layer/track, the newest two generations survive
-    regardless of age, protecting one atomic browser handoff. A retired
+    For an active exact-composite profile, the catalog-current generation and
+    its immediate predecessor survive regardless of age, protecting one atomic
+    browser handoff. Legacy video profiles retain their newest two. A retired
     profile with no catalog-referenced object keeps only the fifteen-minute browser
     grace; otherwise old secondary profiles would occupy R2 indefinitely.
     Catalog-referenced objects are always excluded from this post-commit pass.
@@ -1575,6 +2041,34 @@ def expired_video_keys(
         if changed <= cutoff:
             expired.add(key)
 
+    composite_groups: dict[
+        tuple[str, str, str, str, str], dict[str, list[str]]
+    ] = {}
+    for key in remote:
+        parsed = _composite_manifest_generation_key(key)
+        if parsed is None:
+            continue
+        group, generation = parsed
+        composite_groups.setdefault(group, {}).setdefault(generation, []).append(key)
+    for group, generations in composite_groups.items():
+        newest = _retained_composite_generations(
+            group,
+            generations,
+            desired,
+            modified_at=modifications,
+        )
+        for generation, keys in generations.items():
+            if generation in newest or any(key in desired for key in keys):
+                continue
+            timestamps = [
+                _as_utc(value)
+                for key in keys
+                if isinstance((value := modifications.get(key)), dt.datetime)
+            ]
+            changed = max(timestamps) if timestamps else _generation_time(generation)
+            if changed <= cutoff:
+                expired.update(key for key in keys if key not in desired)
+
     for key in remote:
         if key in desired or not key.startswith(
             ("video-proxies/", "video-static-overlays/", "video-segments/")
@@ -1594,12 +2088,14 @@ def retained_local_video_keys(
     remote: Mapping[str, int],
     *,
     desired_keys: Iterable[str] = (),
+    modified_at: Mapping[str, dt.datetime] | None = None,
 ) -> set[str]:
-    """Protect dependencies of the locally retained newest generations.
+    """Protect dependencies of the locally retained handoff generations.
 
-    The encoder keeps its newest two immutable manifests. Reading those
-    sidecars lets remote cleanup preserve an old generation's shared proxy
-    objects even when the proxy itself predates the short handoff grace.
+    The encoder keeps its catalog-current and immediately previous immutable
+    manifests. Reading those sidecars lets remote cleanup preserve an old
+    generation's shared proxy objects even when the proxy itself predates the
+    short handoff grace.
     No missing historical object is re-uploaded; this set only constrains the
     post-commit deletion pass.
     """
@@ -1634,7 +2130,239 @@ def retained_local_video_keys(
             )
             if paths is not None:
                 retained.update(paths)
+    composite_groups: dict[tuple[str, str, str, str, str], set[str]] = {}
+    for key in remote:
+        parsed = _composite_manifest_generation_key(key)
+        if parsed is None:
+            continue
+        group, generation = parsed
+        composite_groups.setdefault(group, set()).add(generation)
+    for group, generations in composite_groups.items():
+        product_id, layer_id, track, preset_id, range_value = group
+        prefix = "composite-manifests/" + "/".join(group) + "/"
+        if not any(key.startswith(prefix) for key in desired):
+            continue
+        retained_generations = _retained_composite_generations(
+            group,
+            generations,
+            desired,
+            root=root,
+            modified_at=modified_at,
+        )
+        for generation in retained_generations:
+            manifest_relative = f"{prefix}{generation}.json"
+            manifest_path = root / manifest_relative
+            try:
+                payload = json.loads(manifest_path.read_bytes())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(payload, Mapping):
+                continue
+            pointer = _composite_pointer_from_manifest(manifest_relative, payload)
+            if pointer is None:
+                continue
+            validated = _composite_sidecar_paths(
+                root,
+                product_id,
+                layer_id,
+                track,
+                pointer,
+            )
+            if validated is not None:
+                retained.update(validated[0])
     return retained
+
+
+def expired_fast_composite_keys(
+    root: Path,
+    remote: Mapping[str, int],
+    *,
+    desired_keys: Iterable[str],
+) -> list[str]:
+    """Select stale exact sidecars without listing the full R2 bucket.
+
+    This is intentionally narrower than the regular reconciler: it considers
+    only immutable exact-range manifests and MP4s already recorded in the
+    successful-upload index.  The newly committed catalog generation and its
+    immediate predecessor are retained for every active preset.  A malformed
+    or locally unavailable predecessor makes its whole media scope fail open,
+    leaving the periodic authoritative reconciliation to decide it later.
+    """
+    root = root.resolve()
+    desired = set(desired_keys)
+    groups: dict[tuple[str, str, str, str, str], set[str]] = {}
+    for key in remote:
+        parsed = _composite_manifest_generation_key(key)
+        if parsed is None:
+            continue
+        group, generation = parsed
+        groups.setdefault(group, set()).add(generation)
+
+    active_groups = {
+        group
+        for group in groups
+        if any(
+            f"composite-manifests/{'/'.join(group)}/{generation}.json" in desired
+            for generation in groups[group]
+        )
+    }
+    scope_groups: dict[tuple[str, str, str, str], set[tuple[str, str, str, str, str]]] = {}
+    for group in groups:
+        product_id, layer_id, track, _preset_id, range_value = group
+        scope_groups.setdefault(
+            (product_id, layer_id, track, range_value),
+            set(),
+        ).add(group)
+
+    retained_paths = set(desired)
+    expired: set[str] = set()
+    unsafe_scopes: set[tuple[str, str, str, str]] = set()
+    for group in active_groups:
+        product_id, layer_id, track, _preset_id, range_value = group
+        scope = (product_id, layer_id, track, range_value)
+        retained_generations = _retained_composite_generations(
+            group,
+            groups[group],
+            desired,
+            root=root,
+        )
+        group_paths: set[str] = set()
+        valid = True
+        for generation in retained_generations:
+            manifest_relative = (
+                "composite-manifests/" + "/".join(group) + f"/{generation}.json"
+            )
+            try:
+                payload = json.loads((root / manifest_relative).read_bytes())
+            except (OSError, json.JSONDecodeError):
+                valid = False
+                break
+            if not isinstance(payload, Mapping):
+                valid = False
+                break
+            pointer = _composite_pointer_from_manifest(manifest_relative, payload)
+            validated = (
+                _composite_sidecar_paths(
+                    root,
+                    product_id,
+                    layer_id,
+                    track,
+                    pointer,
+                )
+                if pointer is not None
+                else None
+            )
+            if validated is None:
+                valid = False
+                break
+            group_paths.update(validated[0])
+        if not valid:
+            unsafe_scopes.add(scope)
+            continue
+        retained_paths.update(group_paths)
+        prefix = "composite-manifests/" + "/".join(group) + "/"
+        expired.update(
+            f"{prefix}{generation}.json"
+            for generation in groups[group].difference(retained_generations)
+        )
+
+    # Exact media paths omit the preset id.  Clean a product/layer/range only
+    # when every manifest group in that scope is represented by the new
+    # catalog.  Retired presets are left to the full inventory reconciler,
+    # avoiding an unsafe guess about their still-open browser sessions.
+    safe_scopes = {
+        scope
+        for scope, values in scope_groups.items()
+        if values.issubset(active_groups) and scope not in unsafe_scopes
+    }
+    for key in remote:
+        if key in retained_paths or not _is_exact_composite_media(key):
+            continue
+        parts = Path(key).parts
+        product_id = parts[1].removeprefix("composite-")
+        range_value = parts[4].removeprefix("exact-").removesuffix("h")
+        scope = (product_id, parts[2], parts[3], range_value)
+        if scope in safe_scopes:
+            expired.add(key)
+    return sorted(expired.difference(retained_paths))
+
+
+def prospective_fast_composite_keys(
+    root: Path,
+    remote: Mapping[str, int],
+    objects: Iterable[LocalObject],
+) -> list[str]:
+    """Find exact assets safely reclaimable after the prospective commit."""
+    values = list(objects)
+    prospective = dict(remote)
+    prospective.update({item.key: item.size for item in values})
+    return expired_fast_composite_keys(
+        root,
+        prospective,
+        desired_keys={item.key for item in values},
+    )
+
+
+def safe_precommit_composite_keys(
+    root: Path,
+    keys: Iterable[str],
+    now: dt.datetime,
+) -> list[str]:
+    """Return two-away generations old enough to remove before a new commit.
+
+    The public catalog still references the existing current generation during
+    this deletion.  Only dependencies of an already-unreferenced immutable
+    manifest older than the browser handoff grace are eligible, so an upload
+    failure cannot damage the currently published loop.
+    """
+    root = root.resolve()
+    candidates = set(keys)
+    cutoff = _as_utc(now) - VIDEO_ORPHAN_GRACE
+    safe: set[str] = set()
+    for manifest_relative in candidates:
+        parsed = _composite_manifest_generation_key(manifest_relative)
+        if parsed is None:
+            continue
+        group, generation = parsed
+        if _composite_generation_commit_time(root, group, generation) > cutoff:
+            continue
+        product_id, layer_id, track, _preset_id, _range_value = group
+        try:
+            payload = json.loads((root / manifest_relative).read_bytes())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, Mapping):
+            continue
+        pointer = _composite_pointer_from_manifest(manifest_relative, payload)
+        validated = (
+            _composite_sidecar_paths(
+                root,
+                product_id,
+                layer_id,
+                track,
+                pointer,
+            )
+            if pointer is not None
+            else None
+        )
+        if validated is None:
+            continue
+        dependencies = set(validated[0])
+        # Never broaden a precommit deletion beyond the prospective cleanup's
+        # independently established unreachable set.
+        if dependencies.issubset(candidates):
+            safe.update(dependencies)
+    return sorted(safe)
+
+
+def _guard_fast_peak(sizes: Mapping[str, int], config: R2Config) -> None:
+    peak = int(sizes.get("peakProjectedBytes", 0))
+    if peak > config.max_bytes:
+        raise PublicationSafetyError(
+            "R2 fast publication paused by the physical storage guardrail: "
+            f"temporary peak {peak / 1_000_000_000:.2f} GB exceeds "
+            f"{config.max_bytes / 1_000_000_000:.2f} GB"
+        )
 
 
 def delete_objects(client: Any, config: R2Config, keys: Iterable[str]) -> int:
@@ -1736,6 +2464,7 @@ def publish(
         else None
     )
     state = PublishState(state_path, f"{config.account_id}/{config.bucket}")
+    precommit_deleted = 0
     try:
         known_objects = state.known_objects()
         existing_video_keys = set(known_objects) if existing_video_only else None
@@ -1751,12 +2480,57 @@ def publish(
                 minimum_valid_time=minimum_valid_time,
                 existing_video_keys=existing_video_keys,
             )
-            size_guard(
+            preflight_remote = {
+                key: values[0] for key, values in known_objects.items()
+            }
+            preflight_expired = (
+                prospective_fast_composite_keys(
+                    root,
+                    preflight_remote,
+                    preflight_objects,
+                )
+                if sync_delete
+                else []
+            )
+            safe_precommit = safe_precommit_composite_keys(
+                root,
+                preflight_expired,
+                now,
+            )
+            if safe_precommit:
+                # These are two-away immutable generations older than the
+                # browser grace. Removing them before the upload keeps the
+                # physical bucket peak at current+new rather than briefly
+                # storing three complete rolling MP4 generations.
+                client = client or boto3_client(config)
+                precommit_deleted = delete_objects(
+                    client,
+                    config,
+                    safe_precommit,
+                )
+                state.forget(safe_precommit)
+                safe_precommit_set = set(safe_precommit)
+                known_objects = {
+                    key: value
+                    for key, value in known_objects.items()
+                    if key not in safe_precommit_set
+                }
+                preflight_remote = {
+                    key: values[0] for key, values in known_objects.items()
+                }
+                preflight_expired = prospective_fast_composite_keys(
+                    root,
+                    preflight_remote,
+                    preflight_objects,
+                )
+            preflight_sizes = size_guard(
                 preflight_objects,
                 preflight_catalog,
-                {key: values[0] for key, values in known_objects.items()},
+                preflight_remote,
                 config,
+                pending_delete=preflight_expired,
             )
+            _guard_fast_peak(preflight_sizes, config)
             preflight_discovery = (preflight_objects, preflight_catalog)
         if dry_run:
             objects, catalog_bytes = _discover_objects_stable(
@@ -1807,12 +2581,19 @@ def publish(
                 }
         desired_keys = {item.key for item in objects}
         retained_video_keys = (
-            retained_local_video_keys(root, remote, desired_keys=desired_keys)
+            retained_local_video_keys(
+                root,
+                remote,
+                desired_keys=desired_keys,
+                modified_at=remote_modified,
+            )
             if not fast
             else set()
         )
-        expired = (
-            sorted(
+        if sync_delete and fast:
+            expired = prospective_fast_composite_keys(root, remote, objects)
+        elif sync_delete:
+            expired = sorted(
                 {
                     key
                     for key in (
@@ -1827,9 +2608,8 @@ def publish(
                     if key not in desired_keys
                 }
             )
-            if sync_delete and not fast
-            else []
-        )
+        else:
+            expired = []
         sizes = size_guard(
             objects,
             catalog_bytes,
@@ -1837,6 +2617,8 @@ def publish(
             config,
             pending_delete=expired,
         )
+        if fast and not dry_run:
+            _guard_fast_peak(sizes, config)
         pending = [
             item
             for item in objects
@@ -1895,11 +2677,17 @@ def publish(
             key="catalog-index.json",
         )
 
-        # Deletion is intentionally after the catalog commit and is limited to
-        # objects whose timestamp independently violates the retention policy.
-        deleted = delete_objects(client, config, expired) if expired else 0
-        if expired:
-            state.forget(expired)
+        # All non-aged handoff cleanup remains after the catalog commit.
+        # Regular reconciliation applies its broader policies from an
+        # authoritative bucket listing.
+        post_commit_expired = list(expired)
+        postcommit_deleted = (
+            delete_objects(client, config, post_commit_expired)
+            if post_commit_expired
+            else 0
+        )
+        if post_commit_expired:
+            state.forget(post_commit_expired)
 
         result = {
             "status": "ok",
@@ -1908,7 +2696,8 @@ def publish(
             "objects": len(objects),
             "uploaded": uploaded,
             "unchanged": len(objects) - uploaded,
-            "deleted": deleted,
+            "deleted": precommit_deleted + postcommit_deleted,
+            "precommitDeleted": precommit_deleted,
             "catalogLast": True,
             "fast": fast,
             "wholeFrameOnly": whole_frame_only,
