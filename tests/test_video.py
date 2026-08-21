@@ -913,6 +913,39 @@ class VideoBuildTests(unittest.TestCase):
             self.assertFalse(segment.exists())
             self.assertEqual(final["removedDependencies"], 1)
 
+    def test_prune_retires_unoffered_track_pointer_and_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            product = "bc-northeast-overlay"
+            generation = "20260801T1000Z-abcdef012345"
+            manifest = (
+                output / "video-manifests" / product / "eccc-geocolor"
+                / "archive" / f"{generation}.json"
+            )
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({"schemaVersion": 2}))
+            index = output / "video-index" / product / "eccc-geocolor.json"
+            index.parent.mkdir(parents=True)
+            index.write_text(json.dumps({
+                "schemaVersion": 2,
+                "profiles": {
+                    "live": {"generation": generation},
+                    "archive": {"generation": generation},
+                },
+            }))
+            now = dt.datetime(2026, 8, 1, 12, tzinfo=UTC)
+            old = (now - dt.timedelta(hours=2)).timestamp()
+            os.utime(manifest, (old, old))
+
+            result = prune_local_video_orphans(output, product, now=now)
+
+            self.assertFalse(manifest.exists())
+            self.assertEqual(result["removedManifests"], 1)
+            self.assertEqual(
+                set(json.loads(index.read_text())["profiles"]),
+                {"live"},
+            )
+
     def test_parallel_build_can_defer_shared_orphan_scan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

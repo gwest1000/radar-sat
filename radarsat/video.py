@@ -2146,6 +2146,24 @@ def prune_local_video_orphans(
     output_root = output_root.resolve()
     current = (now or dt.datetime.now(UTC)).timestamp()
     grace_seconds = LOCAL_ORPHAN_GRACE_HOURS * 3600
+    allowed_tracks = set(VIDEO_TRACKS_BY_PRODUCT.get(product_id, ("live",)))
+    index_root = output_root / "video-index" / product_id
+    if index_root.is_dir():
+        for index_path in index_root.glob("*.json"):
+            try:
+                payload = json.loads(index_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            profiles = payload.get("profiles") if isinstance(payload, Mapping) else None
+            if not isinstance(profiles, Mapping):
+                continue
+            retained_profiles = {
+                track: pointer
+                for track, pointer in profiles.items()
+                if track in allowed_tracks
+            }
+            if len(retained_profiles) != len(profiles):
+                _atomic_json(index_path, {**payload, "profiles": retained_profiles})
     manifest_root = output_root / "video-manifests" / product_id
     kept_manifests: list[Path] = []
     removed_manifests = 0
@@ -2160,7 +2178,10 @@ def prune_local_video_orphans(
                 continue
             for index, manifest in enumerate(manifests):
                 age = current - manifest.stat().st_mtime
-                if index < LOCAL_GENERATIONS_TO_KEEP or age <= grace_seconds:
+                if (
+                    (track_directory.name in allowed_tracks and index < LOCAL_GENERATIONS_TO_KEEP)
+                    or age <= grace_seconds
+                ):
                     kept_manifests.append(manifest)
                 else:
                     manifest.unlink(missing_ok=True)
