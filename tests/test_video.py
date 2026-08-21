@@ -14,6 +14,8 @@ from unittest import mock
 
 from PIL import Image, ImageDraw
 
+import radarsat.video as video_module
+
 from radarsat.composite_video import (
     _derive_rendition,
     _render_high_frame,
@@ -1520,6 +1522,49 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(len(manifest["frames"]), 2)
             self.assertNotIn("10.webp", {frame["sourcePath"] for frame in manifest["frames"]})
+
+    def test_source_pruned_during_build_remains_available_from_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, spec = self.make_source(root)
+            output = root / "output"
+            rotating = root / "source/frames/bc/raw-visir/10.webp"
+            source_fingerprint = video_module._source_fingerprint
+            removed = False
+
+            def prune_then_fingerprint(
+                snapshot_root: Path,
+                selected_frame: object,
+            ) -> object:
+                nonlocal removed
+                if not removed:
+                    rotating.unlink()
+                    removed = True
+                return source_fingerprint(snapshot_root, selected_frame)
+
+            with mock.patch(
+                "radarsat.video._source_fingerprint",
+                side_effect=prune_then_fingerprint,
+            ):
+                result = build_profile(
+                    root / "source",
+                    output,
+                    catalog,
+                    spec,
+                    ffmpeg=str(shutil.which("ffmpeg")),
+                    hours=1,
+                )
+
+            self.assertTrue(removed)
+            self.assertFalse(rotating.exists())
+            self.assertEqual(result["status"], "built")
+            manifest = json.loads((output / str(result["manifestPath"])).read_text())
+            self.assertEqual(len(manifest["frames"]), 3)
+            self.assertIn(
+                "frames/bc/raw-visir/10.webp",
+                {frame["sourcePath"] for frame in manifest["frames"]},
+            )
+            self.assertEqual(list(output.glob(".radarsat-video-source-*")), [])
 
     def test_manifest_freezes_ordered_dynamic_proxy_selections(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

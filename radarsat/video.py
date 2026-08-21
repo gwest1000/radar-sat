@@ -5,13 +5,14 @@ import hashlib
 import json
 import math
 import os
+from contextlib import contextmanager
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import time
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 from urllib.parse import urlencode
 
 from PIL import Image
@@ -2324,7 +2325,7 @@ def prune_shared_video_orphans(
     return removed
 
 
-def build_profile(
+def _build_profile_from_snapshot(
     source_root: Path,
     output_root: Path,
     catalog: Mapping[str, Any],
@@ -2780,6 +2781,113 @@ def build_profile(
         "proxies": len(proxy_entries),
         "proxyWarnings": len(proxy_warnings),
     }
+
+
+@contextmanager
+def _profile_source_snapshot(
+    source_root: Path,
+    output_root: Path,
+    catalog: Mapping[str, Any],
+    spec: ProfileSpec,
+    *,
+    hours: float,
+    now: dt.datetime,
+    proxy_selection_cache: dict[
+        tuple[str, str, dt.datetime], tuple[ProxyLayerSelection, ...]
+    ] | None,
+) -> Iterator[Path]:
+    """Freeze one profile's catalog inputs against concurrent retention.
+
+    Catalog generation and frame retention intentionally run independently.
+    Hard-linking every selected input gives the encoder a stable inode for its
+    complete lifetime without duplicating image data.  An input that has
+    already rotated away while this snapshot is assembled is simply absent;
+    the normal satellite-frame filter and optional-proxy handling then omit it.
+    """
+    selected = _selected_satellite_frames(catalog, spec, hours, now=now)
+    proxy_selections = _proxy_selections(
+        catalog,
+        spec,
+        selected,
+        proxy_selection_cache,
+    )
+    relative_paths = {
+        f"static/{spec.domain_id}/base-dark.png",
+        *(frame.source_path for frame in selected),
+        *(
+            selection.source_path
+            for selections in proxy_selections
+            for selection in selections
+        ),
+    }
+    output_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=".radarsat-video-source-",
+        dir=output_root,
+    ) as temporary:
+        snapshot_root = Path(temporary)
+        for relative in sorted(relative_paths):
+            try:
+                source = _safe_path(source_root, relative)
+            except FileNotFoundError:
+                continue
+            destination = snapshot_root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.link(source, destination)
+            except FileNotFoundError:
+                # Retention won the race before the hard link was established.
+                continue
+            except OSError:
+                # Keep the helper correct for callers whose source and output
+                # roots reside on filesystems that do not support hard links.
+                try:
+                    shutil.copy2(source, destination)
+                except FileNotFoundError:
+                    destination.unlink(missing_ok=True)
+                    continue
+        yield snapshot_root
+
+
+def build_profile(
+    source_root: Path,
+    output_root: Path,
+    catalog: Mapping[str, Any],
+    spec: ProfileSpec,
+    *,
+    ffmpeg: str,
+    hours: float = 24.0,
+    now: dt.datetime | None = None,
+    proxy_selection_cache: dict[
+        tuple[str, str, dt.datetime], tuple[ProxyLayerSelection, ...]
+    ] | None = None,
+    proxy_render_cache: dict[
+        tuple[str, str, str, int, int, bool], Mapping[str, Any]
+    ] | None = None,
+) -> Mapping[str, Any]:
+    source_root = source_root.resolve()
+    output_root = output_root.resolve()
+    build_now = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    with _profile_source_snapshot(
+        source_root,
+        output_root,
+        catalog,
+        spec,
+        hours=hours,
+        now=build_now,
+        proxy_selection_cache=proxy_selection_cache,
+    ) as snapshot_root:
+        return _build_profile_from_snapshot(
+            snapshot_root,
+            output_root,
+            catalog,
+            spec,
+            ffmpeg=ffmpeg,
+            hours=hours,
+            now=build_now,
+            proxy_selection_cache=proxy_selection_cache,
+            proxy_render_cache=proxy_render_cache,
+        )
 
 
 def build_satellite_videos(

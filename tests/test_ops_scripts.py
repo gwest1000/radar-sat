@@ -197,6 +197,37 @@ class OpsScriptTests(unittest.TestCase):
                 sum("--track archive" in line for line in before_lines) + 1,
             )
 
+    def test_video_scheduler_archive_uses_public_layer_per_product(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment, calls = self._video_scheduler_fixture(root)
+            for _ in range(4):
+                result = subprocess.run(
+                    ["/bin/zsh", str(RUN_VIDEO_SCHEDULER)],
+                    cwd=PROJECT,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+            archive_calls = [
+                line for line in calls.read_text().splitlines()
+                if "--track archive" in line
+            ]
+            expected = [
+                ("bc-large-overlay", "eccc-geocolor"),
+                ("pacific-wna-overlay", "raw-visir"),
+                ("north-america-overlay", "westwx-visir"),
+                ("north-pacific-overlay", "raw-visir"),
+            ]
+            self.assertEqual(len(archive_calls), len(expected))
+            for call, (product, layer) in zip(archive_calls, expected, strict=True):
+                self.assertIn(f"--product {product}", call)
+                self.assertIn(f"--layer {layer}", call)
+                self.assertEqual(call.count("--layer "), 1)
+
     def test_video_scheduler_retries_dirty_publish_without_rebuilding_completed_range(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -757,16 +757,23 @@ build_exact_batch() {
 }
 
 run_archive_worker() {
-  local product="$1"
+  local product="$1" layer=""
+  case "${product}" in
+    bc-large-overlay) layer="eccc-geocolor" ;;
+    north-america-overlay) layer="westwx-visir" ;;
+    pacific-wna-overlay|north-pacific-overlay) layer="raw-visir" ;;
+    *)
+      print -u2 "No public archive satellite layer is configured for ${product}."
+      return 2
+      ;;
+  esac
   local -a args=(
     --source-root "${OUTPUT_ROOT}"
     --output-root "${OUTPUT_ROOT}"
     --track archive
     --archive-hours "${RADARSAT_VIDEO_ARCHIVE_HOURS:-168}"
     --defer-shared-prune
-    --layer eccc-geocolor
-    --layer westwx-visir
-    --layer raw-visir
+    --layer "${layer}"
   )
   args+=(--product "${product}")
   if [[ -n "${RADARSAT_FFMPEG:-}" ]]; then
