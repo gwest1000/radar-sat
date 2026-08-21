@@ -2739,6 +2739,11 @@ export function RadarViewer() {
 
   const speed = PLAYBACK_SPEEDS[speedIndex] ?? 1;
   const currentFrameIndex = Math.min(frameIndex, Math.max(0, anchorFrames.length - 1));
+  useEffect(() => {
+    if (timelineRangeRef.current) {
+      timelineRangeRef.current.value = String(currentFrameIndex);
+    }
+  }, [anchorFrames.length, currentFrameIndex]);
   const showLiveEdge = liveEdgeState.active && currentFrameIndex === anchorFrames.length - 1;
   const stepFactor = playbackStepFactor(anchorFrames, currentFrameIndex);
   const isAnimating = playing && pageVisible && anchorFrames.length > 1;
@@ -3572,7 +3577,7 @@ export function RadarViewer() {
               type="range"
               min={0}
               max={Math.max(0, anchorFrames.length - 1)}
-              value={currentFrameIndex}
+              defaultValue={currentFrameIndex}
               disabled={anchorFrames.length < 2}
               onChange={(event) => selectFrame(Number(event.target.value))}
             />

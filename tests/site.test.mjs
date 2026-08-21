@@ -88,6 +88,9 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /presentedVideoIndexRef/);
   assert.match(viewer, /timelineRangeRef\.current\.value = String\(index\)/);
   assert.match(viewer, /timelineRangeRef\.current\.value = String\(index\)[\s\S]*?now - lastVideoHudUpdateAtRef\.current < VIDEO_HUD_UPDATE_INTERVAL_MS/);
+  assert.match(viewer, /timelineRangeRef\.current\.value = String\(currentFrameIndex\)/);
+  assert.match(viewer, /defaultValue=\{currentFrameIndex\}/);
+  assert.doesNotMatch(viewer, /value=\{currentFrameIndex\}/);
   assert.match(viewer, /PlaybackStatusLines/);
   assert.match(viewer, /playbackStatusLinesRef\.current\?\.update\(displayedFrame\.validTime, times\)/);
   assert.match(viewer, /useEffect\(\(\) => \{\s*update\(initialValidTime, initialSourceTimes\)/);
