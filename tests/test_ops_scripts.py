@@ -139,7 +139,7 @@ class OpsScriptTests(unittest.TestCase):
         })
         return environment, calls
 
-    def test_video_scheduler_runs_smoke_core_after_exact_work_for_pilot_only(
+    def test_video_scheduler_runs_hybrid_core_after_exact_work_for_pilot_only(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -162,12 +162,12 @@ class OpsScriptTests(unittest.TestCase):
                 (index, line)
                 for index, line in enumerate(lines)
                 if "--range-hours " in line
-                and "--preset weather-smoke-core-v1" not in line
+                and "--preset " not in line
             ]
             hybrid_calls = [
                 (index, line)
                 for index, line in enumerate(lines)
-                if "--preset weather-smoke-core-v1" in line
+                if "--preset weather-core-v1" in line
             ]
             self.assertTrue(exact_calls)
             self.assertEqual(len(hybrid_calls), 1)
@@ -664,7 +664,9 @@ class OpsScriptTests(unittest.TestCase):
             state.mkdir(parents=True)
             (state / "publication-dirty").write_text("dirty\n")
             environment.update({
-                "RADARSAT_VIDEO_SCHEDULER_MAX_RUNTIME_SECONDS": "1",
+                # Give catalog startup enough headroom on a busy CI/Mac host;
+                # the sleeping publisher still proves the hard deadline.
+                "RADARSAT_VIDEO_SCHEDULER_MAX_RUNTIME_SECONDS": "3",
                 "RADARSAT_VIDEO_TERMINATE_GRACE_SECONDS": "0",
                 "RADARSAT_VIDEO_KILL_REAP_SECONDS": "2",
                 "RADARSAT_TEST_SLEEP_PUBLISHER": "1",

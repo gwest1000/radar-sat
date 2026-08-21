@@ -25,7 +25,7 @@ FAILURE_BACKOFF_SECONDS="${RADARSAT_VIDEO_FAILURE_BACKOFF_SECONDS:-120}"
 PRUNE_INTERVAL_SECONDS="${RADARSAT_VIDEO_PRUNE_INTERVAL_SECONDS:-3600}"
 MAX_EXACT_WORKERS="${RADARSAT_VIDEO_MAX_EXACT_WORKERS:-2}"
 HYBRID_CORE_ENABLED="${RADARSAT_HYBRID_CORE_ENABLED:-1}"
-HYBRID_CORE_PRESET="weather-smoke-core-v1"
+HYBRID_CORE_PRESETS=(weather-core-v1 weather-smoke-core-v1)
 
 if (( MAX_EXACT_WORKERS < 1 || MAX_EXACT_WORKERS > 2 )); then
   print -u2 "RADARSAT_VIDEO_MAX_EXACT_WORKERS must be 1 or 2."
@@ -732,13 +732,13 @@ hybrid_range_products() {
 }
 
 run_hybrid_worker() {
-  local range="$1" track="$2" product="$3"
+  local range="$1" track="$2" product="$3" preset="$4"
   local -a args=(
     --source-root "${OUTPUT_ROOT}"
     --output-root "${OUTPUT_ROOT}"
     --track "${track}"
     --range-hours "${range}"
-    --preset "${HYBRID_CORE_PRESET}"
+    --preset "${preset}"
     --defer-cache-prune
     --product "${product}"
   )
@@ -755,35 +755,42 @@ run_hybrid_worker() {
 }
 
 run_one_hybrid_profile() {
-  local now_epoch="$1" range product token task_id track worker_result=0 worker_pid=0
+  local now_epoch="$1" range product preset token task_id track worker_result=0 worker_pid=0
   local -a products
   [[ "${HYBRID_CORE_ENABLED}" == "1" ]] || return 2
-  for range in 3 6 12 24; do
-    products=("${(@f)$(hybrid_range_products "${range}")}")
-    for product in "${products[@]}"; do
-      token="$(latest_token "${product}" "${range}" || true)"
-      task_id="hybrid-${range}-${product}"
-      if [[ -z "${token}" ]] \
-        || ! batch_due "${range}" "${token}" "${now_epoch}" "${task_id}"; then
-        continue
-      fi
-      track="$(range_track "${range}")"
-      mark_attempt "${task_id}" "${now_epoch}"
-      mark_dirty
-      log_message \
-        "Building lower-priority ${range}h ${HYBRID_CORE_PRESET} for ${product}."
-      run_hybrid_worker "${range}" "${track}" "${product}"
-      worker_pid="${STARTED_COMMAND_PID}"
-      ACTIVE_VIDEO_PIDS=("${worker_pid}")
-      arm_deadline_watchdog \
-        "${product} ${range}h hybrid-core worker" "${worker_pid}"
-      wait "${worker_pid}" || worker_result=$?
-      finish_deadline_watchdog
-      ACTIVE_VIDEO_PIDS=()
-      if (( worker_result == 0 )); then
-        mark_success "${task_id}" "${token}" "${now_epoch}"
-      fi
-      return "${worker_result}"
+  for preset in "${HYBRID_CORE_PRESETS[@]}"; do
+    for range in 3 6 12 24; do
+      products=("${(@f)$(hybrid_range_products "${range}")}")
+      for product in "${products[@]}"; do
+        token="$(latest_token "${product}" "${range}" || true)"
+        if [[ "${preset}" == "weather-smoke-core-v1" ]]; then
+          # Preserve the deployed smoke-core state keys across this upgrade.
+          task_id="hybrid-${range}-${product}"
+        else
+          task_id="hybrid-${preset}-${range}-${product}"
+        fi
+        if [[ -z "${token}" ]] \
+          || ! batch_due "${range}" "${token}" "${now_epoch}" "${task_id}"; then
+          continue
+        fi
+        track="$(range_track "${range}")"
+        mark_attempt "${task_id}" "${now_epoch}"
+        mark_dirty
+        log_message \
+          "Building lower-priority ${range}h ${preset} for ${product}."
+        run_hybrid_worker "${range}" "${track}" "${product}" "${preset}"
+        worker_pid="${STARTED_COMMAND_PID}"
+        ACTIVE_VIDEO_PIDS=("${worker_pid}")
+        arm_deadline_watchdog \
+          "${product} ${range}h ${preset} worker" "${worker_pid}"
+        wait "${worker_pid}" || worker_result=$?
+        finish_deadline_watchdog
+        ACTIVE_VIDEO_PIDS=()
+        if (( worker_result == 0 )); then
+          mark_success "${task_id}" "${token}" "${now_epoch}"
+        fi
+        return "${worker_result}"
+      done
     done
   done
   return 2

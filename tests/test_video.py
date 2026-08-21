@@ -563,44 +563,47 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(set(presets[0]["optionalLayers"]), expected)
             self.assertEqual(
                 len(presets),
-                3 if product_id in {
+                4 if product_id in {
                     "bc-large-overlay",
                     "bc-northeast-overlay",
                     "north-america-overlay",
                 } else 2,
             )
 
-    def test_smoke_core_pilots_are_strict_recipe_prefixes(self) -> None:
+    def test_hybrid_core_pilots_are_strict_recipe_prefixes(self) -> None:
         products = {str(product["id"]): product for product in PRODUCTS}
         for product_id, satellite_layer_id in (
             ("bc-large-overlay", "eccc-geocolor"),
             ("bc-northeast-overlay", "eccc-geocolor"),
             ("north-america-overlay", "westwx-visir"),
         ):
-            preset_id = "weather-smoke-core-v1"
-            self.assertEqual(
-                video_composite_kind(product_id, preset_id),
-                "hybrid-prefix",
-            )
-            baked = video_composite_layer_ids(
-                product_id,
-                satellite_layer_id,
-                preset_id,
-            )
-            upper = video_composite_overlay_layer_ids(
-                product_id,
-                satellite_layer_id,
-                preset_id,
-            )
-            recipe_order = [
-                str(recipe["id"])
-                for recipe in products[product_id]["layers"]
-                if str(recipe["id"]) in {*baked, *upper}
-            ]
-            self.assertEqual(list((*baked, *upper)), recipe_order)
-            self.assertIn("smoke", baked)
-            self.assertIn("radar-rain", baked)
-            self.assertEqual(upper[-2:], ("model-mslp", "model-hgt500"))
+            for preset_id, expects_smoke in (
+                ("weather-smoke-core-v1", True),
+                ("weather-core-v1", False),
+            ):
+                self.assertEqual(
+                    video_composite_kind(product_id, preset_id),
+                    "hybrid-prefix",
+                )
+                baked = video_composite_layer_ids(
+                    product_id,
+                    satellite_layer_id,
+                    preset_id,
+                )
+                upper = video_composite_overlay_layer_ids(
+                    product_id,
+                    satellite_layer_id,
+                    preset_id,
+                )
+                recipe_order = [
+                    str(recipe["id"])
+                    for recipe in products[product_id]["layers"]
+                    if str(recipe["id"]) in {*baked, *upper}
+                ]
+                self.assertEqual(list((*baked, *upper)), recipe_order)
+                self.assertEqual("smoke" in baked, expects_smoke)
+                self.assertIn("radar-rain", baked)
+                self.assertEqual(upper[-2:], ("model-mslp", "model-hgt500"))
 
     def make_source(self, root: Path) -> tuple[dict[str, object], ProfileSpec]:
         source = root / "source"

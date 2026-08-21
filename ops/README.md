@@ -83,7 +83,10 @@ BC XL, Northeast BC and North America also pilot a reusable
 `weather-smoke-core-v1` prefix. It bakes satellite, enhanced smoke, radar and
 static geography into H.264, then draws lightning, fires and the combined
 MSLP/500-hPa contour overlay from the same immutable generation. Exact full-loop
-matches always take priority. The hybrid core is built explicitly in a
+matches always take priority. A sibling `weather-core-v1` prefix omits smoke,
+allowing the same upper lightning, fire and combined-contour layers to be
+mixed over a prebuilt satellite/radar/static base whenever smoke is disabled.
+The hybrid cores are built explicitly in a
 lower-priority scheduler lane and therefore cannot delay exact operational
 loops. Seven-day and unsupported layer combinations retain the HLS or lossless
 image fallback until the later CMAF and hybrid-core expansion.

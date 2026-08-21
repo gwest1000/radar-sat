@@ -777,14 +777,15 @@ VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
 # composite matrix while the browser and storage costs are measured.  The
 # prefix ends at the static linework; every eligible layer is therefore above
 # the H.264 plane and can be added without changing the recipe's visual order.
-VIDEO_SMOKE_CORE_PRODUCTS = frozenset(
+VIDEO_HYBRID_CORE_PRODUCTS = frozenset(
     {
         "bc-large-overlay",
         "bc-northeast-overlay",
         "north-america-overlay",
     }
 )
-for _product_id in VIDEO_SMOKE_CORE_PRODUCTS:
+VIDEO_SMOKE_CORE_PRODUCTS = VIDEO_HYBRID_CORE_PRODUCTS
+for _product_id in VIDEO_HYBRID_CORE_PRODUCTS:
     _lightning_id = (
         "lightning-trail"
         if _product_id.startswith("bc-")
@@ -796,6 +797,17 @@ for _product_id in VIDEO_SMOKE_CORE_PRODUCTS:
             "id": "weather-smoke-core-v1",
             "compositeKind": "hybrid-prefix",
             "optionalLayers": ("smoke", "radar-rain"),
+            "overlayLayers": (
+                _lightning_id,
+                "hotspots",
+                "model-mslp",
+                "model-hgt500",
+            ),
+        },
+        {
+            "id": "weather-core-v1",
+            "compositeKind": "hybrid-prefix",
+            "optionalLayers": ("radar-rain",),
             "overlayLayers": (
                 _lightning_id,
                 "hotspots",
