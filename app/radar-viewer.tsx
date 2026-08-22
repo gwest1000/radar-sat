@@ -4202,6 +4202,45 @@ export function RadarViewer() {
 
         <aside className="legend-rail" aria-label="Map legends">
           <div className={`layer-toolbar${optional.length ? "" : " decoder-only"}`}>
+            <div
+              className={`decoder-selector${decoderMenuOpen ? " is-open" : ""}`}
+              onMouseLeave={(event) => {
+                setDecoderMenuOpen(false);
+                const focused = document.activeElement;
+                if (focused instanceof HTMLElement && event.currentTarget.contains(focused)) {
+                  focused.blur();
+                }
+              }}
+            >
+              <button
+                className="layers-summary decoder-summary"
+                type="button"
+                aria-label={`Decoder: ${playbackQualityOption.label}`}
+                aria-expanded={decoderMenuOpen}
+                onClick={() => {
+                  setLayersMenuOpen(false);
+                  setDecoderMenuOpen((open) => !open);
+                }}
+              >
+                <span className="layers-summary-heading">
+                  <span className="selector-label">Decoder</span>
+                  <span className="layers-count">{playbackQualityOption.shortLabel}</span>
+                </span>
+                <span className="layers-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div className="layers-popover decoder-popover" role="group" aria-label="Playback decoder">
+                <div className="layers-popover-heading">
+                  <span>Decoder</span>
+                  <span>{playbackQualityOption.label}</span>
+                </div>
+                <div className="decoder-options">
+                  <div className="decoder-choice decoder-information">
+                    <span>{playbackQualityOption.label}</span>
+                    <small>{playbackQualityOption.description}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
             {optional.length > 0 && (
               <div
                 className={`layer-selector${layersMenuOpen ? " is-open" : ""}`}
@@ -4276,45 +4315,6 @@ export function RadarViewer() {
                 </div>
               </div>
             )}
-            <div
-              className={`decoder-selector${decoderMenuOpen ? " is-open" : ""}`}
-              onMouseLeave={(event) => {
-                setDecoderMenuOpen(false);
-                const focused = document.activeElement;
-                if (focused instanceof HTMLElement && event.currentTarget.contains(focused)) {
-                  focused.blur();
-                }
-              }}
-            >
-              <button
-                className="layers-summary decoder-summary"
-                type="button"
-                aria-label={`Decoder: ${playbackQualityOption.label}`}
-                aria-expanded={decoderMenuOpen}
-                onClick={() => {
-                  setLayersMenuOpen(false);
-                  setDecoderMenuOpen((open) => !open);
-                }}
-              >
-                <span className="layers-summary-heading">
-                  <span className="selector-label">Decoder</span>
-                  <span className="layers-count">{playbackQualityOption.shortLabel}</span>
-                </span>
-                <span className="layers-chevron" aria-hidden="true">⌄</span>
-              </button>
-              <div className="layers-popover decoder-popover" role="group" aria-label="Playback decoder">
-                <div className="layers-popover-heading">
-                  <span>Decoder</span>
-                  <span>{playbackQualityOption.label}</span>
-                </div>
-                <div className="decoder-options">
-                  <div className="decoder-choice decoder-information">
-                    <span>{playbackQualityOption.label}</span>
-                    <small>{playbackQualityOption.description}</small>
-                  </div>
-                </div>
-              </div>
-            </div>
             <div
               className={`playback-build-indicator is-${playbackBuildStatus.mode}`}
               data-playback-build={playbackBuildStatus.mode}
