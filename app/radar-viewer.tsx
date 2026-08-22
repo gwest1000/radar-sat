@@ -3852,7 +3852,7 @@ export function RadarViewer() {
         ? {
             mode: "hybrid",
             label: "Prebuilt core + layers",
-            description: "Satellite, smoke, radar and static geography are playing as one video; the selected upper layers are synchronized from the same immutable generation.",
+            description: "Satellite, radar and static geography—and smoke when selected—are playing as one video; the selected upper layers are synchronized from the same immutable generation.",
           }
         : {
             mode: "prebuilt",
