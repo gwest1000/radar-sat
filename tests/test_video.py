@@ -28,6 +28,7 @@ from radarsat.config import (
     PRODUCTS,
     VIDEO_COMPOSITE_PRESETS,
     VIDEO_TRACKS_BY_PRODUCT,
+    VIEWPORTS,
     video_composite_kind,
     video_composite_layer_ids,
     video_composite_overlay_layer_ids,
@@ -35,10 +36,12 @@ from radarsat.config import (
 from radarsat.video import (
     COMPOSITE_VIDEO_CRF,
     ProfileSpec,
+    SelectedFrame,
     VIDEO_FRAME_RATE,
     VIDEO_PROFILES,
     _exact_renditions,
     _render_proxy,
+    _proxy_selections,
     _selected_satellite_frames,
     _update_profile_index,
     build_profile,
@@ -108,6 +111,59 @@ class VideoSelectionTests(unittest.TestCase):
         )
         self.assertEqual(rapid[1].source_valid_time, base)
         self.assertEqual(COMPOSITE_VIDEO_CRF, 20)
+
+    def test_regional_radar_accepts_scan_seconds_after_nominal_slot(self) -> None:
+        base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
+        viewport = VIEWPORTS["south-coast"]
+        old = frame(
+            "frames/bc/radar-rain-region-south-coast/0031.png",
+            base + dt.timedelta(minutes=31, seconds=9),
+        )
+        current = frame(
+            "frames/bc/radar-rain-region-south-coast/0036.png",
+            base + dt.timedelta(minutes=36, seconds=54),
+        )
+        for value in (old, current):
+            value["regionalViewport"] = viewport
+        catalog = {
+            "domains": {
+                "bc": {
+                    "staticLayers": {},
+                    "layers": {
+                        "radar-rain-region-south-coast": {
+                            "maxAgeMinutes": 12,
+                            "frames": [old, current],
+                        }
+                    },
+                }
+            }
+        }
+        spec = ProfileSpec(
+            "bc-south-coast-overlay",
+            "bc",
+            "eccc-geocolor",
+            viewport,
+            64,
+            48,
+            6,
+        )
+        selected = SelectedFrame(
+            valid_time=base + dt.timedelta(minutes=36),
+            source_valid_time=base + dt.timedelta(minutes=30),
+            source_times={},
+            encoded_source_layer="eccc-geocolor",
+            source_path="frames/bc/eccc-geocolor/0030.png",
+            source_fetched_at="2026-08-01T00:31:00Z",
+        )
+
+        selections = _proxy_selections(catalog, spec, [selected])[0]
+        radar = next(value for value in selections if value.recipe_id == "radar-rain")
+
+        self.assertEqual(radar.source_path, current["path"])
+        self.assertEqual(
+            radar.source_valid_time,
+            base + dt.timedelta(minutes=36, seconds=54),
+        )
 
     def test_profiles_follow_the_operational_range_matrix(self) -> None:
         by_product_layer: dict[tuple[str, str], dict[str, int]] = {}

@@ -550,7 +550,7 @@ latest_token() {
                       $domain.layers[$renderedId];
                       $cutoff;
                       $selectedAnchorEpoch;
-                      0
+                      (if ($renderedId | startswith("radar-rain-region-")) then 120 else 0 end)
                     )
                   }
                 end

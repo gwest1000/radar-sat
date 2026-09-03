@@ -44,6 +44,7 @@ FFCONCAT_TIMEBASE_FPS = 50
 VIDEO_FRAME_RATE = 5
 VIDEO_CLOCK_STRIP_HEIGHT = 16
 COMPOSITE_VIDEO_CRF = 20
+REGIONAL_RADAR_SLOT_TOLERANCE_MINUTES = 2
 MPEGTS_TIMESTAMP_WRAP_SECONDS = (1 << 33) / 90_000
 LOCAL_GENERATIONS_TO_KEEP = 2
 LOCAL_ORPHAN_GRACE_HOURS = 0.25
@@ -1089,6 +1090,16 @@ def _proxy_selections(
             assert prepared_recipe_id is not None
             if "lightning" in rendered_id:
                 frame = _at_or_before_source_time(frames, anchor, max_age_minutes)
+            elif rendered_id.startswith("radar-rain-region-"):
+                # A regional frame combines the exact six-minute ECCC mosaic
+                # with asynchronous NEXRAD scans. Its catalog time can
+                # therefore be seconds after the nominal ECCC slot. Prefer
+                # that matching frame over a five-to-six-minute-old image.
+                frame = _nearest(
+                    frames,
+                    anchor,
+                    REGIONAL_RADAR_SLOT_TOLERANCE_MINUTES,
+                ) or _at_or_before(frames, anchor, max_age_minutes)
             else:
                 frame = _at_or_before(frames, anchor, max_age_minutes)
             if frame is None or not frame.get("path"):
