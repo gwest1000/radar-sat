@@ -5,14 +5,30 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
-from radarsat.health import inspect_health
+from radarsat.health import inspect_health, recent_layer_source_count
 
 
 UTC = dt.timezone.utc
 
 
 class HealthTests(unittest.TestCase):
+    def test_recent_layer_source_count_uses_latest_hour(self) -> None:
+        base = dt.datetime(2026, 9, 3, 20, tzinfo=UTC)
+        frames = [
+            {
+                "validTime": (base + dt.timedelta(minutes=index * 6)).isoformat(),
+                "layerSourceTimes": {
+                    "radar-rain": (base + dt.timedelta(minutes=index * 6)).isoformat(),
+                    "eccc-geocolor": (base + dt.timedelta(minutes=(index // 2) * 10)).isoformat(),
+                },
+            }
+            for index in range(21)
+        ]
+        self.assertEqual(recent_layer_source_count(frames, "radar-rain"), 11)
+        self.assertEqual(recent_layer_source_count(frames, "eccc-geocolor"), 6)
+
     def _fixture(self, root: Path, now: dt.datetime, projected: int) -> Path:
         status = root / "status"
         status.mkdir(parents=True)
@@ -59,6 +75,38 @@ class HealthTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertTrue(any("projected R2 storage" in value for value in result["errors"]))
+
+    def test_storage_breakdown_and_free_disk_alarm_are_reported(self) -> None:
+        now = dt.datetime(2026, 8, 20, 23, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            publish = self._fixture(root, now, 1_000_000)
+            for relative, size in (
+                ("composite-frame-cache/a.png", 3),
+                ("video-segments/a.ts", 5),
+                ("frames/a.png", 7),
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"x" * size)
+            with mock.patch("radarsat.health.shutil.disk_usage") as disk_usage:
+                disk_usage.return_value = mock.Mock(
+                    total=1_000_000_000_000,
+                    used=920_000_000_000,
+                    free=80_000_000_000,
+                )
+                result = inspect_health(
+                    root,
+                    publish,
+                    now=now,
+                    disk_warn_free_bytes=200_000_000_000,
+                    disk_min_free_bytes=100_000_000_000,
+                )
+
+        self.assertEqual(result["storage"]["compositeCacheBytes"], 3)
+        self.assertEqual(result["storage"]["videoSegmentBytes"], 5)
+        self.assertEqual(result["storage"]["sourceFrameBytes"], 7)
+        self.assertTrue(any("disk has 80.0 GB free" in value for value in result["errors"]))
 
     def test_exact_sidecar_coverage_is_reported_from_composite_profiles(self) -> None:
         now = dt.datetime(2026, 8, 20, 23, tzinfo=UTC)

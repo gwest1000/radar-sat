@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
+import shutil
 from typing import Any
 
 from .catalog import PUBLIC_VIDEO_LAYERS
@@ -34,6 +35,39 @@ def directory_size(root: Path) -> int:
     return total
 
 
+def storage_breakdown(root: Path) -> dict[str, int]:
+    categories = {
+        "compositeCacheBytes": 0,
+        "videoSegmentBytes": 0,
+        "videoBytes": 0,
+        "videoProxyBytes": 0,
+        "sourceFrameBytes": 0,
+        "otherBytes": 0,
+    }
+    roots = {
+        "composite-frame-cache": "compositeCacheBytes",
+        "video-segments": "videoSegmentBytes",
+        "videos": "videoBytes",
+        "video-proxies": "videoProxyBytes",
+        "video-proxy-index": "videoProxyBytes",
+        "frames": "sourceFrameBytes",
+        "metadata": "sourceFrameBytes",
+    }
+    if not root.exists():
+        return {"totalBytes": 0, **categories}
+    for path in root.rglob("*"):
+        try:
+            if not path.is_file():
+                continue
+            size = path.stat().st_size
+            relative = path.relative_to(root)
+        except (OSError, ValueError):
+            continue
+        category = roots.get(relative.parts[0], "otherBytes")
+        categories[category] += size
+    return {"totalBytes": sum(categories.values()), **categories}
+
+
 def read_json(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text())
@@ -58,6 +92,30 @@ def status_age_issue(
     return None
 
 
+def recent_layer_source_count(
+    frames: list[object],
+    layer_id: str,
+    *,
+    window_minutes: int = 60,
+) -> int:
+    parsed: list[tuple[dt.datetime, str]] = []
+    for value in frames:
+        if not isinstance(value, dict):
+            continue
+        source_times = value.get("layerSourceTimes")
+        source_time = source_times.get(layer_id) if isinstance(source_times, dict) else None
+        if not source_time:
+            continue
+        try:
+            parsed.append((parse_utc(str(value["validTime"])), str(source_time)))
+        except (KeyError, ValueError):
+            continue
+    if not parsed:
+        return 0
+    cutoff = max(valid for valid, _source in parsed) - dt.timedelta(minutes=window_minutes)
+    return len({source for valid, source in parsed if valid >= cutoff})
+
+
 def inspect_health(
     output_root: Path,
     publish_status_path: Path,
@@ -67,6 +125,8 @@ def inspect_health(
     service_max_age_minutes: int = 15,
     local_warn_bytes: int | None = None,
     local_max_bytes: int | None = None,
+    disk_warn_free_bytes: int | None = None,
+    disk_min_free_bytes: int | None = None,
 ) -> dict[str, Any]:
     now = (now or dt.datetime.now(UTC)).astimezone(UTC)
     warnings: list[str] = []
@@ -258,6 +318,27 @@ def inspect_health(
                                     else {}
                                 ),
                             }
+                            if (
+                                product_id == "bc-south-coast-overlay"
+                                and hours == 3
+                                and status_key == "exact"
+                            ):
+                                radar_updates = recent_layer_source_count(frames, "radar-rain")
+                                satellite_updates = recent_layer_source_count(frames, layer_id)
+                                range_status[preset_id]["recentSourceCounts"] = {
+                                    "radar": radar_updates,
+                                    "satellite": satellite_updates,
+                                }
+                                if radar_updates and radar_updates < 6:
+                                    warnings.append(
+                                        f"{label} contains only {radar_updates} distinct radar sources "
+                                        "in its latest hour (target at least 6)"
+                                    )
+                                if satellite_updates and satellite_updates < 3:
+                                    warnings.append(
+                                        f"{label} contains only {satellite_updates} distinct satellite sources "
+                                        "in its latest hour (target at least 3)"
+                                    )
                         except (RuntimeError, KeyError, TypeError, ValueError) as error:
                             warnings.append(f"{label} is invalid: {error}")
                             range_status[preset_id] = "invalid"
@@ -303,23 +384,50 @@ def inspect_health(
     except (RuntimeError, KeyError, ValueError) as error:
         errors.append(str(error))
 
-    local_bytes = directory_size(output_root)
+    storage = storage_breakdown(output_root)
+    local_bytes = storage["totalBytes"]
     warning_threshold = local_warn_bytes or int(
-        os.environ.get("RADARSAT_LOCAL_WARN_BYTES", 25_000_000_000)
+        os.environ.get("RADARSAT_LOCAL_WARN_BYTES", 20_000_000_000)
     )
     maximum_threshold = local_max_bytes or int(
-        os.environ.get("RADARSAT_LOCAL_MAX_BYTES", 40_000_000_000)
+        os.environ.get("RADARSAT_LOCAL_MAX_BYTES", 30_000_000_000)
     )
     if local_bytes >= maximum_threshold:
         errors.append(
-            f"local archive is {local_bytes / 1_000_000_000:.2f} GB "
+            f"local working set is {local_bytes / 1_000_000_000:.2f} GB "
             f"(limit {maximum_threshold / 1_000_000_000:.2f} GB)"
         )
     elif local_bytes >= warning_threshold:
         warnings.append(
-            f"local archive is {local_bytes / 1_000_000_000:.2f} GB "
+            f"local working set is {local_bytes / 1_000_000_000:.2f} GB "
             f"(warning {warning_threshold / 1_000_000_000:.2f} GB)"
         )
+
+    try:
+        disk = shutil.disk_usage(output_root)
+        storage.update({
+            "diskTotalBytes": disk.total,
+            "diskUsedBytes": disk.used,
+            "diskFreeBytes": disk.free,
+        })
+        free_warning = disk_warn_free_bytes or int(
+            os.environ.get("RADARSAT_DISK_WARN_FREE_BYTES", 200_000_000_000)
+        )
+        free_minimum = disk_min_free_bytes or int(
+            os.environ.get("RADARSAT_DISK_MIN_FREE_BYTES", 100_000_000_000)
+        )
+        if disk.free <= free_minimum:
+            errors.append(
+                f"forecast-data disk has {disk.free / 1_000_000_000:.1f} GB free "
+                f"(minimum {free_minimum / 1_000_000_000:.0f} GB)"
+            )
+        elif disk.free <= free_warning:
+            warnings.append(
+                f"forecast-data disk has {disk.free / 1_000_000_000:.1f} GB free "
+                f"(warning {free_warning / 1_000_000_000:.0f} GB)"
+            )
+    except OSError as error:
+        errors.append(f"cannot inspect forecast-data disk usage: {error}")
 
     return {
         "status": "ok" if not errors else "error",
@@ -327,6 +435,7 @@ def inspect_health(
         "errors": errors,
         "warnings": warnings,
         "localBytes": local_bytes,
+        "storage": storage,
         "frameCounts": frame_counts,
         "videoCoverage": video_coverage,
     }

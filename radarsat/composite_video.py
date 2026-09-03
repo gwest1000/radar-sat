@@ -56,6 +56,7 @@ COMPOSITE_SIDECAR_SCHEMA_VERSION = 1
 HYBRID_COMPOSITE_SIDECAR_SCHEMA_VERSION = 2
 COMPOSITE_FRAME_CACHE_VERSION = 1
 COMPOSITE_FRAME_CACHE_MAX_AGE_HOURS = 36.0
+COMPOSITE_FRAME_CACHE_MAX_BYTES = 6_000_000_000
 COMPOSITE_LOCAL_GENERATIONS_TO_KEEP = 1
 COMPOSITE_MANIFEST_GRACE_HOURS = 0.25
 RAPID_RADAR_HOURS = 3
@@ -1290,21 +1291,42 @@ def prune_composite_frame_cache(
     output_root: Path,
     *,
     max_age_hours: float = COMPOSITE_FRAME_CACHE_MAX_AGE_HOURS,
+    max_bytes: int = COMPOSITE_FRAME_CACHE_MAX_BYTES,
     now: dt.datetime | None = None,
 ) -> int:
     if max_age_hours <= 0:
         raise ValueError("max_age_hours must be positive")
+    if max_bytes <= 0:
+        raise ValueError("max_bytes must be positive")
     cache_root = output_root.resolve() / "composite-frame-cache"
     if not cache_root.is_dir():
         return 0
     current = (now or dt.datetime.now(UTC)).timestamp()
     cutoff = current - max_age_hours * 3600
     removed = 0
+    retained: list[tuple[float, int, Path]] = []
+    retained_bytes = 0
     for path in cache_root.rglob("*.png"):
         try:
-            if path.stat().st_mtime < cutoff:
+            stat = path.stat()
+            if stat.st_mtime < cutoff:
                 path.unlink()
                 removed += 1
+            else:
+                retained.append((stat.st_mtime, stat.st_size, path))
+                retained_bytes += stat.st_size
+        except FileNotFoundError:
+            continue
+    # Cache hits touch mtime, so this is a durable least-recently-used pass.
+    # HLS segments and manifests are authoritative; evicted PNGs are merely
+    # regenerated if a future segment actually needs them.
+    for _mtime, size, path in sorted(retained):
+        if retained_bytes <= max_bytes:
+            break
+        try:
+            path.unlink()
+            removed += 1
+            retained_bytes -= size
         except FileNotFoundError:
             continue
     for directory in sorted(

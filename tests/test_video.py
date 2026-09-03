@@ -21,6 +21,7 @@ from radarsat.composite_video import (
     _render_high_frame,
     _with_recent_radar_timeline,
     build_composite_profile,
+    prune_composite_frame_cache,
     prune_composite_sidecar_manifests,
 )
 from radarsat.catalog import build_catalog
@@ -622,6 +623,30 @@ class VideoSelectionTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is required")
 class VideoBuildTests(unittest.TestCase):
+    def test_composite_cache_prunes_oldest_files_to_byte_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cache = root / "composite-frame-cache" / "product"
+            cache.mkdir(parents=True)
+            now = dt.datetime(2026, 9, 3, 22, tzinfo=UTC)
+            paths = [cache / f"{index}.png" for index in range(3)]
+            for index, path in enumerate(paths):
+                path.write_bytes(b"x" * 4)
+                stamp = (now - dt.timedelta(minutes=30 - index)).timestamp()
+                os.utime(path, (stamp, stamp))
+
+            removed = prune_composite_frame_cache(
+                root,
+                max_age_hours=2,
+                max_bytes=8,
+                now=now,
+            )
+
+            self.assertEqual(removed, 1)
+            self.assertFalse(paths[0].exists())
+            self.assertTrue(paths[1].exists())
+            self.assertTrue(paths[2].exists())
+
     def test_composite_renditions_are_high_only_for_bc_and_display_only_for_broad(self) -> None:
         bc = ProfileSpec(
             "bc-large-overlay",
@@ -660,12 +685,23 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(set(presets[0]["optionalLayers"]), expected)
             self.assertEqual(
                 len(presets),
-                3 if product_id in {
+                2 if product_id == "bc-south-coast-overlay" else 3
+                if product_id in {
                     "bc-large-overlay",
                     "bc-northeast-overlay",
                     "north-america-overlay",
-                } else 1,
+                }
+                else 1,
             )
+        south_coast_presets = VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"]
+        self.assertEqual(
+            set(south_coast_presets[1]["optionalLayers"]),
+            {
+                *south_coast_presets[0]["optionalLayers"],
+                "model-mslp",
+                "model-hgt500",
+            },
+        )
 
     def test_hybrid_core_pilots_are_strict_recipe_prefixes(self) -> None:
         products = {str(product["id"]): product for product in PRODUCTS}

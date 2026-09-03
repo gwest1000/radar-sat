@@ -145,8 +145,13 @@ GitHub Pages static viewer ◀────────────────�
 - The publisher warns at 6.5 GB and refuses storage growth above 8 GB.
 - R2 lifecycle rules expire observational frames, metadata, and video media
   after 9 days as a failure backstop.
-- Allow roughly 8–10 GB free on the ingest host for processed output plus the
-  local native-data spool; monitor account-wide R2 usage separately.
+- Local files are a bounded working set, not a second long-term archive. The
+  disposable composite PNG cache is LRU-pruned to 6 GB; HLS segments, current
+  videos/proxies, and the short source-frame window remain only while the
+  published catalogs reference them. Health warns above a 20 GB working set,
+  becomes critical above 30 GB, and separately warns below 200 GB free disk
+  space (critical below 100 GB). Component totals are recorded in
+  `var/status/health.json`; monitor account-wide R2 usage separately.
 
 See [the technical assessment](docs/technical-report.md),
 [production-feed setup](docs/production-feeds.md), and

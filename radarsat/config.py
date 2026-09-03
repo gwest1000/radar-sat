@@ -815,6 +815,14 @@ VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"] = (
         "id": "operational-default-v1",
         "optionalLayers": _default_video_optional_layers("bc-south-coast-overlay"),
     },
+    {
+        "id": "operational-model-contours-v1",
+        "optionalLayers": (
+            *_default_video_optional_layers("bc-south-coast-overlay"),
+            "model-mslp",
+            "model-hgt500",
+        ),
+    },
 )
 
 

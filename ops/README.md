@@ -189,6 +189,12 @@ checker directly with:
 PYTHONPATH=. .venv/bin/python scripts/check_health.py
 ```
 
+The local output is a disposable working set. Composite source PNGs are
+age-pruned and LRU-pruned to 6 GB; the default health thresholds are 20/30 GB
+for the complete working set and 200/100 GB for warning/critical free-disk
+space. The health JSON reports composite cache, HLS segment, video, proxy, and
+source-frame bytes separately.
+
 `RADARSAT_SPOOL_ROOT` defaults to
 `$HOME/.local/share/radar-sat/spool/eccc`; `RADARSAT_SPOOL_MODE` defaults to
 `auto`. Use `off` for a WMS-only bootstrap host or `only` to suppress WMS

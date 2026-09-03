@@ -2124,9 +2124,17 @@ export function RadarViewer() {
     }
     load();
     const interval = window.setInterval(load, 60_000);
+    const refreshOnFocus = () => { void load(); };
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnVisibility);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnVisibility);
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, []);
@@ -2366,6 +2374,7 @@ export function RadarViewer() {
       const active = loadedVideoManifestRef.current;
       if (
         active
+        && playing
         && active.productId === manifest.productId
         && active.layerId === manifest.layerId
         && active.track === manifest.track
@@ -2390,6 +2399,7 @@ export function RadarViewer() {
     catalogBase,
     failedVideoProfiles,
     product,
+    playing,
     videoLayerId,
     videoPointer,
     videoPointerKey,
@@ -2449,7 +2459,7 @@ export function RadarViewer() {
         manifest,
         acceptedCompositeGenerationRef.current,
         activeMatchesSelection,
-      )) {
+      ) && playing) {
         pendingCompositeManifestRef.current = manifest;
         setPendingCompositeManifest(manifest);
       } else {
@@ -2477,6 +2487,7 @@ export function RadarViewer() {
     effectiveRangeHours,
     enabledVideoLayerIds,
     failedCompositeProfiles,
+    playing,
     product,
     videoLayerId,
     videoTrack,

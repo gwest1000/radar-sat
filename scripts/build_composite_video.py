@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import signal
 
 from radarsat.composite_video import (
+    COMPOSITE_FRAME_CACHE_MAX_BYTES,
     build_composite_videos,
     prune_composite_frame_cache,
     prune_composite_sidecar_manifests,
@@ -102,9 +104,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=36.0,
         help="Maximum unused composite-frame cache age (default: 36 hours).",
     )
+    parser.add_argument(
+        "--cache-max-bytes",
+        type=int,
+        default=int(os.environ.get(
+            "RADARSAT_COMPOSITE_CACHE_MAX_BYTES",
+            COMPOSITE_FRAME_CACHE_MAX_BYTES,
+        )),
+        help="Maximum local composite-frame cache size (default: 6 GB).",
+    )
     args = parser.parse_args(argv)
     if args.cache_max_age_hours <= 0:
         parser.error("--cache-max-age-hours must be positive")
+    if args.cache_max_bytes <= 0:
+        parser.error("--cache-max-bytes must be positive")
     return args
 
 
@@ -117,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         removed = prune_composite_frame_cache(
             output_root,
             max_age_hours=args.cache_max_age_hours,
+            max_bytes=args.cache_max_bytes,
         )
         removed_manifests = prune_composite_sidecar_manifests(output_root)
         print(json.dumps({
