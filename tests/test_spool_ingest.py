@@ -644,6 +644,17 @@ class NativeRenderTests(unittest.TestCase):
             with Image.open(high_resolution) as high_resolution_image:
                 self.assertEqual(high_resolution_image.size, (240, 200))
 
+            thick = root / "transmission-lines-thick.png"
+            render_transmission_overlay(
+                domain,
+                thick,
+                source,
+                line_width_scale=2.0,
+            )
+            regular_alpha = np.asarray(Image.open(destination).convert("RGBA"))[:, :, 3]
+            thick_alpha = np.asarray(Image.open(thick).convert("RGBA"))[:, :, 3]
+            self.assertGreater(np.count_nonzero(thick_alpha), np.count_nonzero(regular_alpha))
+
     def test_lightning_density_palette_is_transparent_at_zero_and_red_at_legend_ceiling(self) -> None:
         rgba = _lightning_rgba(np.asarray([[np.nan, 0.0, 0.2, 1.0, 2.0, 5.0]], dtype=np.float32))
 

@@ -469,6 +469,7 @@ def render_transmission_overlay(
     source_path: Path | None = None,
     *,
     output_width: int | None = None,
+    line_width_scale: float = 1.0,
 ) -> None:
     """Render the GeoBC transmission network onto the aligned map grid."""
     from pyproj import Transformer
@@ -535,6 +536,8 @@ def render_transmission_overlay(
     render_width = output_width or domain.width
     if render_width < 1:
         raise ValueError("Transmission overlay output width must be positive")
+    if line_width_scale <= 0:
+        raise ValueError("Transmission line-width scale must be positive")
     render_scale = render_width / domain.width
     render_size = (
         render_width,
@@ -546,8 +549,10 @@ def render_transmission_overlay(
     ]
     image = Image.new("RGBA", render_size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
-    core_width = max(2, round(render_width / 960))
-    halo_width = core_width + max(2, round(render_width / 960))
+    base_core_width = max(2, round(render_width / 960))
+    base_halo_width = base_core_width + max(2, round(render_width / 960))
+    core_width = max(1, round(base_core_width * line_width_scale))
+    halo_width = max(core_width + 1, round(base_halo_width * line_width_scale))
     for line in scaled_lines:
         draw.line(line, fill=(2, 7, 11, 235), width=halo_width, joint="curve")
     for line in scaled_lines:
@@ -571,6 +576,7 @@ def render_static_maps(
     boundary_destination: Path,
     *,
     boundary_scale: float = 2,
+    line_width_scale: float = 1.0,
     render_base: bool = True,
 ) -> None:
     import matplotlib
@@ -592,6 +598,8 @@ def render_static_maps(
     figsize = (domain.width / dpi, domain.height / dpi)
     if boundary_scale <= 0:
         raise ValueError("Boundary render scale must be positive")
+    if line_width_scale <= 0:
+        raise ValueError("Boundary line-width scale must be positive")
 
     def configure_axes(ax: object) -> None:
         ax.set_xlim(bbox[0], bbox[2])
@@ -691,14 +699,14 @@ def render_static_maps(
             axis.add_collection(LineCollection(
                 segments,
                 colors="#071018",
-                linewidths=dark_width * boundary_scale,
+                linewidths=dark_width * boundary_scale * line_width_scale,
                 alpha=0.86,
                 zorder=5,
             ))
             axis.add_collection(LineCollection(
                 segments,
                 colors="#f4f7f8",
-                linewidths=light_width * boundary_scale,
+                linewidths=light_width * boundary_scale * line_width_scale,
                 alpha=light_alpha,
                 zorder=6,
             ))
@@ -717,7 +725,7 @@ def render_static_maps(
             axis.add_feature(
                 feature,
                 edgecolor="#071018",
-                linewidth=2.4 * boundary_scale,
+                linewidth=2.4 * boundary_scale * line_width_scale,
                 alpha=0.86,
                 zorder=5,
             )
@@ -725,7 +733,7 @@ def render_static_maps(
             axis.add_feature(
                 feature,
                 edgecolor="#f4f7f8",
-                linewidth=0.72 * boundary_scale,
+                linewidth=0.72 * boundary_scale * line_width_scale,
                 alpha=0.78,
                 zorder=6,
             )

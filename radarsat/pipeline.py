@@ -103,6 +103,7 @@ REGIONAL_WATERSHED_WIDTH = 2880
 REGIONAL_STATIC_WIDTH = 2880
 REGIONAL_STATIC_REGIONS = ("south-coast",)
 REGIONAL_BOUNDARY_SCALE = 1.25
+REGIONAL_LINE_WIDTH_SCALE = 2.0
 DEFAULT_SOURCE_LAYERS = (
     "convective",
     "snowfog",
@@ -569,6 +570,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
             "transmissionRenderVersion": STATIC_TRANSMISSION_RENDER_VERSION,
             "width": REGIONAL_STATIC_WIDTH,
             "boundaryScale": REGIONAL_BOUNDARY_SCALE,
+            "lineWidthScale": REGIONAL_LINE_WIDTH_SCALE,
             "viewports": {
                 region_id: VIEWPORTS[region_id]
                 for region_id in REGIONAL_STATIC_REGIONS
@@ -620,12 +622,14 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
                     base,
                     regional_boundaries,
                     boundary_scale=REGIONAL_BOUNDARY_SCALE,
+                    line_width_scale=REGIONAL_LINE_WIDTH_SCALE,
                     render_base=False,
                 )
                 render_transmission_overlay(
                     regional_domain,
                     regional_transmission,
                     output_width=REGIONAL_STATIC_WIDTH,
+                    line_width_scale=REGIONAL_LINE_WIDTH_SCALE,
                 )
             static_versions["regionalDetail"] = regional_signature
     version_path.parent.mkdir(parents=True, exist_ok=True)
