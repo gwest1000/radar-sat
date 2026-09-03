@@ -570,7 +570,8 @@ def render_static_maps(
     base_destination: Path,
     boundary_destination: Path,
     *,
-    boundary_scale: int = 2,
+    boundary_scale: float = 2,
+    render_base: bool = True,
 ) -> None:
     import matplotlib
 
@@ -589,8 +590,8 @@ def render_static_maps(
     bbox = projected_bbox(domain)
     dpi = 120
     figsize = (domain.width / dpi, domain.height / dpi)
-    if boundary_scale < 1:
-        raise ValueError("Boundary render scale must be at least one")
+    if boundary_scale <= 0:
+        raise ValueError("Boundary render scale must be positive")
 
     def configure_axes(ax: object) -> None:
         ax.set_xlim(bbox[0], bbox[2])
@@ -598,41 +599,42 @@ def render_static_maps(
         ax.set_aspect("auto")
         ax.set_axis_off()
 
-    base_destination.parent.mkdir(parents=True, exist_ok=True)
-    figure = plt.figure(figsize=figsize, dpi=dpi, facecolor="#071018")
-    axis = figure.add_axes([0, 0, 1, 1], projection=projection)
-    configure_axes(axis)
-    axis.add_feature(cfeature.OCEAN.with_scale("50m"), facecolor="#071018", zorder=0)
-    axis.add_feature(cfeature.LAND.with_scale("50m"), facecolor="#18242c", zorder=1)
-    axis.add_feature(cfeature.LAKES.with_scale("50m"), facecolor="#0b1720", edgecolor="#52616c", linewidth=0.35, zorder=2)
-    axis.add_feature(cfeature.RIVERS.with_scale("50m"), edgecolor="#425664", linewidth=0.25, alpha=0.75, zorder=2)
-    grid = axis.gridlines(
-        crs=ccrs.PlateCarree(),
-        draw_labels=False,
-        linewidth=0.35,
-        color="#60717c",
-        alpha=0.28,
-        linestyle=":",
-        xlocs=range(-180, 181, 10 if domain.tier == "broad" else 5),
-        ylocs=range(0 if domain.tier == "broad" else 40, 81, 10 if domain.tier == "broad" else 5),
-    )
-    temporary_base = base_destination.with_suffix(base_destination.suffix + ".tmp")
-    figure.savefig(
-        temporary_base,
-        dpi=dpi,
-        transparent=False,
-        pad_inches=0,
-        format="png",
-    )
-    temporary_base.replace(base_destination)
-    plt.close(figure)
+    if render_base:
+        base_destination.parent.mkdir(parents=True, exist_ok=True)
+        figure = plt.figure(figsize=figsize, dpi=dpi, facecolor="#071018")
+        axis = figure.add_axes([0, 0, 1, 1], projection=projection)
+        configure_axes(axis)
+        axis.add_feature(cfeature.OCEAN.with_scale("50m"), facecolor="#071018", zorder=0)
+        axis.add_feature(cfeature.LAND.with_scale("50m"), facecolor="#18242c", zorder=1)
+        axis.add_feature(cfeature.LAKES.with_scale("50m"), facecolor="#0b1720", edgecolor="#52616c", linewidth=0.35, zorder=2)
+        axis.add_feature(cfeature.RIVERS.with_scale("50m"), edgecolor="#425664", linewidth=0.25, alpha=0.75, zorder=2)
+        axis.gridlines(
+            crs=ccrs.PlateCarree(),
+            draw_labels=False,
+            linewidth=0.35,
+            color="#60717c",
+            alpha=0.28,
+            linestyle=":",
+            xlocs=range(-180, 181, 10 if domain.tier == "broad" else 5),
+            ylocs=range(0 if domain.tier == "broad" else 40, 81, 10 if domain.tier == "broad" else 5),
+        )
+        temporary_base = base_destination.with_suffix(base_destination.suffix + ".tmp")
+        figure.savefig(
+            temporary_base,
+            dpi=dpi,
+            transparent=False,
+            pad_inches=0,
+            format="png",
+        )
+        temporary_base.replace(base_destination)
+        plt.close(figure)
 
     boundary_figsize = (
         domain.width * boundary_scale / dpi,
         domain.height * boundary_scale / dpi,
     )
     figure = plt.figure(figsize=boundary_figsize, dpi=dpi, facecolor="none")
-    if domain.id == "bc":
+    if domain.id.startswith("bc"):
         # Cartopy clips EPSG:3005 features to the CRS's official BC area of
         # use, even though our operational grid intentionally extends well
         # into neighbouring provinces, territories and U.S. states. Project
@@ -740,7 +742,7 @@ def render_static_maps(
         ("Fort St. John", -120.85, 56.25),
         ("Cranbrook", -115.77, 49.51),
     ]
-    for name, lon, lat in cities if domain.id == "bc" else []:
+    for name, lon, lat in cities if domain.id.startswith("bc") else []:
         city_x, city_y = transformer.transform(lon, lat)
         axis.plot(
             city_x,

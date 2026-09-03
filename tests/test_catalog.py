@@ -299,11 +299,28 @@ class CatalogTests(unittest.TestCase):
                 root / "static" / "bc" / "bch-watersheds-region-south-coast.png"
             )
             regional_watershed.write_bytes(b"regional watershed")
+            regional_boundaries = (
+                root / "static" / "bc" / "boundaries-region-south-coast.png"
+            )
+            regional_boundaries.write_bytes(b"regional boundaries")
+            regional_transmission = (
+                root
+                / "static"
+                / "bc"
+                / "transmission-lines-region-south-coast.png"
+            )
+            regional_transmission.write_bytes(b"regional transmission")
 
             rebuilt = build_catalog(root)
             entry = rebuilt["domains"]["bc"]["staticLayers"]["boundaries"]
             regional_entry = rebuilt["domains"]["bc"]["staticLayers"][
                 "watersheds-region-south-coast"
+            ]
+            boundary_entry = rebuilt["domains"]["bc"]["staticLayers"][
+                "boundaries-region-south-coast"
+            ]
+            transmission_entry = rebuilt["domains"]["bc"]["staticLayers"][
+                "transmission-lines-region-south-coast"
             ]
 
             self.assertEqual(entry["path"], "static/bc/boundaries.png")
@@ -313,6 +330,14 @@ class CatalogTests(unittest.TestCase):
                 "static/bc/bch-watersheds-region-south-coast.png",
             )
             self.assertTrue(regional_entry["revision"].isdigit())
+            self.assertEqual(
+                boundary_entry["path"],
+                "static/bc/boundaries-region-south-coast.png",
+            )
+            self.assertEqual(
+                transmission_entry["path"],
+                "static/bc/transmission-lines-region-south-coast.png",
+            )
 
     def test_five_minute_catalog_uses_one_source_and_monotonic_fallbacks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

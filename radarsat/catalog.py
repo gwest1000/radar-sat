@@ -743,6 +743,20 @@ def build_catalog(root: Path) -> dict[str, Any]:
                     )
                     for region_id in VIEWPORTS
                 )
+                static_files.extend(
+                    (layer_id, filename)
+                    for region_id in ("south-coast",)
+                    for layer_id, filename in (
+                        (
+                            f"boundaries-region-{region_id}",
+                            f"boundaries-region-{region_id}.png",
+                        ),
+                        (
+                            f"transmission-lines-region-{region_id}",
+                            f"transmission-lines-region-{region_id}.png",
+                        ),
+                    )
+                )
             for layer_id, filename in static_files:
                 path = root / "static" / domain_id / filename
                 if path.exists():

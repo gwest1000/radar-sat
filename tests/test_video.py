@@ -19,6 +19,7 @@ import radarsat.video as video_module
 from radarsat.composite_video import (
     _derive_rendition,
     _render_high_frame,
+    _with_recent_radar_timeline,
     build_composite_profile,
     prune_composite_sidecar_manifests,
 )
@@ -32,6 +33,7 @@ from radarsat.config import (
     video_composite_overlay_layer_ids,
 )
 from radarsat.video import (
+    COMPOSITE_VIDEO_CRF,
     ProfileSpec,
     VIDEO_FRAME_RATE,
     VIDEO_PROFILES,
@@ -68,6 +70,45 @@ def write_rgba(path: Path, colour: tuple[int, int, int, int], size: tuple[int, i
 
 
 class VideoSelectionTests(unittest.TestCase):
+    def test_recent_bc_timeline_follows_native_radar_and_holds_satellite(self) -> None:
+        base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
+        satellite = [
+            frame(f"frames/bc/eccc-geocolor/{minute}.png", base + dt.timedelta(minutes=minute))
+            for minute in range(0, 61, 10)
+        ]
+        radar = [
+            frame(f"frames/bc/radar-rain/{minute}.png", base + dt.timedelta(minutes=minute))
+            for minute in range(0, 61, 6)
+        ]
+        catalog = {
+            "domains": {
+                "bc": {
+                    "layers": {
+                        "eccc-geocolor": {"maxAgeMinutes": 35, "frames": satellite},
+                        "radar-rain": {"maxAgeMinutes": 20, "frames": radar},
+                    }
+                }
+            }
+        }
+        spec = ProfileSpec(
+            "bc-large-overlay",
+            "bc",
+            "eccc-geocolor",
+            {"left": 0.0, "top": 0.0, "width": 1.0, "height": 1.0},
+            64,
+            48,
+            10,
+        )
+        selected = _selected_satellite_frames(catalog, spec, 1, now=base + dt.timedelta(hours=1))
+        rapid = _with_recent_radar_timeline(catalog, spec, selected, 1)
+
+        self.assertEqual(
+            [int((item.valid_time - base).total_seconds() // 60) for item in rapid],
+            list(range(0, 61, 6)),
+        )
+        self.assertEqual(rapid[1].source_valid_time, base)
+        self.assertEqual(COMPOSITE_VIDEO_CRF, 20)
+
     def test_profiles_follow_the_operational_range_matrix(self) -> None:
         by_product_layer: dict[tuple[str, str], dict[str, int]] = {}
         for spec in VIDEO_PROFILES:

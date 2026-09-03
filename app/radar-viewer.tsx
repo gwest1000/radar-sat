@@ -1199,9 +1199,9 @@ function composeLayers(
     const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
     const regionalStaticId = product.domain === "bc"
       && regionKey
-      && recipe.id === "watersheds"
-      && domain.staticLayers[`watersheds-region-${regionKey}`]
-      ? `watersheds-region-${regionKey}`
+      && ["watersheds", "transmission-lines", "boundaries"].includes(recipe.id)
+      && domain.staticLayers[`${recipe.id}-region-${regionKey}`]
+      ? `${recipe.id}-region-${regionKey}`
       : recipe.id;
     const staticLayer = domain.staticLayers[regionalStaticId];
     if (staticLayer) {

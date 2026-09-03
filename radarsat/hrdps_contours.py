@@ -35,6 +35,8 @@ RUN_RE = re.compile(r"^\d{8}T(?:00|06|12|18)Z$")
 BASE_URL = "https://dd.weather.gc.ca/today/model_hrdps/continental/2.5km"
 GRID_TAG = "RLatLon0.0225"
 RENDER_VERSION = 4
+SOUTH_COAST_STYLE_VERSION = 2
+SOUTH_COAST_OUTPUT_SCALE = 6.2
 DEFAULT_DATA_ROOT = Path(
     os.environ.get(
         "RADARSAT_HRDPS_DATA_ROOT",
@@ -369,6 +371,7 @@ def render_contours(
     line_scale_override: float | None = None,
     label_scale_override: float | None = None,
     centre_scale_override: float | None = None,
+    output_scale_override: float | None = None,
 ) -> dict[str, object]:
     pixel_km = _pixel_km(domain, domain.width, domain.height)
     scaled = _smooth_nan(
@@ -376,7 +379,9 @@ def render_contours(
         max(0.55, style.contour_smooth_km / pixel_km),
     )
     ecmwf_overview = style.layer_id.startswith("ecmwf-")
-    output_scale = 2
+    output_scale = output_scale_override if output_scale_override is not None else 2
+    if output_scale <= 0:
+        raise ValueError("output_scale_override must be positive")
     line_scale = 1.0
     if ecmwf_overview:
         line_scale = 0.5625 if style.kind == "hgt500" else 0.90
@@ -389,8 +394,8 @@ def render_contours(
     if centre_scale_override is not None:
         centre_scale = centre_scale_override
     rendered_linewidth = style.linewidth * line_scale
-    output_width = domain.width * output_scale
-    output_height = domain.height * output_scale
+    output_width = round(domain.width * output_scale)
+    output_height = round(domain.height * output_scale)
     dpi = 100
     fig = plt.figure(figsize=(output_width / dpi, output_height / dpi), dpi=dpi)
     ax = fig.add_axes((0, 0, 1, 1))
@@ -421,9 +426,14 @@ def render_contours(
             output_scale,
             label_scale,
         )
+        label_effect_scale = label_scale if label_scale_override is not None else 1.0
         for label in labels:
             label.set_path_effects([
-                path_effects.Stroke(linewidth=2.2 * output_scale, foreground="#151822", alpha=0.92),
+                path_effects.Stroke(
+                    linewidth=2.2 * output_scale * label_effect_scale,
+                    foreground="#151822",
+                    alpha=0.92,
+                ),
                 path_effects.Normal(),
             ])
 
@@ -481,6 +491,7 @@ def render_contours(
         "renderVersion": RENDER_VERSION,
         "outputWidth": output_width,
         "outputHeight": output_height,
+        "outputScale": output_scale,
         "centreCount": len(centres),
         "centres": [centre.__dict__ for centre in centres],
         "contourInterval": 6 if style.kind == "hgt500" else 4,
@@ -580,6 +591,12 @@ def render_valid_time(
                                 and existing.get("regionalViewportId") == region_id
                                 and existing.get("regionalViewport")
                                 == (VIEWPORTS[region_id] if region_id is not None else None)
+                                and existing.get("regionalStyleVersion", 0)
+                                == (
+                                    SOUTH_COAST_STYLE_VERSION
+                                    if region_id == "south-coast"
+                                    else 0
+                                )
                             )
                         except (OSError, json.JSONDecodeError):
                             pass
@@ -593,6 +610,9 @@ def render_valid_time(
                     render_values = values
                     render_domain = domain
                     line_scale_override: float | None = None
+                    label_scale_override: float | None = None
+                    centre_scale_override: float | None = None
+                    output_scale_override: float | None = None
                     if region_id is not None:
                         render_values, render_domain = crop_field_to_viewport(
                             values,
@@ -602,12 +622,20 @@ def render_valid_time(
                         )
                         if style.kind == "hgt500":
                             line_scale_override = 0.80 if region_id == "small" else 0.50
+                        if region_id == "south-coast":
+                            line_scale_override = 0.15 if style.kind == "hgt500" else 0.45
+                            label_scale_override = 0.27
+                            centre_scale_override = 0.27
+                            output_scale_override = SOUTH_COAST_OUTPUT_SCALE
                     summary = render_contours(
                         render_values,
                         render_domain,
                         style,
                         destination,
                         line_scale_override=line_scale_override,
+                        label_scale_override=label_scale_override,
+                        centre_scale_override=centre_scale_override,
+                        output_scale_override=output_scale_override,
                     )
                     write_metadata(
                         output_root,
@@ -623,6 +651,11 @@ def render_valid_time(
                             "modelInitTime": init_time.isoformat().replace("+00:00", "Z"),
                             "forecastHour": fhour,
                             "regionalViewportId": region_id,
+                            "regionalStyleVersion": (
+                                SOUTH_COAST_STYLE_VERSION
+                                if region_id == "south-coast"
+                                else 0
+                            ),
                             "regionalViewport": (
                                 VIEWPORTS[region_id]
                                 if region_id is not None

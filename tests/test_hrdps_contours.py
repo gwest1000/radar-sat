@@ -120,8 +120,13 @@ class HrdpsContourTests(unittest.TestCase):
                 FIELD_STYLES[0],
                 Path(temporary) / "regional-hgt500.png",
                 line_scale_override=0.50,
+                label_scale_override=0.25,
+                output_scale_override=3.0,
             )
         self.assertAlmostEqual(summary["lineWidth"], FIELD_STYLES[0].linewidth * 0.50)
+        self.assertEqual(summary["outputScale"], 3.0)
+        self.assertEqual(summary["outputWidth"], 240)
+        self.assertEqual(summary["outputHeight"], 216)
 
 
 if __name__ == "__main__":

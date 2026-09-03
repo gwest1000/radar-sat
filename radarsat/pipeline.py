@@ -23,7 +23,14 @@ from .active_fires import (
 )
 from .catalog import write_catalog
 from .config import DOMAINS, LAYERS, VIEWPORTS, Domain, Layer, regional_layer_id
-from .geomet import GeoMetClient, LayerTimeline, at_or_before, format_utc, frame_stamp
+from .geomet import (
+    GeoMetClient,
+    LayerTimeline,
+    at_or_before,
+    format_utc,
+    frame_stamp,
+    projected_bbox,
+)
 from .hotspots import (
     CWFIS_HOTSPOT_LAYER,
     fetch_hotspots,
@@ -93,6 +100,9 @@ STATIC_BOUNDARY_RENDER_VERSION = 4
 STATIC_TRANSMISSION_RENDER_VERSION = 2
 STATIC_WATERSHED_RENDER_VERSION = 2
 REGIONAL_WATERSHED_WIDTH = 2880
+REGIONAL_STATIC_WIDTH = 2880
+REGIONAL_STATIC_REGIONS = ("south-coast",)
+REGIONAL_BOUNDARY_SCALE = 1.25
 DEFAULT_SOURCE_LAYERS = (
     "convective",
     "snowfog",
@@ -553,6 +563,71 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
             output_width=domain.width * 2,
         )
         static_versions["transmissionLines"] = STATIC_TRANSMISSION_RENDER_VERSION
+    if domain.id == "bc":
+        regional_signature = {
+            "boundaryRenderVersion": STATIC_BOUNDARY_RENDER_VERSION,
+            "transmissionRenderVersion": STATIC_TRANSMISSION_RENDER_VERSION,
+            "width": REGIONAL_STATIC_WIDTH,
+            "boundaryScale": REGIONAL_BOUNDARY_SCALE,
+            "viewports": {
+                region_id: VIEWPORTS[region_id]
+                for region_id in REGIONAL_STATIC_REGIONS
+            },
+        }
+        regional_paths = {
+            region_id: (
+                root / "static" / domain.id / f"boundaries-region-{region_id}.png",
+                root / "static" / domain.id / f"transmission-lines-region-{region_id}.png",
+            )
+            for region_id in REGIONAL_STATIC_REGIONS
+        }
+        if (
+            static_versions.get("regionalDetail") != regional_signature
+            or any(not path.exists() for paths in regional_paths.values() for path in paths)
+        ):
+            full_xmin, full_ymin, full_xmax, full_ymax = projected_bbox(domain)
+            for region_id, (regional_boundaries, regional_transmission) in regional_paths.items():
+                viewport = VIEWPORTS[region_id]
+                xmin = full_xmin + viewport["left"] * (full_xmax - full_xmin)
+                xmax = xmin + viewport["width"] * (full_xmax - full_xmin)
+                ymax = full_ymax - viewport["top"] * (full_ymax - full_ymin)
+                ymin = ymax - viewport["height"] * (full_ymax - full_ymin)
+                render_height = max(
+                    1,
+                    round(
+                        REGIONAL_STATIC_WIDTH
+                        * domain.height
+                        * viewport["height"]
+                        / (domain.width * viewport["width"])
+                    ),
+                )
+                regional_domain = Domain(
+                    id=f"bc-region-{region_id}",
+                    title=f"{domain.title} - {region_id}",
+                    west=domain.west,
+                    south=domain.south,
+                    east=domain.east,
+                    north=domain.north,
+                    crs=domain.crs,
+                    width=REGIONAL_STATIC_WIDTH,
+                    height=render_height,
+                    tier=domain.tier,
+                    projected_bounds=(xmin, ymin, xmax, ymax),
+                )
+                regional_boundaries.parent.mkdir(parents=True, exist_ok=True)
+                render_static_maps(
+                    regional_domain,
+                    base,
+                    regional_boundaries,
+                    boundary_scale=REGIONAL_BOUNDARY_SCALE,
+                    render_base=False,
+                )
+                render_transmission_overlay(
+                    regional_domain,
+                    regional_transmission,
+                    output_width=REGIONAL_STATIC_WIDTH,
+                )
+            static_versions["regionalDetail"] = regional_signature
     version_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_versions = version_path.with_suffix(".tmp")
     try:

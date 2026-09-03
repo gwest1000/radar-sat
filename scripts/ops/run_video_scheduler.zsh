@@ -325,6 +325,8 @@ latest_token() {
         "radar-rain", "lightning-trail", "lightning-hour", "hotspots",
         "hrdps-hgt500", "hrdps-mslp"
       ];
+    def regional_static:
+      ["watersheds", "transmission-lines", "boundaries"];
     def frame_epoch:
       try (.validTime | fromdateiso8601) catch null;
     def compact_frames($layer; $cutoff; $ceiling; $ceilingTolerance):
@@ -385,10 +387,19 @@ latest_token() {
       ][0] // $product.anchorLayer) as $satellite
     | ($buildPolicy.presetPolicy[$product.id]) as $presetPolicy
     | select($presetPolicy != null)
+    | ([ $domain.layers["radar-rain"].frames[]? | frame_epoch | select(. != null) ]) as $radarEpochs
+    | ($radarEpochs | max) as $newestRadarEpoch
+    | (
+        $product.domain == "bc"
+        and $track != "archive"
+        and $rangeHours <= 24
+        and ($radarEpochs | length) >= 2
+      ) as $rapidRadar
     | ({
         satelliteLayerId: $satellite,
         cadenceMinutes: (
-          if $track == "day" then ($product.dayFrameIntervalMinutes // 30)
+          if $rapidRadar then 6
+          elif $track == "day" then ($product.dayFrameIntervalMinutes // 30)
           elif $track == "archive" then ($product.archiveFrameIntervalMinutes // 60)
           else ($product.frameIntervalMinutes // 10)
           end
@@ -428,7 +439,9 @@ latest_token() {
     | ($profile.cadenceMinutes * 60) as $cadenceSeconds
     | (((($newestSatelliteEpoch / $cadenceSeconds) | floor) * $cadenceSeconds)) as $timelineCeiling
     | (
-        if $product.domain == "bc" and $satellite == "eccc-geocolor" then
+        if $rapidRadar then
+          $newestRadarEpoch
+        elif $product.domain == "bc" and $satellite == "eccc-geocolor" then
           (exact_slots($domain.layers["eccc-geocolor"]; $cadenceSeconds; $timelineCeiling)) as $mscSlots
           | ((
               exact_slots($domain.layers["raw-visir-native"]; $cadenceSeconds; $timelineCeiling)
@@ -515,7 +528,7 @@ latest_token() {
                 ) as $renderedId
               | (
                   if $region != null
-                    and $recipe.id == "watersheds"
+                    and (regional_static | index($recipe.id)) != null
                     and $domain.staticLayers[($recipe.id + "-region-" + $region)] != null
                   then $recipe.id + "-region-" + $region
                   else $recipe.id

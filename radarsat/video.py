@@ -43,6 +43,7 @@ FFCONCAT_TIMEBASE_FPS = 50
 # and multiply client decode work, especially at 4x playback.
 VIDEO_FRAME_RATE = 5
 VIDEO_CLOCK_STRIP_HEIGHT = 16
+COMPOSITE_VIDEO_CRF = 20
 MPEGTS_TIMESTAMP_WRAP_SECONDS = (1 << 33) / 90_000
 LOCAL_GENERATIONS_TO_KEEP = 2
 LOCAL_ORPHAN_GRACE_HOURS = 0.25
@@ -74,7 +75,7 @@ REGIONAL_LAYER_BASES = frozenset(
         "hrdps-mslp",
     }
 )
-REGIONAL_STATIC_BASES = frozenset({"watersheds"})
+REGIONAL_STATIC_BASES = frozenset({"watersheds", "transmission-lines", "boundaries"})
 REGIONAL_PRODUCT_KEYS = {
     "bc-small-overlay": "small",
     "bc-southwest-overlay": "southwest",
@@ -1114,7 +1115,10 @@ def _frame_durations(
 ) -> list[float]:
     if not selected:
         return []
-    nominal = cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS
+    nominal = max(
+        1 / VIDEO_FRAME_RATE,
+        cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS,
+    )
     # Playback is a sequence of available observations, not a wall-clock
     # reconstruction of missing data. Encoding a four-hour source gap as a
     # four-times-long frame makes an otherwise healthy loop appear frozen.
@@ -1922,7 +1926,10 @@ def _build_exact_composite_range(
         raise RuntimeError(
             f"{spec.product_id} {hours}h composite has fewer than two frames"
         )
-    nominal_duration = spec.cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS
+    nominal_duration = max(
+        1 / VIDEO_FRAME_RATE,
+        spec.cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS,
+    )
     durations = [nominal_duration] * len(range_frames)
     durations[-1] = nominal_duration * 4
     range_inputs = list(composite_inputs[first_frame:])
@@ -1937,7 +1944,7 @@ def _build_exact_composite_range(
             media_viewport=dict(spec.viewport),
             media_width=width,
             media_height=height,
-            crf=16 if spec.track in {"live", "day"} else 18,
+            crf=COMPOSITE_VIDEO_CRF,
         )
         def prepare_composite(
             group_frames: Sequence[SelectedFrame],
@@ -2656,7 +2663,7 @@ def _build_profile_from_snapshot(
                     media_viewport=dict(spec.viewport),
                     media_width=width,
                     media_height=height,
-                    crf=18,
+                    crf=COMPOSITE_VIDEO_CRF,
                 )
 
                 def prepare_composite(

@@ -726,6 +726,22 @@ class RetentionTests(unittest.TestCase):
             keep_layer_frame(old_off_cycle, now, "broad", "radar-rain")
         )
 
+    def test_rapid_satellite_and_radar_keep_native_cadence_for_three_hours(self) -> None:
+        now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
+        recent_five = now - dt.timedelta(hours=2, minutes=55)
+        older_five = now - dt.timedelta(hours=4, minutes=5)
+        older_ten = now - dt.timedelta(hours=4, minutes=10)
+        recent_radar = now - dt.timedelta(hours=2, minutes=54)
+        older_radar_kept = now - dt.timedelta(hours=4, minutes=12)
+        older_radar_dropped = now - dt.timedelta(hours=4, minutes=6)
+
+        self.assertTrue(keep_layer_frame(recent_five, now, "bc", "raw-visir-5min"))
+        self.assertFalse(keep_layer_frame(older_five, now, "bc", "raw-visir-5min"))
+        self.assertTrue(keep_layer_frame(older_ten, now, "bc", "raw-visir-5min"))
+        self.assertTrue(keep_layer_frame(recent_radar, now, "bc", "radar-rain"))
+        self.assertTrue(keep_layer_frame(older_radar_kept, now, "bc", "radar-rain"))
+        self.assertFalse(keep_layer_frame(older_radar_dropped, now, "bc", "radar-rain"))
+
     def test_local_prune_thins_old_ecmwf_interpolated_hours(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

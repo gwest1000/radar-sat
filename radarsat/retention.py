@@ -6,6 +6,7 @@ import datetime as dt
 ECMWF_CONTOUR_LAYERS = frozenset({"ecmwf-hgt500", "ecmwf-mslp"})
 ECMWF_HOURLY_RETENTION_HOURS = 24
 ECMWF_SOURCE_INTERVAL_HOURS = 3
+RAPID_RETENTION_HOURS = 3
 
 
 def keep_frame(valid_time: dt.datetime, now: dt.datetime, tier: str) -> bool:
@@ -32,7 +33,17 @@ def keep_layer_frame(
     if layer_id.startswith("glm-lightning-live"):
         return age <= dt.timedelta(minutes=30)
     if layer_id in {"raw-visir-native", "raw-visir-5min"}:
-        return age <= dt.timedelta(hours=24)
+        if age <= dt.timedelta(hours=RAPID_RETENTION_HOURS):
+            return True
+        return age <= dt.timedelta(hours=24) and valid_time.minute % 10 == 0
+    if layer_id.startswith("radar-rain"):
+        if age <= dt.timedelta(hours=RAPID_RETENTION_HOURS):
+            return True
+        if age <= dt.timedelta(hours=24):
+            # ECCC's native composite is six-minute data. Twelve-minute
+            # thinning preserves every other scan without inventing a
+            # nominal ten-minute observation time.
+            return valid_time.second == 0 and valid_time.minute % 12 == 0
     if (
         layer_id in ECMWF_CONTOUR_LAYERS
         and age > dt.timedelta(hours=ECMWF_HOURLY_RETENTION_HOURS)
