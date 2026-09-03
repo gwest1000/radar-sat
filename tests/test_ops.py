@@ -256,7 +256,7 @@ def add_composite_sidecar(
     product_id = "bc-northeast-overlay"
     layer_id = "eccc-geocolor"
     track = "live"
-    preset_id = "operational-core-v1"
+    preset_id = "operational-default-v1"
     range_hours = 3
     media_generation = f"{generation[:14]}-{generation.rsplit('-', 1)[-1]}"
     media_relative = (
@@ -270,18 +270,7 @@ def add_composite_sidecar(
     media = root / media_relative
     media.parent.mkdir(parents=True, exist_ok=True)
     media.write_bytes(b"independent-exact-composite")
-    layer_ids = [
-        "base-dark",
-        layer_id,
-        "radar-coverage",
-        "radar-rain",
-        "watersheds",
-        "transmission-lines",
-        "boundaries",
-        "lightning-trail",
-        "model-mslp",
-        "model-hgt500",
-    ]
+    layer_ids = list(video_composite_layer_ids(product_id, layer_id, preset_id))
     frames = [
         {
             "validTime": "2026-07-20T23:30:00Z",
@@ -670,15 +659,13 @@ class RetentionTests(unittest.TestCase):
     def test_bc_and_broad_archive_cadence(self) -> None:
         now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
         self.assertTrue(keep_frame(now - dt.timedelta(hours=23, minutes=59), now, "bc"))
-        self.assertTrue(
-            keep_frame(dt.datetime(2026, 7, 18, 10, 30, tzinfo=UTC), now, "bc")
-        )
+        self.assertTrue(keep_frame(dt.datetime(2026, 7, 18, 9, 0, tzinfo=UTC), now, "bc"))
+        self.assertFalse(keep_frame(dt.datetime(2026, 7, 18, 10, 30, tzinfo=UTC), now, "bc"))
         self.assertFalse(
             keep_frame(dt.datetime(2026, 7, 18, 10, 20, tzinfo=UTC), now, "bc")
         )
-        self.assertTrue(
-            keep_frame(dt.datetime(2026, 7, 18, 10, 0, tzinfo=UTC), now, "broad")
-        )
+        self.assertTrue(keep_frame(dt.datetime(2026, 7, 18, 9, 0, tzinfo=UTC), now, "broad"))
+        self.assertFalse(keep_frame(dt.datetime(2026, 7, 18, 10, 0, tzinfo=UTC), now, "broad"))
         self.assertFalse(
             keep_frame(dt.datetime(2026, 7, 18, 10, 30, tzinfo=UTC), now, "broad")
         )
@@ -687,7 +674,7 @@ class RetentionTests(unittest.TestCase):
     def test_bootstrap_selection_applies_archive_cadence_before_download(self) -> None:
         now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
         values = [
-            now - dt.timedelta(hours=25, minutes=minute)
+            now - dt.timedelta(hours=27, minutes=minute)
             for minute in (0, 10, 20, 30, 40, 50)
         ] + [now - dt.timedelta(hours=3, minutes=10)]
 
@@ -696,8 +683,7 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(
             selected,
             [
-                now - dt.timedelta(hours=25, minutes=30),
-                now - dt.timedelta(hours=25),
+                now - dt.timedelta(hours=27),
                 now - dt.timedelta(hours=3, minutes=10),
             ],
         )
@@ -708,7 +694,7 @@ class RetentionTests(unittest.TestCase):
             now - dt.timedelta(minutes=minute)
             for minute in (6, 12, 18, 24, 30)
         )
-        old_hour = now - dt.timedelta(hours=25)
+        old_hour = now - dt.timedelta(hours=27)
         old_off_hour = old_hour - dt.timedelta(minutes=6)
 
         self.assertEqual(
@@ -736,7 +722,7 @@ class RetentionTests(unittest.TestCase):
         self.assertTrue(
             keep_layer_frame(old_synoptic, now, "broad", "ecmwf-hgt500")
         )
-        self.assertTrue(
+        self.assertFalse(
             keep_layer_frame(old_off_cycle, now, "broad", "radar-rain")
         )
 
@@ -1375,9 +1361,9 @@ class PublisherTests(unittest.TestCase):
         self.assertIn(old_proxy, expired)
         self.assertNotIn(grace_proxy, expired)
         self.assertNotIn(desired_proxy, expired)
-        for generation in generations[-2:]:
+        for generation in generations[-1:]:
             self.assertFalse(any(generation in key for key in expired))
-        for generation in generations[:3]:
+        for generation in generations[:-1]:
             self.assertTrue(any(generation in key for key in expired))
 
         current_exact = (
@@ -1434,7 +1420,7 @@ class PublisherTests(unittest.TestCase):
             modified_at=manifest_modified,
         )
         self.assertNotIn(current_manifest, manifest_expired)
-        self.assertNotIn(previous_manifest, manifest_expired)
+        self.assertIn(previous_manifest, manifest_expired)
         self.assertIn(stale_manifest, manifest_expired)
 
         retired = expired_video_keys(remote, now, modified_at=modified)
@@ -1484,7 +1470,7 @@ class PublisherTests(unittest.TestCase):
             deleted = fake.events[delete_index][1]
             self.assertTrue(
                 all(
-                    any(generation in key for generation in generations[:3])
+                    any(generation in key for generation in generations)
                     for key in deleted
                 )
             )
@@ -1535,18 +1521,25 @@ class PublisherTests(unittest.TestCase):
         now = dt.datetime(2026, 7, 20, 12, tzinfo=UTC)
         remote = {
             "frames/bc/radar-rain/2026/07/20/20260720T1100Z.png": 1,
+            "frames/bc/radar-snow/2026/07/20/20260720T1100Z.png": 1,
+            "metadata/bc/site-radar/2026/07/20/20260720T1100Z.json": 1,
             "frames/bc/radar-rain/2026/07/18/20260718T1012Z.png": 1,
             "metadata/bc/radar-rain/2026/07/18/20260718T1030Z.json": 1,
             "frames/north-america/ecmwf-hgt500/2026/07/19/20260719T0900Z.png": 1,
             "frames/north-america/ecmwf-hgt500/2026/07/19/20260719T1100Z.png": 1,
             "metadata/north-america/ecmwf-hgt500/2026/07/19/20260719T1100Z.json": 1,
+            "frames/bc/raw-visir-native/2026/07/18/20260718T0900Z.webp": 1,
             "static/bc/base-dark.png": 1,
         }
         self.assertEqual(
             expired_remote_keys(remote, now),
             [
                 "frames/bc/radar-rain/2026/07/18/20260718T1012Z.png",
+                "frames/bc/radar-snow/2026/07/20/20260720T1100Z.png",
+                "frames/bc/raw-visir-native/2026/07/18/20260718T0900Z.webp",
                 "frames/north-america/ecmwf-hgt500/2026/07/19/20260719T1100Z.png",
+                "metadata/bc/radar-rain/2026/07/18/20260718T1030Z.json",
+                "metadata/bc/site-radar/2026/07/20/20260720T1100Z.json",
                 "metadata/north-america/ecmwf-hgt500/2026/07/19/20260719T1100Z.json",
             ],
         )
@@ -1644,7 +1637,7 @@ class PublisherTests(unittest.TestCase):
                 ("put", "catalog-index.json"),
             ])
 
-    def test_fast_composite_publish_keeps_current_and_true_previous(self) -> None:
+    def test_fast_composite_publish_keeps_only_current_after_grace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             root = base / "output"
@@ -1684,7 +1677,7 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(results[-1]["deleted"], 2)
             self.assertEqual(results[-1]["precommitDeleted"], 0)
             self.assertTrue(keys_by_generation[0].isdisjoint(fake.remote))
-            self.assertTrue(keys_by_generation[1].issubset(fake.remote))
+            self.assertTrue(keys_by_generation[1].isdisjoint(fake.remote))
             self.assertTrue(keys_by_generation[2].issubset(fake.remote))
             catalog_commit = max(
                 index
@@ -1767,7 +1760,7 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(result["deleted"], 2)
             self.assertLessEqual(result["peakProjectedBytes"], cap)
             self.assertTrue(oldest.isdisjoint(fake.remote))
-            self.assertTrue(previous.issubset(fake.remote))
+            self.assertTrue(previous.isdisjoint(fake.remote))
             self.assertTrue(current.issubset(fake.remote))
             delete_index = next(
                 index for index, event in enumerate(fake.events) if event[0] == "delete"

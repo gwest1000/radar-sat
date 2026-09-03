@@ -563,11 +563,11 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(set(presets[0]["optionalLayers"]), expected)
             self.assertEqual(
                 len(presets),
-                4 if product_id in {
+                3 if product_id in {
                     "bc-large-overlay",
                     "bc-northeast-overlay",
                     "north-america-overlay",
-                } else 2,
+                } else 1,
             )
 
     def test_hybrid_core_pilots_are_strict_recipe_prefixes(self) -> None:
@@ -773,7 +773,7 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(unchanged["status"], "unchanged")
 
-    def test_configured_composites_build_exact_vfr_ranges_and_are_content_addressed(self) -> None:
+    def test_configured_composites_build_shared_segment_ranges(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             catalog, original_spec = self.make_source(root)
@@ -800,10 +800,7 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(first_manifest["schemaVersion"], 2)
             self.assertEqual(
                 [item["id"] for item in first_manifest["composites"]],
-                [
-                    "operational-default-v1",
-                    "operational-core-v1",
-                ],
+                ["operational-default-v1"],
             )
             default_composite = first_manifest["composites"][0]
             self.assertEqual(
@@ -851,32 +848,28 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(exact_range["durationsSeconds"], [0.2, 0.2, 0.8])
             self.assertEqual(exact_range["boundaryIntervalMultiplier"], 4)
             self.assertIn(
-                "videos/composite-bc-large-overlay/eccc-geocolor/live/exact-3h/high/",
+                "videos/composite-bc-large-overlay-operational-default-v1/eccc-geocolor/day/",
                 rendition["media"]["path"],
+            )
+            self.assertEqual(
+                rendition["media"]["mimeType"],
+                "application/vnd.apple.mpegurl",
             )
             exact_media = output / rendition["media"]["path"]
             self.assertTrue(exact_media.is_file())
-            packets = subprocess.run(
-                [
-                    str(shutil.which("ffprobe")),
-                    "-v", "error", "-select_streams", "v:0",
-                    "-show_entries", "packet=pts_time,duration_time",
-                    "-of", "json", str(exact_media),
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
+            self.assertTrue(rendition["media"]["segments"])
+            self.assertTrue(
+                all((output / item["path"]).is_file() for item in rendition["media"]["segments"])
             )
-            packet_values = json.loads(packets.stdout)["packets"]
-            self.assertEqual(len(packet_values), 3)
-            self.assertEqual(
-                [round(float(item["duration_time"]), 2) for item in packet_values],
-                [0.2, 0.2, 0.8],
-            )
+            segment_sets = [
+                {item["path"] for item in value["renditions"][0]["media"]["segments"]}
+                for value in composite["ranges"]
+            ]
+            self.assertTrue(all(value == segment_sets[0] for value in segment_sets[1:]))
             self.assertGreater(first["compositeMediaBytes"], 0)
 
             # A new satellite anchor plus a static-overlay content change must
-            # bind the next immutable exact MP4 to the new rendered proxy.
+            # bind the next immutable exact HLS generation to the new proxy.
             boundary = root / "source/static/bc/boundaries.png"
             write_rgba(boundary, (255, 0, 0, 255), (64, 48))
             stat = boundary.stat()
@@ -901,7 +894,7 @@ class VideoBuildTests(unittest.TestCase):
             second_media = second_manifest["composites"][0]["ranges"][0]["renditions"][0]["media"]["path"]
             self.assertNotEqual(second_media, rendition["media"]["path"])
             protected = output / second_media
-            orphan = protected.with_name("20260801T0030Z-deadbeefdead.mp4")
+            orphan = protected.with_name("20260801T0030Z-deadbeefdead.m3u8")
             orphan.write_bytes(b"orphan")
             old = dt.datetime.now(UTC) - dt.timedelta(hours=2)
             os.utime(orphan, (old.timestamp(), old.timestamp()))
@@ -937,13 +930,13 @@ class VideoBuildTests(unittest.TestCase):
                     spec,
                     ffmpeg=str(shutil.which("ffmpeg")),
                     ranges=(3,),
-                    preset_ids=("operational-default-v1", "operational-core-v1"),
+                    preset_ids=("operational-default-v1",),
                     now=now,
                 )
-                self.assertEqual(render.call_count, 6)
+                self.assertEqual(render.call_count, 3)
 
             self.assertEqual(first["status"], "ok")
-            self.assertEqual(len(first["profiles"]), 2)
+            self.assertEqual(len(first["profiles"]), 1)
             profile = first["profiles"][0]
             pointer = json.loads((output / profile["pointerPath"]).read_text())
             self.assertEqual(
@@ -969,7 +962,7 @@ class VideoBuildTests(unittest.TestCase):
                 len(
                     published_profiles["bc-large-overlay"]["eccc-geocolor"]["live"]
                 ),
-                2,
+                1,
             )
             manifest = json.loads((output / pointer["manifestPath"]).read_text())
             self.assertEqual(manifest["schemaVersion"], 1)
@@ -982,35 +975,28 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(manifest["endValidTime"], "2026-08-01T00:20:00Z")
             self.assertEqual(manifest["endSourceTime"], "2026-08-01T00:20:00Z")
+            self.assertEqual(
+                manifest["renditions"][0]["media"]["mimeType"],
+                "application/vnd.apple.mpegurl",
+            )
             self.assertIn("sourceTimes", manifest["frames"][0])
             self.assertEqual(
                 manifest["frames"][0]["layerSourceTimes"]["eccc-geocolor"],
                 "2026-08-01T00:00:00Z",
             )
             media = output / manifest["renditions"][0]["media"]["path"]
-            packets = subprocess.run(
-                [
-                    str(shutil.which("ffprobe")),
-                    "-v",
-                    "error",
-                    "-select_streams",
-                    "v:0",
-                    "-show_entries",
-                    "packet=pts_time,duration_time",
-                    "-of",
-                    "json",
-                    str(media),
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
+            self.assertTrue(media.is_file())
+            self.assertTrue(
+                all(
+                    (output / value["path"]).is_file()
+                    for value in manifest["renditions"][0]["media"]["segments"]
+                )
             )
-            self.assertEqual(len(json.loads(packets.stdout)["packets"]), 3)
 
             # The legacy shared-media maintenance pass also scans the
             # composite-* tree.  A sidecar manifest must therefore protect its
-            # exact MP4 even though it is not part of video-manifests.
-            orphan = media.with_name("20260801T0020Z-deadbeefdead.mp4")
+            # exact HLS playlist even though it is not part of video-manifests.
+            orphan = media.with_name("20260801T0020Z-deadbeefdead.m3u8")
             orphan.write_bytes(b"orphan")
             old = (now - dt.timedelta(hours=1)).timestamp()
             os.utime(orphan, (old, old))
@@ -1047,10 +1033,10 @@ class VideoBuildTests(unittest.TestCase):
                     output,
                     now=now + dt.timedelta(hours=2),
                 ),
-                1,
+                2,
             )
             self.assertTrue(manifest_path.is_file())
-            self.assertTrue(previous.is_file())
+            self.assertFalse(previous.exists())
             self.assertFalse(expired.exists())
 
             with mock.patch(
@@ -1064,7 +1050,7 @@ class VideoBuildTests(unittest.TestCase):
                     spec,
                     ffmpeg=str(shutil.which("ffmpeg")),
                     ranges=(3,),
-                    preset_ids=("operational-default-v1", "operational-core-v1"),
+                    preset_ids=("operational-default-v1",),
                     now=now + dt.timedelta(minutes=1),
                 )
                 self.assertEqual(render.call_count, 0)
@@ -1074,7 +1060,7 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(
                 len(list((output / "composite-frame-cache").rglob("*.png"))),
-                6,
+                3,
             )
 
     def test_composite_sidecar_failure_preserves_last_good_pointer(self) -> None:
@@ -1096,7 +1082,7 @@ class VideoBuildTests(unittest.TestCase):
                 spec,
                 ffmpeg=str(shutil.which("ffmpeg")),
                 ranges=(3,),
-                preset_ids=("operational-default-v1", "operational-core-v1"),
+                preset_ids=("operational-default-v1",),
                 now=dt.datetime(2026, 8, 1, 1, tzinfo=UTC),
             )
             pointers = {
@@ -1109,7 +1095,7 @@ class VideoBuildTests(unittest.TestCase):
             stat = boundary.stat()
             os.utime(boundary, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
             with mock.patch(
-                "radarsat.composite_video._encode_vfr_mp4",
+                "radarsat.video._encode_ts",
                 side_effect=RuntimeError("synthetic encoder failure"),
             ):
                 failed = build_composite_profile(
@@ -1119,12 +1105,12 @@ class VideoBuildTests(unittest.TestCase):
                     spec,
                     ffmpeg=str(shutil.which("ffmpeg")),
                     ranges=(3,),
-                    preset_ids=("operational-default-v1", "operational-core-v1"),
+                    preset_ids=("operational-default-v1",),
                     now=dt.datetime(2026, 8, 1, 1, 10, tzinfo=UTC),
                 )
 
             self.assertEqual(failed["status"], "warning")
-            self.assertEqual(len(failed["failures"]), 2)
+            self.assertEqual(len(failed["failures"]), 1)
             for relative, previous in pointers.items():
                 self.assertEqual((output / relative).read_bytes(), previous)
 

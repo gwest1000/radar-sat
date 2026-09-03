@@ -16,9 +16,7 @@ def keep_frame(valid_time: dt.datetime, now: dt.datetime, tier: str) -> bool:
         return False
     if age <= dt.timedelta(hours=24):
         return True
-    if tier == "bc":
-        return valid_time.minute in {0, 30}
-    return valid_time.minute == 0
+    return valid_time.minute == 0 and valid_time.hour % 3 == 0
 
 
 def keep_layer_frame(
@@ -33,6 +31,8 @@ def keep_layer_frame(
     age = now - valid_time
     if layer_id.startswith("glm-lightning-live"):
         return age <= dt.timedelta(minutes=30)
+    if layer_id in {"raw-visir-native", "raw-visir-5min"}:
+        return age <= dt.timedelta(hours=24)
     if (
         layer_id in ECMWF_CONTOUR_LAYERS
         and age > dt.timedelta(hours=ECMWF_HOURLY_RETENTION_HOURS)

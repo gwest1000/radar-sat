@@ -729,6 +729,7 @@ class OpsScriptTests(unittest.TestCase):
     def test_video_proxy_lifecycle_is_reachability_managed(self) -> None:
         source = CONFIGURE_R2.read_text()
         self.assertIn('"ID": "expire-video-media"', source)
+        self.assertIn('"ID": "expire-video-segments"', source)
         self.assertIn('"ID": "expire-video-manifests"', source)
         self.assertNotIn('"ID": "expire-video-proxies"', source)
         self.assertNotIn('"ID": "expire-video-static-overlays"', source)

@@ -30,9 +30,9 @@ from .video import (
     ProxyLayerSelection,
     SelectedFrame,
     _atomic_json,
+    _build_hls_media,
     _composite_presets,
     _crop_resize,
-    _encode_vfr_mp4,
     _exact_renditions,
     _format_time,
     _hash_payload,
@@ -52,7 +52,7 @@ COMPOSITE_SIDECAR_SCHEMA_VERSION = 1
 HYBRID_COMPOSITE_SIDECAR_SCHEMA_VERSION = 2
 COMPOSITE_FRAME_CACHE_VERSION = 1
 COMPOSITE_FRAME_CACHE_MAX_AGE_HOURS = 36.0
-COMPOSITE_LOCAL_GENERATIONS_TO_KEEP = 2
+COMPOSITE_LOCAL_GENERATIONS_TO_KEEP = 1
 COMPOSITE_MANIFEST_GRACE_HOURS = 0.25
 
 
@@ -685,36 +685,6 @@ def _build_range_sidecar(
     for rendition_id, width, height in _exact_renditions(spec):
         images = list(rendition_paths[rendition_id][first:])
         cache_fingerprints = list(rendition_fingerprints[rendition_id][first:])
-        media_fingerprint = _hash_payload(
-            {
-                "schemaVersion": COMPOSITE_SIDECAR_SCHEMA_VERSION,
-                "frameCacheVersion": COMPOSITE_FRAME_CACHE_VERSION,
-                "productId": spec.product_id,
-                "layerId": spec.layer_id,
-                "track": spec.track,
-                "presetId": preset_id,
-                "layerIds": list(layer_ids),
-                "rangeHours": hours,
-                "rendition": rendition_id,
-                "width": width,
-                "height": height,
-                "crf": 16,
-                "preset": spec.preset,
-                "frames": cache_fingerprints,
-                "durations": durations,
-            }
-        )
-        end_stamp = range_frames[-1].valid_time.strftime("%Y%m%dT%H%MZ")
-        destination = (
-            output_root
-            / "videos"
-            / f"composite-{spec.product_id}"
-            / spec.layer_id
-            / spec.track
-            / f"exact-{hours}h"
-            / rendition_id
-            / f"{end_stamp}-{media_fingerprint}.mp4"
-        )
         rendition_spec = replace(
             spec,
             width=width,
@@ -725,26 +695,59 @@ def _build_range_sidecar(
             media_height=height,
             crf=16,
         )
-        if not destination.is_file():
-            _encode_vfr_mp4(
-                ffmpeg,
-                images,
-                durations,
-                destination,
-                rendition_spec,
-            )
+        images_by_valid_time = {
+            frame.valid_time: image for frame, image in zip(range_frames, images, strict=True)
+        }
+
+        def prepared_images(
+            group_frames: Sequence[SelectedFrame],
+            _temporary: Path,
+        ) -> list[Path]:
+            return [images_by_valid_time[frame.valid_time] for frame in group_frames]
+
+        media_variant = {
+            "schemaVersion": COMPOSITE_SIDECAR_SCHEMA_VERSION,
+            "frameCacheVersion": COMPOSITE_FRAME_CACHE_VERSION,
+            "productId": spec.product_id,
+            "layerId": spec.layer_id,
+            "presetId": preset_id,
+            "layerIds": list(layer_ids),
+            "rendition": rendition_id,
+            "width": width,
+            "height": height,
+            "crf": 16,
+            "preset": spec.preset,
+        }
+        destination, media_fingerprint, segments, _ = _build_hls_media(
+            output_root,
+            output_root,
+            rendition_spec,
+            range_frames,
+            [{"frameCacheFingerprint": value} for value in cache_fingerprints],
+            durations,
+            ffmpeg=ffmpeg,
+            owner=f"composite-{spec.product_id}-{preset_id}",
+            variant=media_variant,
+            prepare_images=prepared_images,
+            # The same one-hour namespace is used by 3/6/12-hour playlists.
+            # Their overlapping encoded segments therefore exist only once.
+            media_track="day",
+            segment_group_hours=1,
+        )
         renditions.append(
             {
                 "id": rendition_id,
                 "media": {
                     "path": destination.relative_to(output_root).as_posix(),
-                    "mimeType": "video/mp4",
+                    "mimeType": "application/vnd.apple.mpegurl",
                     "codec": "avc1",
                     "width": width,
                     "height": height + VIDEO_CLOCK_STRIP_HEIGHT,
                     "contentHeight": height,
                     "byteLength": destination.stat().st_size,
                     "sha256": _sha256_file(destination),
+                    "fingerprint": media_fingerprint,
+                    "segments": segments,
                 },
             }
         )
@@ -877,7 +880,9 @@ def _build_range_sidecar(
         "pointerPath": pointer_path.relative_to(output_root).as_posix(),
         "frames": len(range_frames),
         "mediaBytes": sum(
-            int(value["media"]["byteLength"]) for value in renditions
+            int(value["media"]["byteLength"])
+            + sum(int(segment["byteLength"]) for segment in value["media"]["segments"])
+            for value in renditions
         ),
     }
 
@@ -1230,10 +1235,10 @@ def prune_composite_sidecar_manifests(
     *,
     now: dt.datetime | None = None,
 ) -> int:
-    """Retain the current and previous immutable sidecar generation.
+    """Retain the current immutable sidecar generation plus a short grace.
 
     Media deletion remains centralized in ``prune_shared_video_orphans`` so a
-    manifest is always removed before any MP4 it references.  The short grace
+    manifest is always removed before any media it references. The short grace
     protects browsers that began loading a generation just before publication.
     """
     output_root = output_root.resolve()

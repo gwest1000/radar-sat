@@ -1688,19 +1688,21 @@ def _segment_groups(
     selected: Sequence[SelectedFrame],
     track: str,
     cadence_minutes: int,
+    group_hours: int | None = None,
 ) -> list[list[int]]:
     grouped: dict[dt.datetime, list[int]] = {}
     for index, frame in enumerate(selected):
         valid = frame.valid_time.astimezone(UTC)
-        group_hours = 1 if track == "live" else 6
+        resolved_group_hours = group_hours or (1 if track == "live" else 6)
         key = valid.replace(
-            hour=valid.hour - valid.hour % group_hours,
+            hour=valid.hour - valid.hour % resolved_group_hours,
             minute=0,
             second=0,
             microsecond=0,
         )
         grouped.setdefault(key, []).append(index)
-    expected = max(1, round(group_hours * 60 / cadence_minutes))
+    resolved_group_hours = group_hours or (1 if track == "live" else 6)
+    expected = max(1, round(resolved_group_hours * 60 / cadence_minutes))
     results: list[list[int]] = []
     pending: list[int] = []
     for key in sorted(grouped):
@@ -1740,9 +1742,17 @@ def _build_hls_media(
     prepare_images: Callable[
         [Sequence[SelectedFrame], Path], list[Path]
     ] | None = None,
+    media_track: str | None = None,
+    segment_group_hours: int | None = None,
 ) -> tuple[Path, str, list[Mapping[str, Any]], list[float]]:
     owner = owner or f"shared-{spec.domain_id}-{spec.media_group}"
-    groups = _segment_groups(selected, spec.track, spec.cadence_minutes)
+    storage_track = media_track or spec.track
+    groups = _segment_groups(
+        selected,
+        storage_track,
+        spec.cadence_minutes,
+        segment_group_hours,
+    )
     adjusted_durations = list(durations)
     segment_entries: list[Mapping[str, Any]] = []
     for indexes in groups:
@@ -1752,7 +1762,7 @@ def _build_hls_media(
             "videoRenderVersion": VIDEO_RENDER_VERSION,
             "domainId": spec.domain_id,
             "layerId": spec.layer_id,
-            "track": spec.track,
+            "track": storage_track,
             "mediaGroup": spec.media_group,
             "mediaViewport": dict(spec.resolved_media_viewport),
             "mediaWidth": spec.resolved_media_width,
@@ -1774,7 +1784,7 @@ def _build_hls_media(
             / "video-segments"
             / owner
             / spec.layer_id
-            / spec.track
+            / storage_track
             / f"{start_stamp}-{segment_fingerprint}.ts"
         )
         if not segment_path.is_file():
@@ -1823,7 +1833,7 @@ def _build_hls_media(
         / "videos"
         / owner
         / spec.layer_id
-        / spec.track
+        / storage_track
         / f"{end_stamp}-{playlist_fingerprint}.m3u8"
     )
     if not playlist_path.is_file():
@@ -1896,7 +1906,7 @@ def _build_exact_composite_range(
     output_root: Path,
     spec: ProfileSpec,
     selected: Sequence[SelectedFrame],
-    media_inputs: Sequence[Mapping[str, Any]],
+    composite_inputs: Sequence[Mapping[str, Any]],
     hours: int,
     preset_id: str,
     layer_ids: Sequence[str],
@@ -1915,30 +1925,7 @@ def _build_exact_composite_range(
     nominal_duration = spec.cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS
     durations = [nominal_duration] * len(range_frames)
     durations[-1] = nominal_duration * 4
-    range_inputs = list(media_inputs[first_frame:])
-    range_overlay_inputs: list[list[Mapping[str, Any]]] = []
-    for frame in range_frames:
-        frame_inputs: list[Mapping[str, Any]] = []
-        for layer in filtered_proxy_layers.get(frame.valid_time, ()):
-            source_key = str(layer.get("sourceKey", ""))
-            proxy = proxy_entries.get(source_key)
-            if not isinstance(proxy, Mapping) or not proxy.get("path"):
-                continue
-            frame_inputs.append(
-                {
-                    "id": str(layer.get("id", "")),
-                    "renderId": str(layer.get("renderId", "")),
-                    "sourceKey": source_key,
-                    "sourceValidTime": layer.get("sourceValidTime"),
-                    # Proxy filenames are hashes of the rendered RGBA pixels.
-                    # Including the immutable path binds every exact MP4 to
-                    # the radar/lightning/fire/model snapshot it actually
-                    # contains without re-hashing hundreds of images here.
-                    "proxyPath": str(proxy["path"]),
-                    "proxyByteLength": int(proxy.get("byteLength", 0)),
-                }
-            )
-        range_overlay_inputs.append(frame_inputs)
+    range_inputs = list(composite_inputs[first_frame:])
     renditions: list[Mapping[str, Any]] = []
     total_bytes = 0
     for rendition_id, width, height in _exact_renditions(spec):
@@ -1952,62 +1939,53 @@ def _build_exact_composite_range(
             media_height=height,
             crf=16 if spec.track in {"live", "day"} else 18,
         )
-        payload = {
-            "videoRenderVersion": VIDEO_RENDER_VERSION,
-            "compositeRenderVersion": COMPOSITE_RENDER_VERSION,
-            "preset": dict(composite_variant),
-            "rangeHours": hours,
-            "rendition": rendition_id,
-            "width": width,
-            "height": height,
-            "frames": range_inputs,
-            "overlayInputs": range_overlay_inputs,
-            "durations": durations,
-        }
-        fingerprint = _hash_payload(payload)
-        end_stamp = range_frames[-1].valid_time.strftime("%Y%m%dT%H%MZ")
-        destination = (
-            output_root
-            / "videos"
-            / f"composite-{spec.product_id}"
-            / spec.layer_id
-            / spec.track
-            / f"exact-{hours}h"
-            / rendition_id
-            / f"{end_stamp}-{fingerprint}.mp4"
+        def prepare_composite(
+            group_frames: Sequence[SelectedFrame],
+            temporary: Path,
+            resolved_spec: ProfileSpec = rendition_spec,
+        ) -> list[Path]:
+            return _prepare_composite_images(
+                source_root,
+                output_root,
+                resolved_spec,
+                group_frames,
+                temporary,
+                layer_ids,
+                filtered_proxy_layers,
+                proxy_entries,
+            )
+
+        destination, fingerprint, segments, _ = _build_hls_media(
+            source_root,
+            output_root,
+            rendition_spec,
+            range_frames,
+            range_inputs,
+            durations,
+            ffmpeg=ffmpeg,
+            owner=f"composite-{spec.product_id}-{preset_id}",
+            variant={**composite_variant, "rendition": rendition_id},
+            prepare_images=prepare_composite,
+            # All exact ranges use the same one-hour segment namespace. This
+            # lets 3/6/12/24-hour playlists share overlapping encoded bytes.
+            media_track="day",
+            segment_group_hours=1,
         )
-        if not destination.is_file():
-            with tempfile.TemporaryDirectory(
-                prefix=f"radarsat-{spec.product_id}-{preset_id}-{hours}h-{rendition_id}-"
-            ) as temporary:
-                prepared = _prepare_composite_images(
-                    source_root,
-                    output_root,
-                    rendition_spec,
-                    range_frames,
-                    Path(temporary),
-                    layer_ids,
-                    filtered_proxy_layers,
-                    proxy_entries,
-                )
-                _encode_vfr_mp4(
-                    ffmpeg,
-                    prepared,
-                    durations,
-                    destination,
-                    rendition_spec,
-                )
         media = {
             "path": destination.relative_to(output_root).as_posix(),
-            "mimeType": "video/mp4",
+            "mimeType": "application/vnd.apple.mpegurl",
             "codec": "avc1",
             "width": width,
             "height": height + VIDEO_CLOCK_STRIP_HEIGHT,
             "contentHeight": height,
             "byteLength": destination.stat().st_size,
             "sha256": _sha256_file(destination),
+            "fingerprint": fingerprint,
+            "segments": segments,
         }
-        total_bytes += destination.stat().st_size
+        total_bytes += destination.stat().st_size + sum(
+            int(entry["byteLength"]) for entry in segments
+        )
         renditions.append({"id": rendition_id, "media": media})
     return (
         {
@@ -2653,7 +2631,7 @@ def _build_profile_from_snapshot(
                     output_root,
                     spec,
                     selected,
-                    media_inputs,
+                    composite_inputs,
                     range_hours,
                     preset_id,
                     composite_layer_ids,

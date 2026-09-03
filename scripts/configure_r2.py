@@ -72,6 +72,12 @@ def main() -> int:
                     "Expiration": {"Days": 9},
                 },
                 {
+                    "ID": "expire-video-segments",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "video-segments/"},
+                    "Expiration": {"Days": 9},
+                },
+                {
                     "ID": "expire-video-manifests",
                     "Status": "Enabled",
                     "Filter": {"Prefix": "video-manifests/"},

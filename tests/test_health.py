@@ -77,7 +77,6 @@ class HealthTests(unittest.TestCase):
             pointers = []
             for preset in (
                 "operational-default-v1",
-                "operational-core-v1",
                 "weather-smoke-core-v1",
                 "weather-core-v1",
             ):
@@ -117,7 +116,6 @@ class HealthTests(unittest.TestCase):
 
         exact = result["videoCoverage"]["bc-large-overlay"]["exact"]["3h"]
         self.assertEqual(exact["operational-default-v1"]["frames"], 2)
-        self.assertEqual(exact["operational-core-v1"]["frames"], 2)
         hybrid = result["videoCoverage"]["bc-large-overlay"]["hybrid"]["3h"]
         self.assertEqual(hybrid["weather-smoke-core-v1"]["frames"], 2)
         self.assertEqual(hybrid["weather-core-v1"]["frames"], 2)

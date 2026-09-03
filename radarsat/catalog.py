@@ -700,6 +700,8 @@ def build_catalog(root: Path) -> dict[str, Any]:
             layers: dict[str, Any] = {}
             if layer_root.exists():
                 for layer_directory in sorted(path for path in layer_root.iterdir() if path.is_dir()):
+                    if layer_directory.name in {"radar-snow", "site-radar"}:
+                        continue
                     frames = read_metadata(
                         root,
                         domain_id,

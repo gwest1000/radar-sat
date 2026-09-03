@@ -11,11 +11,17 @@ def main() -> int:
     config = R2Config.from_environment()
     inventory = list_remote_inventory(boto3_client(config), config.bucket)
     prefixes: dict[str, dict[str, int]] = defaultdict(lambda: {"objects": 0, "bytes": 0})
+    frame_layers: dict[str, dict[str, int]] = defaultdict(lambda: {"objects": 0, "bytes": 0})
     video_profiles: dict[str, dict[str, int]] = defaultdict(lambda: {"objects": 0, "bytes": 0})
     for key, size in inventory.sizes.items():
         prefix = key.split("/", 1)[0]
         prefixes[prefix]["objects"] += 1
         prefixes[prefix]["bytes"] += size
+        if prefix in {"frames", "metadata", "tiles", "tile-manifests"}:
+            parts = key.split("/")
+            if len(parts) > 2:
+                frame_layers[parts[2]]["objects"] += 1
+                frame_layers[parts[2]]["bytes"] += size
         if prefix in {"videos", "video-segments", "video-manifests"}:
             parts = key.split("/")
             owner = parts[1] if len(parts) > 1 else "unknown"
@@ -26,6 +32,7 @@ def main() -> int:
         "objects": len(inventory.sizes),
         "bytes": sum(inventory.sizes.values()),
         "prefixes": dict(sorted(prefixes.items())),
+        "frameLayers": dict(sorted(frame_layers.items())),
         "videoOwners": dict(sorted(video_profiles.items())),
     }, indent=2))
     return 0

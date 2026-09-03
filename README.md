@@ -143,7 +143,8 @@ GitHub Pages static viewer ◀────────────────�
 - R2 publication is transactional: assets upload concurrently, the complete
   compatibility catalog commits, then `catalog-index.json` commits last.
 - The publisher warns at 6.5 GB and refuses storage growth above 8 GB.
-- The R2 `frames/` lifecycle expires at 9 days as a failure backstop.
+- R2 lifecycle rules expire observational frames, metadata, and video media
+  after 9 days as a failure backstop.
 - Allow roughly 8–10 GB free on the ingest host for processed output plus the
   local native-data spool; monitor account-wide R2 usage separately.
 

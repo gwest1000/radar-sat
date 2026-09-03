@@ -760,15 +760,6 @@ VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
             "id": "operational-default-v1",
             "optionalLayers": _default_video_optional_layers(product_id),
         },
-        {
-            "id": "operational-core-v1",
-            "optionalLayers": (
-                "radar-rain",
-                "lightning-trail" if product_id.startswith("bc-") else "glm-lightning-trail",
-                "model-mslp",
-                "model-hgt500",
-            ),
-        },
     )
     for product_id in VIDEO_EXACT_RANGES
 }
@@ -823,10 +814,6 @@ VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"] = (
     {
         "id": "operational-default-v1",
         "optionalLayers": _default_video_optional_layers("bc-south-coast-overlay"),
-    },
-    {
-        "id": "operational-core-v1",
-        "optionalLayers": ("radar-rain", "lightning-trail"),
     },
 )
 
@@ -939,10 +926,6 @@ LEGENDS: dict[str, dict[str, str]] = {
     "radar-rain": {
         "title": "Rain rate",
         "path": "static/legend-radar-rain.png",
-    },
-    "radar-snow": {
-        "title": "Snow rate",
-        "path": "static/legend-radar-snow.png",
     },
     "ptype": {
         "title": "Surface precipitation type",

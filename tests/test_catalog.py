@@ -62,7 +62,7 @@ class CatalogTests(unittest.TestCase):
         self,
         root: Path,
         *,
-        preset_id: str = "operational-core-v1",
+        preset_id: str = "operational-default-v1",
         generation: str = "20260722T1200Z-abcdef012345",
     ) -> None:
         product_id = "bc-northeast-overlay"
@@ -151,6 +151,24 @@ class CatalogTests(unittest.TestCase):
             metadata_path(root, domain, layer, valid_time).unlink()
             rebuilt = build_catalog(root)
             self.assertNotIn("radar-rain", rebuilt["domains"]["bc"]["layers"])
+
+    def test_catalog_omits_local_only_diagnostic_layers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = DOMAINS["bc"]
+            valid_time = dt.datetime(2026, 7, 22, 12, tzinfo=UTC)
+            for layer_id in ("radar-rain", "radar-snow", "site-radar"):
+                layer = LAYERS[layer_id]
+                image = frame_path(root, domain, layer, valid_time)
+                image.parent.mkdir(parents=True, exist_ok=True)
+                image.write_bytes(b"frame")
+                write_metadata(root, domain, layer, valid_time, image)
+
+            layers = build_catalog(root)["domains"]["bc"]["layers"]
+
+            self.assertIn("radar-rain", layers)
+            self.assertNotIn("radar-snow", layers)
+            self.assertNotIn("site-radar", layers)
 
     def test_invalid_previous_catalog_falls_back_to_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -375,7 +393,7 @@ class CatalogTests(unittest.TestCase):
             ]["live"]
 
             self.assertEqual(len(values), 1)
-            self.assertEqual(values[0]["presetId"], "operational-core-v1")
+            self.assertEqual(values[0]["presetId"], "operational-default-v1")
             self.assertEqual(values[0]["rangeHours"], 3)
             self.assertNotIn("frames", json.dumps(values))
 
@@ -398,7 +416,7 @@ class CatalogTests(unittest.TestCase):
             ]["live"]
             self.assertEqual(
                 {pointer["presetId"] for pointer in pointers},
-                {"operational-default-v1", "operational-core-v1"},
+                {"operational-default-v1"},
             )
 
     def test_catalog_exposes_hybrid_contract_without_requiring_it_for_hls_retirement(
@@ -465,7 +483,7 @@ class CatalogTests(unittest.TestCase):
             self.write_composite_pointer(root)
             index = next((root / "composite-index").rglob("*.json"))
             pointer = json.loads(index.read_text())
-            pointer["layerIds"].remove("model-hgt500")
+            pointer["layerIds"].pop()
             index.write_text(json.dumps(pointer))
             manifest = root / pointer["manifestPath"]
             payload = json.loads(manifest.read_text())

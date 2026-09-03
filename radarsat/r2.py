@@ -57,8 +57,9 @@ UPLOAD_WORKERS = 12
 STAMP_RE = re.compile(r"^(\d{8}T\d{4}Z)$")
 VIDEO_GENERATION_RE = re.compile(r"^(\d{8}T\d{4}Z)-([0-9a-f]{12})$")
 VIDEO_TRACKS = frozenset({"live", "day", "archive"})
-VIDEO_MIN_GENERATIONS = 2
+VIDEO_MIN_GENERATIONS = 1
 VIDEO_ORPHAN_GRACE = dt.timedelta(minutes=15)
+UNPUBLISHED_LAYER_IDS = frozenset({"radar-snow", "site-radar"})
 DEFAULT_COMPOSITE_PRESET_ID = "operational-default-v1"
 # Read-only compatibility for the two schema-v1 manifests that may remain
 # catalog-referenced during rollout. New schema-v2 composites are validated
@@ -1383,13 +1384,22 @@ def _composite_sidecar_paths(
                 f"exact-{range_hours}h",
                 rendition_id,
             )
-            valid_shape = (
+            legacy_mp4_shape = (
                 mime == "video/mp4"
                 and len(media_parts) == 7
                 and media_parts[:6] == expected_prefix
                 and Path(media_parts[6]).suffix == ".mp4"
                 and VIDEO_GENERATION_RE.fullmatch(Path(media_parts[6]).stem) is not None
             )
+            owner = f"composite-{product_id}-{preset_id}"
+            shared_hls_shape = (
+                mime == "application/vnd.apple.mpegurl"
+                and len(media_parts) == 5
+                and media_parts[:4] == ("videos", owner, layer_id, "day")
+                and Path(media_parts[4]).suffix == ".m3u8"
+                and VIDEO_GENERATION_RE.fullmatch(Path(media_parts[4]).stem) is not None
+            )
+            valid_shape = legacy_mp4_shape or shared_hls_shape
         else:
             owner = f"composite-{product_id}-{preset_id}"
             valid_shape = (
@@ -2022,7 +2032,7 @@ def expired_remote_keys(remote: Mapping[str, int], now: dt.datetime) -> list[str
         valid_time, tier = parsed
         parts = Path(key).parts
         layer_id = parts[2] if len(parts) > 2 else ""
-        if not keep_layer_frame(valid_time, now, tier, layer_id):
+        if layer_id in UNPUBLISHED_LAYER_IDS or not keep_layer_frame(valid_time, now, tier, layer_id):
             expired.append(key)
     return sorted(expired)
 
@@ -2132,7 +2142,7 @@ def _retained_composite_generations(
     root: Path | None = None,
     modified_at: Mapping[str, dt.datetime] | None = None,
 ) -> set[str]:
-    """Choose the catalog current generation and its immediate predecessor."""
+    """Choose catalog-current generations plus any configured handoff reserve."""
     prefix = "composite-manifests/" + "/".join(group) + "/"
     values = set(generations)
     current = {
@@ -2167,12 +2177,9 @@ def expired_video_keys(
 ) -> list[str]:
     """Select unreachable video generations after a browser-safe grace.
 
-    For an active exact-composite profile, the catalog-current generation and
-    its immediate predecessor survive regardless of age, protecting one atomic
-    browser handoff. Legacy video profiles retain their newest two. A retired
-    profile with no catalog-referenced object keeps only the fifteen-minute browser
-    grace; otherwise old secondary profiles would occupy R2 indefinitely.
-    Catalog-referenced objects are always excluded from this post-commit pass.
+    Catalog-referenced generations always survive. Unreferenced generations are
+    removed after a short browser handoff grace; a retired profile with no current
+    catalog reference receives the same treatment.
     """
     desired = set(desired_keys)
     modifications = modified_at or {}
@@ -2205,10 +2212,9 @@ def expired_video_keys(
             if last_changed <= cutoff:
                 expired.update(key for key in keys if key not in desired)
 
-    # Exact-range MP4s live below range/rendition directories rather than the
-    # legacy flat generation directory. They are immutable dependencies of the
-    # retained manifests, so reachability plus a short browser handoff grace is
-    # both safer and dramatically smaller than retaining every rolling rewrite.
+    # Legacy exact-range MP4s live below range/rendition directories rather than
+    # the flat generation directory. New exact loops use shared HLS segments, but
+    # this keeps migration cleanup safe for already-published MP4s.
     for key in remote:
         if key in desired or not _is_exact_composite_media(key):
             continue
@@ -2362,9 +2368,9 @@ def expired_fast_composite_keys(
     """Select stale exact sidecars without listing the full R2 bucket.
 
     This is intentionally narrower than the regular reconciler: it considers
-    only immutable exact-range manifests and MP4s already recorded in the
-    successful-upload index.  The newly committed catalog generation and its
-    immediate predecessor are retained for every active preset.  A malformed
+    only immutable exact-range manifests and media already recorded in the
+    successful-upload index. The newly committed catalog generation is retained
+    for every active preset. A malformed
     or locally unavailable predecessor makes its whole media scope fail open,
     leaving the periodic authoritative reconciliation to decide it later.
     """
@@ -2687,10 +2693,9 @@ def publish(
                 now,
             )
             if safe_precommit:
-                # These are two-away immutable generations older than the
-                # browser grace. Removing them before the upload keeps the
-                # physical bucket peak at current+new rather than briefly
-                # storing three complete rolling MP4 generations.
+                # These are unreachable immutable generations older than the
+                # browser grace. Removing them before upload bounds the physical
+                # bucket peak while the current generation remains published.
                 client = client or boto3_client(config)
                 precommit_deleted = delete_objects(
                     client,
