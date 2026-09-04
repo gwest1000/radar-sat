@@ -950,6 +950,8 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("RADARSAT_VIDEO_ENABLED", video)
         self.assertIn('--range-hours "${range}"', video)
         self.assertIn('for candidate in 3 6 12 24', video)
+        self.assertNotIn("rapidRadar", video)
+        self.assertNotIn("newestRadarEpoch", video)
         self.assertIn("MAX_EXACT_WORKERS", video)
         self.assertIn("video-worker.lock", video)
         self.assertIn("publication-dirty", video)
