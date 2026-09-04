@@ -19,7 +19,6 @@ import radarsat.video as video_module
 from radarsat.composite_video import (
     _derive_rendition,
     _render_high_frame,
-    _with_recent_radar_timeline,
     build_composite_profile,
     prune_composite_frame_cache,
     prune_composite_sidecar_manifests,
@@ -74,7 +73,7 @@ def write_rgba(path: Path, colour: tuple[int, int, int, int], size: tuple[int, i
 
 
 class VideoSelectionTests(unittest.TestCase):
-    def test_recent_bc_timeline_follows_native_radar_and_holds_satellite(self) -> None:
+    def test_bc_video_timeline_remains_on_regular_satellite_slots(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
         satellite = [
             frame(f"frames/bc/eccc-geocolor/{minute}.png", base + dt.timedelta(minutes=minute))
@@ -104,13 +103,15 @@ class VideoSelectionTests(unittest.TestCase):
             10,
         )
         selected = _selected_satellite_frames(catalog, spec, 1, now=base + dt.timedelta(hours=1))
-        rapid = _with_recent_radar_timeline(catalog, spec, selected, 1)
-
         self.assertEqual(
-            [int((item.valid_time - base).total_seconds() // 60) for item in rapid],
-            list(range(0, 61, 6)),
+            [int((item.valid_time - base).total_seconds() // 60) for item in selected],
+            list(range(0, 61, 10)),
         )
-        self.assertEqual(rapid[1].source_valid_time, base)
+        self.assertEqual(selected[-1].source_valid_time, base + dt.timedelta(hours=1))
+        self.assertEqual(
+            [value["id"] for value in VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"]],
+            ["operational-default-v1"],
+        )
         self.assertEqual(COMPOSITE_VIDEO_CRF, 20)
 
     def test_regional_radar_accepts_scan_seconds_after_nominal_slot(self) -> None:
@@ -685,23 +686,13 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(set(presets[0]["optionalLayers"]), expected)
             self.assertEqual(
                 len(presets),
-                2 if product_id == "bc-south-coast-overlay" else 3
-                if product_id in {
+                3 if product_id in {
                     "bc-large-overlay",
                     "bc-northeast-overlay",
                     "north-america-overlay",
                 }
                 else 1,
             )
-        south_coast_presets = VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"]
-        self.assertEqual(
-            set(south_coast_presets[1]["optionalLayers"]),
-            {
-                *south_coast_presets[0]["optionalLayers"],
-                "model-mslp",
-                "model-hgt500",
-            },
-        )
 
     def test_hybrid_core_pilots_are_strict_recipe_prefixes(self) -> None:
         products = {str(product["id"]): product for product in PRODUCTS}

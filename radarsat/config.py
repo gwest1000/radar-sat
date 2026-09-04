@@ -808,20 +808,13 @@ for _product_id in VIDEO_HYBRID_CORE_PRODUCTS:
         },
     )
 
-# South Coast's common display intentionally omits model contours. Its full
-# preset differs from the core only by smoke and fire.
+# South Coast uses one regular ten-minute prebuilt loop. Optional model
+# contours remain available through the browser-composited fallback without
+# doubling the operational video workload.
 VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"] = (
     {
         "id": "operational-default-v1",
         "optionalLayers": _default_video_optional_layers("bc-south-coast-overlay"),
-    },
-    {
-        "id": "operational-model-contours-v1",
-        "optionalLayers": (
-            *_default_video_optional_layers("bc-south-coast-overlay"),
-            "model-mslp",
-            "model-hgt500",
-        ),
     },
 )
 

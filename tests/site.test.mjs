@@ -3,6 +3,26 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
+import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
+
+test("adds one combined live-edge frame after a regular timeline", () => {
+  const regular = [
+    { validTime: "2026-09-04T00:20:00Z", path: "20.png" },
+    { validTime: "2026-09-04T00:30:00Z", path: "30.png" },
+  ];
+  const result = appendLiveEdgeFrame(regular, [
+    "2026-09-04T00:36:00Z",
+    "2026-09-04T00:40:00Z",
+    "not-a-date",
+  ]);
+  assert.deepEqual(result.map((frame) => frame.validTime), [
+    "2026-09-04T00:20:00Z",
+    "2026-09-04T00:30:00Z",
+    "2026-09-04T00:40:00.000Z",
+  ]);
+  assert.equal(result[2].path, "30.png");
+  assert.equal(appendLiveEdgeFrame(regular, ["2026-09-04T00:30:00Z"]).length, 2);
+});
 
 test("holds the committed weather frame until its sequential overlay is ready", () => {
   const state = {
@@ -55,7 +75,8 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /product\.frameIntervalMinutes/);
   assert.match(viewer, /product\.dayFrameIntervalMinutes/);
   assert.match(viewer, /product\.archiveFrameIntervalMinutes/);
-  assert.match(viewer, /return playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.dayFrameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
+  assert.match(viewer, /const regularFrames = playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.dayFrameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
+  assert.match(viewer, /return appendLiveEdgeFrame\(regularFrames, candidateTimes\)/);
   assert.doesNotMatch(viewer, /Promise\.all\(loads\)/);
   assert.doesNotMatch(viewer, /lightningFlashLayerId|flashDisplayAge/);
   assert.match(viewer, /atOrBeforeSourceTime/);

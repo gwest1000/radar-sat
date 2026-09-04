@@ -59,80 +59,6 @@ COMPOSITE_FRAME_CACHE_MAX_AGE_HOURS = 36.0
 COMPOSITE_FRAME_CACHE_MAX_BYTES = 6_000_000_000
 COMPOSITE_LOCAL_GENERATIONS_TO_KEEP = 1
 COMPOSITE_MANIFEST_GRACE_HOURS = 0.25
-RAPID_RADAR_HOURS = 3
-RAPID_RADAR_CADENCE_MINUTES = 6
-
-
-def _with_recent_radar_timeline(
-    catalog: Mapping[str, Any],
-    spec: ProfileSpec,
-    selected: Sequence[SelectedFrame],
-    hours: int,
-) -> list[SelectedFrame]:
-    """Use native six-minute radar slots for the newest three hours."""
-    if spec.domain_id != "bc" or spec.track == "archive" or hours > 24:
-        return list(selected)
-    layers = catalog.get("domains", {}).get(spec.domain_id, {}).get("layers", {})
-    radar_frames = list(layers.get("radar-rain", {}).get("frames", []))
-    radar_times = sorted(
-        {
-            value
-            for frame in radar_frames
-            if (value := _frame_source_time(frame)) is not None
-        }
-    )
-    if len(radar_times) < 2:
-        return list(selected)
-    if selected and radar_times[-1] < selected[-1].valid_time:
-        return list(selected)
-    newest = radar_times[-1]
-    requested_start = newest - dt.timedelta(hours=hours)
-    rapid_start = max(requested_start, newest - dt.timedelta(hours=RAPID_RADAR_HOURS))
-    anchor_frames = list(layers.get(spec.layer_id, {}).get("frames", []))
-    native_frames = list(layers.get("raw-visir-native", {}).get("frames", []))
-    standard_frames = list(layers.get("raw-visir", {}).get("frames", []))
-    result = [frame for frame in selected if frame.valid_time < rapid_start]
-    previous_source_time = result[-1].source_valid_time if result else None
-    for valid_time in radar_times:
-        if valid_time < rapid_start or valid_time > newest:
-            continue
-        # Satellite changes at its own cadence and is intentionally held
-        # between observations while radar advances at native cadence.
-        satellite = _at_or_before(anchor_frames, valid_time, 35)
-        source_layer = spec.layer_id
-        if satellite is None:
-            satellite = _at_or_before(native_frames, valid_time, 35)
-            source_layer = "raw-visir-native"
-        if satellite is None:
-            satellite = _at_or_before(standard_frames, valid_time, 90)
-            source_layer = "raw-visir"
-        if satellite is None or not satellite.get("path"):
-            continue
-        source_valid_time = _frame_source_time(satellite)
-        if source_valid_time is None:
-            continue
-        if previous_source_time is not None and source_valid_time < previous_source_time:
-            continue
-        raw_source_times = satellite.get("sourceTimes")
-        source_times = (
-            {str(key): str(value) for key, value in raw_source_times.items()}
-            if isinstance(raw_source_times, Mapping)
-            else {}
-        )
-        result.append(
-            SelectedFrame(
-                valid_time=valid_time,
-                source_valid_time=source_valid_time,
-                source_times=source_times,
-                encoded_source_layer=source_layer,
-                source_path=str(satellite["path"]),
-                source_fetched_at=str(satellite.get("fetchedAt", "")),
-            )
-        )
-        previous_source_time = source_valid_time
-    return result
-
-
 @dataclass(frozen=True)
 class CompositeFrame:
     frame: SelectedFrame
@@ -1002,16 +928,6 @@ def build_composite_profile(
         max(requested_ranges),
         now=build_now,
     )
-    rapid_selected = _with_recent_radar_timeline(
-        catalog,
-        spec,
-        selected,
-        max(requested_ranges),
-    )
-    uses_rapid_radar = rapid_selected != selected
-    selected = rapid_selected
-    if uses_rapid_radar:
-        spec = replace(spec, cadence_minutes=RAPID_RADAR_CADENCE_MINUTES)
     selected = [
         frame
         for frame in selected

@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
+import { appendLiveEdgeFrame } from "./live-edge-timeline";
 import {
   VideoCanvasProxyLayer,
   VideoCompositeFramePlan,
@@ -2264,14 +2265,34 @@ export function RadarViewer() {
         )
       : liveEdgeDomain.layers[activeAnchorId]?.frames ?? [];
     if (!frames.length) return [];
-    return playbackFrames(
+    const regularFrames = playbackFrames(
       frames,
       effectiveRangeHours,
       product.frameIntervalMinutes,
       product.dayFrameIntervalMinutes,
       product.archiveFrameIntervalMinutes,
     );
-  }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, product]);
+    if (product.id !== "bc-south-coast-overlay" || effectiveRangeHours !== 3) {
+      return regularFrames;
+    }
+    const regionKey = REGIONAL_PRODUCT_KEYS[product.id];
+    const lightningRecipe = product.layers.find((recipe) => (
+      LIGHTNING_CONTROLLERS.has(recipe.id)
+      && isProductLayerEnabled(recipe, optionalLayers, product.layers)
+    ));
+    const candidateIds = [
+      regionKey ? `radar-rain-region-${regionKey}` : "radar-rain",
+      ...(lightningRecipe
+        ? [rasterLayerId(lightningRecipe.id, product, liveEdgeDomain, false)]
+        : []),
+    ];
+    const candidateTimes = candidateIds.flatMap((layerId) => {
+      const layerFrames = liveEdgeDomain.layers[layerId]?.frames ?? [];
+      const latest = layerFrames[layerFrames.length - 1];
+      return latest ? [actualSourceTime(layerId, latest), latest.validTime] : [];
+    });
+    return appendLiveEdgeFrame(regularFrames, candidateTimes);
+  }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, optionalLayers, product]);
   const compositeProfilePointers = product && videoLayerId
     ? catalog?.compositeProfiles?.[product.id]?.[videoLayerId]?.[videoTrack] ?? []
     : [];
