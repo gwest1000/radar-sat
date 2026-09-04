@@ -13,6 +13,8 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[1]
 RUN_CYCLE = PROJECT / "scripts" / "ops" / "run_cycle.zsh"
 RUN_VIDEO_SCHEDULER = PROJECT / "scripts" / "ops" / "run_video_scheduler.zsh"
+REQUEST_FULL_PUBLISH = PROJECT / "scripts" / "ops" / "request_full_publish.zsh"
+RUN_FULL_PUBLISHER = PROJECT / "scripts" / "ops" / "run_full_publisher.zsh"
 CONFIGURE_R2 = PROJECT / "scripts" / "configure_r2.py"
 
 
@@ -175,6 +177,111 @@ class OpsScriptTests(unittest.TestCase):
             self.assertIn("--product bc-large-overlay", hybrid_calls[0][1])
             self.assertIn("--range-hours 3", hybrid_calls[0][1])
             self.assertTrue(all("--preset " not in line for _, line in exact_calls))
+
+            second = subprocess.run(
+                ["/bin/zsh", str(RUN_VIDEO_SCHEDULER)],
+                cwd=PROJECT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(second.returncode, 0, second.stderr)
+            all_hybrid_calls = [
+                line
+                for line in calls.read_text().splitlines()
+                if "--preset weather-" in line
+            ]
+            self.assertEqual(len(all_hybrid_calls), 2)
+            self.assertIn("--preset weather-core-v1", all_hybrid_calls[0])
+            self.assertIn("--preset weather-smoke-core-v1", all_hybrid_calls[1])
+
+    def test_full_publisher_coalesces_to_the_strongest_requested_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state = root / "state"
+            calls = root / "publish-calls.log"
+            publisher = root / "publisher.zsh"
+            publisher.write_text(
+                "#!/bin/zsh\n"
+                'print -r -- "$*" >> "${RADARSAT_TEST_CALLS}"\n'
+            )
+            publisher.chmod(0o755)
+            environment = os.environ.copy()
+            environment.update({
+                "RADARSAT_STATE_ROOT": str(state),
+                "RADARSAT_OUTPUT_ROOT": str(root / "output"),
+                "RADARSAT_ENV_FILE": str(root / "missing.env"),
+                "RADARSAT_FULL_PUBLISH_KICKSTART": "0",
+                "RADARSAT_FULL_PUBLISH_DRIVER": str(publisher),
+                "RADARSAT_TEST_CALLS": str(calls),
+            })
+            for profile in ("fast-existing", "fast-video"):
+                request = subprocess.run(
+                    ["/bin/zsh", str(REQUEST_FULL_PUBLISH), profile, "test"],
+                    cwd=PROJECT,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(request.returncode, 0, request.stderr)
+
+            result = subprocess.run(
+                ["/bin/zsh", str(RUN_FULL_PUBLISHER)],
+                cwd=PROJECT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                calls.read_text().splitlines(),
+                ["--fast --whole-frame-only --recovery-hours 24"],
+            )
+            self.assertEqual(
+                list((state / "state" / "full-publish-requests").glob("*.request")),
+                [],
+            )
+
+    def test_full_publisher_retains_requests_after_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state = root / "state"
+            publisher = root / "publisher.zsh"
+            publisher.write_text("#!/bin/zsh\nexit 9\n")
+            publisher.chmod(0o755)
+            environment = os.environ.copy()
+            environment.update({
+                "RADARSAT_STATE_ROOT": str(state),
+                "RADARSAT_OUTPUT_ROOT": str(root / "output"),
+                "RADARSAT_ENV_FILE": str(root / "missing.env"),
+                "RADARSAT_FULL_PUBLISH_KICKSTART": "0",
+                "RADARSAT_FULL_PUBLISH_DRIVER": str(publisher),
+            })
+            subprocess.run(
+                ["/bin/zsh", str(REQUEST_FULL_PUBLISH), "reconcile", "test"],
+                cwd=PROJECT,
+                env=environment,
+                check=True,
+            )
+
+            result = subprocess.run(
+                ["/bin/zsh", str(RUN_FULL_PUBLISHER)],
+                cwd=PROJECT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(
+                len(list((state / "state" / "full-publish-requests").glob("*.request"))),
+                1,
+            )
 
     def test_video_scheduler_prioritizes_ranges_coalesces_and_prunes_last(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -924,6 +1031,15 @@ class OpsScriptTests(unittest.TestCase):
             PROJECT / "ops" / "com.greg.radar-sat.observations.plist.template"
         ).read_text()
         install = (PROJECT / "scripts" / "ops" / "install_launchd.zsh").read_text()
+        request_publish = (
+            PROJECT / "scripts" / "ops" / "request_full_publish.zsh"
+        ).read_text()
+        full_publisher = (
+            PROJECT / "scripts" / "ops" / "run_full_publisher.zsh"
+        ).read_text()
+        full_publisher_plist = (
+            PROJECT / "ops" / "com.greg.radar-sat.full-publisher.plist.template"
+        ).read_text()
 
         self.assertIn("backfill_westwx_satellite.py", satellite)
         self.assertIn("backfill_noaa_star_geocolor.py", satellite)
@@ -981,9 +1097,9 @@ class OpsScriptTests(unittest.TestCase):
         self.assertNotIn("backfill_five_minute_bc_satellite.py", satellite)
         self.assertNotIn("backfill_native_bc_satellite.py", satellite)
         self.assertNotIn("scripts/run_ingest.py", satellite)
-        self.assertIn("publish_locked.zsh", satellite)
+        self.assertIn("request_full_publish.zsh", satellite)
         self.assertIn(
-            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 24",
+            "fast-existing satellite-cycle",
             satellite,
         )
         self.assertNotIn("build_raster_tiles.py", satellite)
@@ -994,7 +1110,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("--sector pacus", five_minute)
         self.assertIn("RADARSAT_NOAA_STAR_PACUS_MAX_FRAMES:-4", five_minute)
         self.assertIn(
-            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 24",
+            "fast-existing five-minute-satellite-cycle",
             five_minute,
         )
         self.assertNotIn("build_raster_tiles.py", five_minute)
@@ -1003,9 +1119,9 @@ class OpsScriptTests(unittest.TestCase):
 
         self.assertIn("RADARSAT_RAW_SAT_ENABLED=0", observations)
         self.assertIn("--spool-mode only", observations)
-        self.assertIn("publish_locked.zsh", observations)
+        self.assertIn("request_full_publish.zsh", observations)
         self.assertIn(
-            "publish_locked.zsh\" --fast --existing-video-only --whole-frame-only --recovery-hours 24",
+            "fast-existing observation-cycle",
             observations,
         )
         self.assertIn("<string>10</string>", observation_plist)
@@ -1019,7 +1135,7 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("build_raster_tiles.py", archive)
         self.assertIn('RADARSAT_WEB_TILES_ENABLED:-0', archive)
         self.assertIn(
-            'publish_locked.zsh" --whole-frame-only --recovery-hours 24',
+            "reconcile archive-cycle",
             archive,
         )
         self.assertLess(
@@ -1030,13 +1146,12 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("RADARSAT_MODEL_CONTOURS_ENABLED", model_contours)
         self.assertIn("RADARSAT_ECMWF_DATA_ROOT", model_contours)
         self.assertIn("RADARSAT_HRDPS_CONTOUR_RECOVERY_HOURS:-0", model_contours)
-        self.assertIn("RADARSAT_MODEL_PUBLISH_LOCK_WAIT_SECONDS:-900", model_contours)
         self.assertIn("model-contour-cycle.lock", model_contours)
         self.assertNotIn("try_acquire_heavy_satellite_lock", model_contours)
         self.assertNotIn("scripts/run_ingest.py", model_contours)
-        self.assertIn("publish_locked.zsh", model_contours)
+        self.assertIn("request_full_publish.zsh", model_contours)
         self.assertIn(
-            "--fast --existing-video-only --whole-frame-only --recovery-hours 24",
+            "fast-existing model-contour-cycle",
             model_contours,
         )
         self.assertIn("<integer>1800</integer>", model_contours_plist)
@@ -1047,6 +1162,11 @@ class OpsScriptTests(unittest.TestCase):
         self.assertIn("RADARSAT_PUBLISH_LOCK_WAIT_SECONDS:-300", publish_locked)
         self.assertIn("/usr/bin/lockf -k -t", publish_locked)
         self.assertNotIn("LOCK_OWNER", publish_locked)
+        self.assertIn("full-publisher", install)
+        self.assertIn("fast-existing|fast-video|reconcile|full", request_publish)
+        self.assertIn("/usr/bin/lockf -t 0", full_publisher)
+        self.assertIn("RADARSAT_FULL_PUBLISH_MAX_DRAIN_PASSES:-2", full_publisher)
+        self.assertIn("<integer>15</integer>", full_publisher_plist)
         self.assertIn(
             "lightning-edge radar-edge model-contours video-scheduler",
             install,

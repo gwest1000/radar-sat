@@ -17,7 +17,7 @@ CATALOG_PATH="${OUTPUT_ROOT}/catalog.json"
 COMPOSITE_BUILDER="${RADARSAT_COMPOSITE_VIDEO_BUILDER:-${PROJECT_ROOT}/scripts/build_composite_video.py}"
 LEGACY_BUILDER="${RADARSAT_LEGACY_VIDEO_BUILDER:-${PROJECT_ROOT}/scripts/build_satellite_video.py}"
 CATALOG_WRITER="${RADARSAT_VIDEO_CATALOG_WRITER:-${PROJECT_ROOT}/scripts/write_catalog.py}"
-PUBLISHER="${RADARSAT_VIDEO_PUBLISHER:-${PROJECT_ROOT}/scripts/ops/publish_locked.zsh}"
+PUBLISHER="${RADARSAT_VIDEO_PUBLISHER:-${PROJECT_ROOT}/scripts/ops/request_full_publish.zsh}"
 MAX_RUNTIME_SECONDS="${RADARSAT_VIDEO_SCHEDULER_MAX_RUNTIME_SECONDS:-3300}"
 TERMINATE_GRACE_SECONDS="${RADARSAT_VIDEO_TERMINATE_GRACE_SECONDS:-15}"
 KILL_REAP_SECONDS="${RADARSAT_VIDEO_KILL_REAP_SECONDS:-5}"
@@ -686,7 +686,7 @@ run_driver_with_deadline() {
 
 publish_dirty() {
   [[ -e "${DIRTY_FILE}" ]] || return 0
-  log_message "Publishing completed video batches."
+  log_message "Queuing completed video batches for publication."
   if ! run_driver_with_deadline \
     "catalog generation" \
     "${CATALOG_WRITER}" --output-root "${OUTPUT_ROOT}"; then
@@ -694,9 +694,9 @@ publish_dirty() {
     return 1
   fi
   if ! run_with_deadline \
-    "R2 publication" \
-    "${PUBLISHER}" --fast --whole-frame-only --recovery-hours 24; then
-    log_message "R2 publication failed; completed media will be retried without rebuilding."
+    "R2 publication request" \
+    "${PUBLISHER}" fast-video video-scheduler; then
+    log_message "R2 publication request failed; completed media will be retried without rebuilding."
     return 1
   fi
   /bin/rm -f "${DIRTY_FILE}"
@@ -758,9 +758,17 @@ run_hybrid_worker() {
 
 run_one_hybrid_profile() {
   local now_epoch="$1" range product preset token task_id track worker_result=0 worker_pid=0
+  local selected_preset="" selected_range="" selected_product="" selected_token=""
+  local selected_task_id="" selected_success=0 preset_served=0 selected_preset_served=0
+  local task_success=0
   local -a products
   [[ "${HYBRID_CORE_ENABLED}" == "1" ]] || return 2
+  # Pick between hybrid families by the time each family was last served, then
+  # pick its stalest due task. This prevents the frequently changing weather
+  # family from indefinitely starving smoke while retaining deterministic
+  # oldest-success ordering within each family.
   for preset in "${HYBRID_CORE_PRESETS[@]}"; do
+    preset_served="$(read_epoch "${SCHEDULER_STATE}/$(state_key "hybrid-family-${preset}").served-epoch")"
     for range in 3 6 12 24; do
       products=("${(@f)$(hybrid_range_products "${range}")}")
       for product in "${products[@]}"; do
@@ -775,27 +783,47 @@ run_one_hybrid_profile() {
           || ! batch_due "${range}" "${token}" "${now_epoch}" "${task_id}"; then
           continue
         fi
-        track="$(range_track "${range}")"
-        mark_attempt "${task_id}" "${now_epoch}"
-        mark_dirty
-        log_message \
-          "Building lower-priority ${range}h ${preset} for ${product}."
-        run_hybrid_worker "${range}" "${track}" "${product}" "${preset}"
-        worker_pid="${STARTED_COMMAND_PID}"
-        ACTIVE_VIDEO_PIDS=("${worker_pid}")
-        arm_deadline_watchdog \
-          "${product} ${range}h ${preset} worker" "${worker_pid}"
-        wait "${worker_pid}" || worker_result=$?
-        finish_deadline_watchdog
-        ACTIVE_VIDEO_PIDS=()
-        if (( worker_result == 0 )); then
-          mark_success "${task_id}" "${token}" "${now_epoch}"
+        task_success="$(read_epoch "${SCHEDULER_STATE}/$(state_key "${task_id}").success-epoch")"
+        if [[ -z "${selected_preset}" ]] \
+          || (( preset_served < selected_preset_served )) \
+          || { (( preset_served == selected_preset_served )) \
+            && [[ "${preset}" == "${selected_preset}" ]] \
+            && (( task_success < selected_success )); }; then
+          selected_preset="${preset}"
+          selected_preset_served="${preset_served}"
+          selected_range="${range}"
+          selected_product="${product}"
+          selected_token="${token}"
+          selected_task_id="${task_id}"
+          selected_success="${task_success}"
         fi
-        return "${worker_result}"
       done
     done
   done
-  return 2
+  [[ -n "${selected_preset}" ]] || return 2
+
+  track="$(range_track "${selected_range}")"
+  mark_attempt "${selected_task_id}" "${now_epoch}"
+  atomic_state \
+    "${SCHEDULER_STATE}/$(state_key "hybrid-family-${selected_preset}").served-epoch" \
+    "${now_epoch}"
+  mark_dirty
+  log_message \
+    "Building lower-priority ${selected_range}h ${selected_preset} for ${selected_product}."
+  run_hybrid_worker \
+    "${selected_range}" "${track}" "${selected_product}" "${selected_preset}"
+  worker_pid="${STARTED_COMMAND_PID}"
+  ACTIVE_VIDEO_PIDS=("${worker_pid}")
+  arm_deadline_watchdog \
+    "${selected_product} ${selected_range}h ${selected_preset} worker" "${worker_pid}"
+  wait "${worker_pid}" || worker_result=$?
+  finish_deadline_watchdog
+  ACTIVE_VIDEO_PIDS=()
+  if (( worker_result == 0 )); then
+    mark_success \
+      "${selected_task_id}" "${selected_token}" "${now_epoch}"
+  fi
+  return "${worker_result}"
 }
 
 typeset -gA SELECTED_TOKENS

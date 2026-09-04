@@ -8,7 +8,7 @@ AGENT_DIR="${HOME}/Library/LaunchAgents"
 
 mkdir -p "${AGENT_DIR}" "${PROJECT_ROOT}/logs" "${PROJECT_ROOT}/var/status"
 
-available=(ingest five-minute observations msc-satellite-edge lightning-edge radar-edge model-contours video-scheduler archive health)
+available=(full-publisher ingest five-minute observations msc-satellite-edge lightning-edge radar-edge model-contours video-scheduler archive health)
 selected=("${available[@]}")
 if (( $# )); then
   selected=()

@@ -95,4 +95,5 @@ fi
 # has its own worker and must never hold the real-time satellite ingest lock.
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
 release_heavy_satellite_lock
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast --existing-video-only --whole-frame-only --recovery-hours 24
+"${PROJECT_ROOT}/scripts/ops/request_full_publish.zsh" \
+  fast-existing satellite-cycle

@@ -2,14 +2,16 @@
 
 Independent three-minute full-disk and five-minute-BC satellite workers, a
 five-minute observation worker, an independent half-hour model-contour worker,
-and a half-hour Pacific archive worker each use PID locks. Each completed run
-atomically rebuilds `catalog.json`, publishes its
-referenced assets through the shared R2 lock, commits the complete catalog, then
-commits the compact `catalog-index.json` discovery document last. Browsers poll
-the index and fetch the complete image history only for a compatibility or
-failure fallback.
-The publisher uses macOS `lockf` for an OS-held, FIFO-ordered lock; process exit
-releases it automatically and stale-lock recovery cannot admit two publishers.
+and a half-hour Pacific archive worker each use PID locks. Completed runs
+atomically rebuild `catalog.json`, enqueue a durable typed publication request,
+and return. The dedicated `full-publisher` agent merges overlapping requests,
+uploads referenced assets, commits the complete catalog, then commits the
+compact `catalog-index.json` discovery document last. Requests that arrive
+during an upload are drained in one bounded follow-up pass; failures retain the
+request files for the next retry. Browsers poll the index and fetch the complete
+image history only for a compatibility or failure fallback.
+The final publisher uses macOS `lockf` for an OS-held lock; process exit releases
+it automatically and stale-lock recovery cannot admit two publishers.
 Raw pruning runs only after observation rendering; any rejected source files
 are explicitly preserved for retry and surfaced by health checks. Expired remote
 objects are deleted only after the catalog commit and only when their timestamps
@@ -44,14 +46,12 @@ fast publications expose a 24-hour recovery catalog, so all 6-, 12-, and
 24-hour choices remain available even if video decoding is unsupported.
 
 HRDPS and ECMWF model contours have their own `model-contours` agent and lock.
-It refreshes and publishes every 30 minutes without waiting for the slow North
+It refreshes and queues publication every 30 minutes without waiting for the slow North
 Pacific satellite blend, so satellite lock contention cannot make the model
 overlays age out of the operational display. Scheduled runs prioritize the
 newest valid hour and let the archive accumulate naturally; set
 `RADARSAT_MODEL_CONTOUR_RECOVERY_HOURS` only when an explicit historical repair
-is needed. The worker can wait up to 15 minutes behind an in-progress atomic R2
-reconciliation instead of discarding a completed render at the generic
-five-minute publisher timeout.
+is needed.
 
 ## Display-resolution H.264 loops
 
@@ -88,13 +88,15 @@ allowing the same upper lightning, fire and combined-contour layers to be
 mixed over a prebuilt satellite/radar/static base whenever smoke is disabled.
 The hybrid cores are built explicitly in a
 lower-priority scheduler lane and therefore cannot delay exact operational
-loops. Seven-day and unsupported layer combinations retain the HLS or lossless
+loops. The scheduler alternates due weather and smoke families by their
+last-served times, then chooses the stalest task inside the selected family, so
+frequent weather updates cannot starve smoke. Seven-day and unsupported layer combinations retain the HLS or lossless
 image fallback until the later CMAF and hybrid-core expansion.
 
 One bounded video scheduler serializes live, day and archive media work so the
 jobs cannot contend for the same source tree or delete one another's inputs. It
 builds exact ranges first, using at most two product workers in parallel on the
-Mac, publishes each urgent range batch, then considers one lower-priority
+Mac, queues each urgent range batch for coalesced publication, then considers one lower-priority
 hybrid or archive unit. It refreshes MSC GeoColor for the BC family, NOAA VIS/IR
 for North America, and NOAA VIS/IR for the two Pacific products. A separate
 one-minute MSC edge job renders and publishes only the newest Datamart GeoColor
@@ -158,13 +160,13 @@ scripts/ops/install_launchd.zsh
 Pass one or more agent names to update only those jobs, for example:
 
 ```bash
-scripts/ops/install_launchd.zsh msc-satellite-edge lightning-edge radar-edge model-contours video-day video-archive
+scripts/ops/install_launchd.zsh full-publisher msc-satellite-edge lightning-edge radar-edge model-contours video-scheduler
 ```
 
-The live video job retains the native 10/20-minute cadence for 3-, 6-, and
-12-hour loops. The independent `video-day` job builds the 24-hour loop every
-30 minutes, while `video-archive` retains the hourly seven-day loop. Separate
-jobs keep the longer products from delaying the operational live refresh.
+The video scheduler retains the native 10/20-minute cadence for 3-, 6-, and
+12-hour loops, builds 24-hour loops at 30-minute cadence, and retains the hourly
+seven-day products. Exact short ranges always run before a bounded hybrid or
+archive unit.
 
 The production bucket already has site CORS and a nine-day `frames/` lifecycle
 backstop. Bucket configuration is a one-time control-plane operation. If the

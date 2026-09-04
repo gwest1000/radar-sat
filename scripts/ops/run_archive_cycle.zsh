@@ -109,4 +109,5 @@ fi
 # Long loops are delivered by immutable video manifests. Keep only a recent
 # whole-frame image fallback in R2 while retaining the full source archive on
 # local disk for rebuilding those loops.
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --whole-frame-only --recovery-hours 24
+"${PROJECT_ROOT}/scripts/ops/request_full_publish.zsh" \
+  reconcile archive-cycle

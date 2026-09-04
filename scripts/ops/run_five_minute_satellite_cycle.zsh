@@ -73,4 +73,5 @@ if [[ "${RADARSAT_NOAA_STAR_GEOCOLOR_ENABLED:-${RADARSAT_WESTWX_SATELLITE_ENABLE
 fi
 
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}"
-"${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" --fast --existing-video-only --whole-frame-only --recovery-hours 24
+"${PROJECT_ROOT}/scripts/ops/request_full_publish.zsh" \
+  fast-existing five-minute-satellite-cycle

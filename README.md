@@ -142,6 +142,9 @@ GitHub Pages static viewer ◀────────────────�
   does not rebuild the same multi-million-point resampling tree.
 - R2 publication is transactional: assets upload concurrently, the complete
   compatibility catalog commits, then `catalog-index.json` commits last.
+- Full-catalog producers enqueue durable publication requests and return. A
+  dedicated worker coalesces overlapping requests, while the latency-sensitive
+  radar/lightning live-edge publisher remains independent.
 - The publisher warns at 6.5 GB and refuses storage growth above 8 GB.
 - R2 lifecycle rules expire observational frames, metadata, and video media
   after 9 days as a failure backstop.

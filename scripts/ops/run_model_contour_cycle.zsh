@@ -68,9 +68,8 @@ publish_status=0
 "${PYTHON_BIN}" "${PROJECT_ROOT}/scripts/write_catalog.py" --output-root "${OUTPUT_ROOT}" \
   || publish_status=$?
 if (( publish_status == 0 )); then
-  RADARSAT_PUBLISH_LOCK_WAIT_SECONDS="${RADARSAT_MODEL_PUBLISH_LOCK_WAIT_SECONDS:-900}" \
-    "${PROJECT_ROOT}/scripts/ops/publish_locked.zsh" \
-    --fast --existing-video-only --whole-frame-only --recovery-hours 24 \
+  "${PROJECT_ROOT}/scripts/ops/request_full_publish.zsh" \
+    fast-existing model-contour-cycle \
     || publish_status=$?
 fi
 if (( publish_status != 0 )); then
