@@ -15,6 +15,7 @@ from radarsat.hrdps_contours import (
     available_runs,
     crop_field_to_viewport,
     model_filename,
+    model_url,
     render_contours,
     significant_centres,
     update_recent,
@@ -37,6 +38,15 @@ class HrdpsContourTests(unittest.TestCase):
         self.assertEqual((height.lower_colour, height.upper_colour), ("#c98735", "#b95750"))
         self.assertGreater(height.label_size, 7.2)
         self.assertGreater(mslp.label_size, 6.4)
+
+    def test_model_url_uses_dated_tree_across_utc_rollover(self) -> None:
+        height = FIELD_STYLES[0]
+        self.assertEqual(
+            model_url("20260903T18Z", 8, height),
+            "https://dd.weather.gc.ca/20260903/WXO-DD/model_hrdps/continental/"
+            "2.5km/18/008/"
+            "20260903T18Z_MSC_HRDPS_HGT_ISBL_0500_RLatLon0.0225_PT008H.grib2",
+        )
 
     def test_newest_covering_run_is_preferred(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

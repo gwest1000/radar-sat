@@ -76,6 +76,8 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /product\.archiveFrameIntervalMinutes/);
   assert.match(viewer, /const regularFrames = playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.dayFrameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
   assert.match(viewer, /return appendLiveEdgeFrame\(regularFrames, candidateTimes, 3 \* 60\)/);
+  assert.match(viewer, /validTime: lastPlan\.frame\.validTime/);
+  assert.match(viewer, /composeLayers\([\s\S]*?selectionAnchor/);
   assert.doesNotMatch(viewer, /Promise\.all\(loads\)/);
   assert.doesNotMatch(viewer, /lightningFlashLayerId|flashDisplayAge/);
   assert.match(viewer, /atOrBeforeSourceTime/);

@@ -3120,17 +3120,26 @@ export function RadarViewer() {
     if (!fresher || !Number.isFinite(targetTime)) {
       return { active: false, anchor: undefined, layers: [] as ComposedLayer[] };
     }
-    const edgeAnchor: Frame = {
+    const selectionAnchor: Frame = {
       ...videoAnchorFrames[videoAnchorFrames.length - 1],
       validTime: new Date(targetTime).toISOString(),
     };
+    // The hot edge replaces the final video slot rather than adding another
+    // media sample. Keep that slot's regular presentation time so the visible
+    // timeline never jumps from (for example) 02:20 straight to 02:54 merely
+    // because radar arrived ahead of the next video rebuild. Per-layer source
+    // clocks below remain truthful and show the newer observation times.
+    const displayAnchor: Frame = {
+      ...selectionAnchor,
+      validTime: lastPlan.frame.validTime,
+    };
     return {
       active: true,
-      anchor: edgeAnchor,
+      anchor: displayAnchor,
       layers: composeLayers(
         product,
         liveEdgeDomain,
-        edgeAnchor,
+        selectionAnchor,
         catalogBase,
         optionalLayers,
         false,

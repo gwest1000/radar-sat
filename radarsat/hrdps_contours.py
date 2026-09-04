@@ -32,7 +32,7 @@ from .paths import sibling_project_path
 
 UTC = dt.timezone.utc
 RUN_RE = re.compile(r"^\d{8}T(?:00|06|12|18)Z$")
-BASE_URL = "https://dd.weather.gc.ca/today/model_hrdps/continental/2.5km"
+DATAMART_ROOT = "https://dd.weather.gc.ca"
 GRID_TAG = "RLatLon0.0225"
 RENDER_VERSION = 4
 SOUTH_COAST_STYLE_VERSION = 2
@@ -134,6 +134,24 @@ def model_filename(stamp: str, fhour: int, style: FieldStyle) -> str:
     )
 
 
+def model_url(stamp: str, fhour: int, style: FieldStyle) -> str:
+    """Return the dated Datamart URL for an HRDPS field.
+
+    The convenient ``/today`` alias rolls over at 00 UTC.  The most recent
+    usable model at that time is normally the previous day's 18 UTC cycle, so
+    using the alias makes its later forecast hours disappear for several
+    hours.  ECCC retains dated trees for 30 days; they are stable across the
+    UTC boundary and are therefore the operational source of truth here.
+    """
+    date = stamp[:8]
+    cycle = stamp[9:11]
+    filename = model_filename(stamp, fhour, style)
+    return (
+        f"{DATAMART_ROOT}/{date}/WXO-DD/model_hrdps/continental/2.5km/"
+        f"{cycle}/{fhour:03d}/{filename}"
+    )
+
+
 def model_path(data_root: Path, stamp: str, fhour: int, style: FieldStyle) -> Path:
     return data_root / stamp / f"{fhour:03d}" / model_filename(stamp, fhour, style)
 
@@ -192,12 +210,10 @@ def ensure_fields(
     download: bool,
 ) -> dict[str, Path]:
     paths: dict[str, Path] = {}
-    cycle = stamp[9:11]
     for style in FIELD_STYLES:
         path = model_path(data_root, stamp, fhour, style)
         if not path.is_file() and download:
-            filename = model_filename(stamp, fhour, style)
-            _download(f"{BASE_URL}/{cycle}/{fhour:03d}/{filename}", path)
+            _download(model_url(stamp, fhour, style), path)
         if not path.is_file():
             raise FileNotFoundError(path)
         paths[style.layer_id] = path
