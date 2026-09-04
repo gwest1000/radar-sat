@@ -5,6 +5,7 @@ type TimedFrame = {
 export function appendLiveEdgeFrame<T extends TimedFrame>(
   frames: readonly T[],
   candidateTimes: readonly string[],
+  maxWindowMinutes?: number,
 ): T[] {
   if (!frames.length) return [];
   const newest = candidateTimes.reduce((current, value) => {
@@ -16,11 +17,14 @@ export function appendLiveEdgeFrame<T extends TimedFrame>(
   if (!Number.isFinite(newest) || !Number.isFinite(lastTime) || newest <= lastTime + 1_000) {
     return [...frames];
   }
-  return [
+  const combined = [
     ...frames,
     {
       ...last,
       validTime: new Date(newest).toISOString(),
     },
   ];
+  if (!maxWindowMinutes || maxWindowMinutes <= 0) return combined;
+  const cutoff = newest - maxWindowMinutes * 60_000;
+  return combined.filter((frame) => Date.parse(frame.validTime) >= cutoff);
 }

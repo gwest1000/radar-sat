@@ -14,13 +14,12 @@ test("adds one combined live-edge frame after a regular timeline", () => {
     "2026-09-04T00:36:00Z",
     "2026-09-04T00:40:00Z",
     "not-a-date",
-  ]);
+  ], 15);
   assert.deepEqual(result.map((frame) => frame.validTime), [
-    "2026-09-04T00:20:00Z",
     "2026-09-04T00:30:00Z",
     "2026-09-04T00:40:00.000Z",
   ]);
-  assert.equal(result[2].path, "30.png");
+  assert.equal(result[1].path, "30.png");
   assert.equal(appendLiveEdgeFrame(regular, ["2026-09-04T00:30:00Z"]).length, 2);
 });
 
@@ -76,7 +75,7 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /product\.dayFrameIntervalMinutes/);
   assert.match(viewer, /product\.archiveFrameIntervalMinutes/);
   assert.match(viewer, /const regularFrames = playbackFrames\([\s\S]*?product\.frameIntervalMinutes,[\s\S]*?product\.dayFrameIntervalMinutes,[\s\S]*?product\.archiveFrameIntervalMinutes/);
-  assert.match(viewer, /return appendLiveEdgeFrame\(regularFrames, candidateTimes\)/);
+  assert.match(viewer, /return appendLiveEdgeFrame\(regularFrames, candidateTimes, 3 \* 60\)/);
   assert.doesNotMatch(viewer, /Promise\.all\(loads\)/);
   assert.doesNotMatch(viewer, /lightningFlashLayerId|flashDisplayAge/);
   assert.match(viewer, /atOrBeforeSourceTime/);

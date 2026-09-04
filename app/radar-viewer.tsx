@@ -2291,7 +2291,7 @@ export function RadarViewer() {
       const latest = layerFrames[layerFrames.length - 1];
       return latest ? [actualSourceTime(layerId, latest), latest.validTime] : [];
     });
-    return appendLiveEdgeFrame(regularFrames, candidateTimes);
+    return appendLiveEdgeFrame(regularFrames, candidateTimes, 3 * 60);
   }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, optionalLayers, product]);
   const compositeProfilePointers = product && videoLayerId
     ? catalog?.compositeProfiles?.[product.id]?.[videoLayerId]?.[videoTrack] ?? []
