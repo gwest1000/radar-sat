@@ -1957,6 +1957,7 @@ export function RadarViewer() {
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [viewsMenuOpen, setViewsMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
   const [loadedVideoManifest, setLoadedVideoManifest] = useState<VideoLoopManifest | null>(null);
@@ -4255,16 +4256,32 @@ export function RadarViewer() {
 
         <aside className="legend-rail" aria-label="Map legends">
           <div className="layer-toolbar">
-            <details className="prebuilt-selector">
-              <summary className="layers-summary">
+            <div className={`prebuilt-selector${viewsMenuOpen ? " is-open" : ""}`}
+              onPointerEnter={(event) => {
+                if (event.pointerType !== "mouse") return;
+                setLayersMenuOpen(false);
+                setViewsMenuOpen(true);
+              }}
+              onMouseLeave={() => setViewsMenuOpen(false)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setViewsMenuOpen(false);
+              }}
+            >
+              <button className="layers-summary" type="button" aria-expanded={viewsMenuOpen}
+                aria-controls="published-views"
+                onClick={() => {
+                  setLayersMenuOpen(false);
+                  setViewsMenuOpen((open) => !open);
+                }}
+              >
                 <span className="layers-summary-heading">
-                  <span className="selector-label">Prebuilt combos</span>
+                  <span className="selector-label">Views</span>
                   <span className="layers-count">{prebuiltCombos.length}</span>
                 </span>
                 <span className="layers-chevron" aria-hidden="true">⌄</span>
-              </summary>
-              <div className="prebuilt-popover" role="group" aria-label="Published prebuilt combinations">
-                <div className="layers-popover-heading"><span>Prebuilt combos</span><span>{product.title}</span></div>
+              </button>
+              <div id="published-views" className="layers-popover prebuilt-popover" role="group" aria-label="Published prebuilt combinations">
+                <div className="layers-popover-heading"><span>Views</span><span>{product.title}</span></div>
                 <p>Choose a combo to set its layers and duration. Core loops allow extra layers above the video.</p>
                 {prebuiltCombos.length === 0 && <p>No prebuilt combos are published for this region. Layers remain available.</p>}
                 <div className="prebuilt-combo-list">
@@ -4272,9 +4289,9 @@ export function RadarViewer() {
                     const selected = anchor === activeAnchorId && pointer.rangeHours === effectiveRangeHours
                       && sameLayerSet(enabledVideoLayerIds, pointer.bakedLayerIds ?? pointer.layerIds);
                     return <button type="button" className="prebuilt-combo" key={`${anchor}/${pointer.rangeHours}/${pointer.presetId}`}
-                      aria-pressed={selected} onClick={(event) => {
+                      aria-pressed={selected} onClick={() => {
                         selectPrebuiltCombo(pointer);
-                        event.currentTarget.closest("details")?.removeAttribute("open");
+                        setViewsMenuOpen(false);
                       }}>
                       <strong>{pointer.rangeHours === 168 ? "7 days" : `${pointer.rangeHours} hours`} · {pointer.compositeKind === "hybrid-prefix" ? "Prebuilt core" : "Full loop"}{selected ? " · Selected" : ""}</strong>
                       <span>{labels.join(" + ")}</span>
@@ -4283,7 +4300,7 @@ export function RadarViewer() {
                   })}
                 </div>
               </div>
-            </details>
+            </div>
             {optional.length > 0 && (
               <div
                 className={`layer-selector${layersMenuOpen ? " is-open" : ""}`}
@@ -4300,18 +4317,19 @@ export function RadarViewer() {
                   type="button"
                   aria-expanded={layersMenuOpen}
                   onClick={() => {
+                    setViewsMenuOpen(false);
                     setLayersMenuOpen((open) => !open);
                   }}
                 >
                   <span className="layers-summary-heading">
-                    <span className="selector-label">Layers</span>
+                    <span className="selector-label">Add/Remove Layers</span>
                     <span className="layers-count">{activeLayerLabels.length} on</span>
                   </span>
                   <span className="layers-chevron" aria-hidden="true">⌄</span>
                 </button>
                 <div className="layers-popover" role="group" aria-label="Overlay layers">
                   <div className="layers-popover-heading">
-                    <span>Layers</span>
+                    <span>Add/Remove Layers</span>
                     <span>{activeLayerLabels.length} active</span>
                   </div>
                   <div className="sidebar-layer-controls">
