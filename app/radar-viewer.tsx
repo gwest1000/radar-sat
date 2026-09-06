@@ -27,6 +27,7 @@ import {
   exactCompositeManifest,
   loadCompositeLoopManifest,
   loadVideoLoopManifest,
+  parseCompositeProfilePointer,
   matchingCompositeProfile,
   matchingHybridCompositeProfile,
   selectVideoFrames,
@@ -279,14 +280,6 @@ const MARKER_CACHE_LIMIT = 96;
 const IMAGE_LOAD_TIMEOUT_MS = 10_000;
 const PLAYBACK_IMAGE_RETRIES = 2;
 const PLAYBACK_IMAGE_RETRY_DELAY_MS = 240;
-const PLAYBACK_QUALITY_OPTIONS: ReadonlyArray<{
-  id: PlaybackQuality;
-  label: string;
-  shortLabel: string;
-  description: string;
-}> = [
-  { id: "high", label: "High quality", shortLabel: "High", description: "Use the full-quality prebuilt video rendition; broad views use their display-resolution video." },
-];
 const SOURCE_SUMMARIES: Record<string, string> = {
   "NOAA GOES-18": "Calibrated ABI satellite imagery, GLM total lightning and smoke-detection products.",
   "NOAA Open Data": "Public cloud distribution for GOES ABI Level-2 satellite source files.",
@@ -1344,6 +1337,32 @@ function compositeProfileFreshEnough(
     <= allowanceMinutes * 60_000 + SAME_SLOT_TOLERANCE_MS;
 }
 
+function publishedPrebuiltCombos(
+  catalog: Catalog,
+  product: Product,
+  liveEdgeDomain: Domain | undefined,
+  failedCompositeProfiles: string[],
+) {
+  return Object.entries(catalog.compositeProfiles?.[product.id] ?? {})
+    .flatMap(([anchor, tracks]) => Object.entries(tracks).flatMap(([track, pointers]) =>
+      (pointers ?? []).flatMap((value) => {
+        let pointer: CompositeProfilePointer;
+        try { pointer = parseCompositeProfilePointer(value); } catch { return []; }
+        if (pointer.rangeHours > (product.maxHours ?? 168)) return [];
+        const selected = new Set(pointer.bakedLayerIds ?? pointer.layerIds);
+        const labels = product.layers.filter((layer) => selected.has(layer.id) && layer.optional && !layer.enabledWith)
+          .map((layer) => layerControlLabel(layer.controlId ?? layer.id))
+          .filter((label, index, all) => all.indexOf(label) === index);
+        const fresh = compositeProfileFreshEnough(pointer, liveEdgeDomain?.layers[anchor]?.frames ?? [], anchor, pointer.rangeHours);
+        const failed = failedCompositeProfiles.includes(compositeProfileFailureKey(
+          product.id, anchor, track, pointer.presetId, pointer.rangeHours, pointer.generation,
+        ));
+        return [{ anchor, pointer, labels, fresh, failed }];
+      }),
+    ))
+    .sort((a, b) => a.pointer.rangeHours - b.pointer.rangeHours || a.anchor.localeCompare(b.anchor));
+}
+
 function atOrBefore(frames: Frame[], target: string, maxAgeMinutes?: number): Frame | undefined {
   const targetTime = Date.parse(target);
   if (!Number.isFinite(targetTime)) return undefined;
@@ -1938,7 +1957,6 @@ export function RadarViewer() {
   const [regionMenuOpen, setRegionMenuOpen] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
-  const [decoderMenuOpen, setDecoderMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
   const [loadedVideoManifest, setLoadedVideoManifest] = useState<VideoLoopManifest | null>(null);
@@ -2293,6 +2311,9 @@ export function RadarViewer() {
     });
     return appendLiveEdgeFrame(regularFrames, candidateTimes, 3 * 60);
   }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, optionalLayers, product]);
+  const prebuiltCombos = useMemo(() => catalog && product
+    ? publishedPrebuiltCombos(catalog, product, liveEdgeDomain, failedCompositeProfiles)
+    : [], [catalog, product, liveEdgeDomain, failedCompositeProfiles]);
   const compositeProfilePointers = product && videoLayerId
     ? catalog?.compositeProfiles?.[product.id]?.[videoLayerId]?.[videoTrack] ?? []
     : [];
@@ -2310,6 +2331,9 @@ export function RadarViewer() {
         effectiveRangeHours,
       )
     : null;
+  const publishedCombo = exactCompositePointerCandidate ?? hybridCompositePointerCandidate;
+  const publishedComboEndTime = publishedCombo?.endSourceTime;
+  const publishedComboFresh = compositeProfileFreshEnough(publishedCombo, fallbackAnchorFrames, activeAnchorId, effectiveRangeHours);
   const exactCompositeProfileKey = exactCompositePointerCandidate && product && videoLayerId
     ? compositeProfileFailureKey(
         product.id,
@@ -2592,6 +2616,7 @@ export function RadarViewer() {
       )
     : "";
 
+  const selectedCompositePresetId = compositePointer?.presetId;
   const candidateCompositeManifest = useMemo(() => (
     loadedCompositeManifest
       && loadedCompositeManifest.productId === product?.id
@@ -2600,7 +2625,7 @@ export function RadarViewer() {
       && loadedCompositeManifest.rangeHours === effectiveRangeHours
       && canRetainLoadedComposite(
         loadedCompositeManifest,
-        compositePointer,
+        selectedCompositePresetId ? { presetId: selectedCompositePresetId } : null,
         acceptedCompositeGeneration,
       )
       && (
@@ -2618,7 +2643,7 @@ export function RadarViewer() {
   ), [
     acceptedCompositeGeneration,
     compositeFreshEnough,
-    compositePointer,
+    selectedCompositePresetId,
     enabledVideoLayerIds,
     effectiveRangeHours,
     failedCompositeProfiles,
@@ -3875,9 +3900,21 @@ export function RadarViewer() {
     .filter(isLayerEnabled)
     .map((layer) => layerControlLabel(layer.controlId ?? layer.id))
     .filter((label, index, all) => all.indexOf(label) === index);
-  const playbackQualityOption = PLAYBACK_QUALITY_OPTIONS.find(
-    (option) => option.id === playbackQuality,
-  ) ?? PLAYBACK_QUALITY_OPTIONS[0];
+  const selectPrebuiltCombo = (pointer: CompositeProfilePointer) => {
+    const selected = new Set(pointer.bakedLayerIds ?? pointer.layerIds);
+    setOptionalLayers((current) => {
+      const next = { ...current };
+      for (const layer of product.layers) {
+        if (!layer.optional || layer.enabledWith) continue;
+        next[layer.id] = selected.has(layer.id);
+        next[layer.controlId ?? layer.id] = selected.has(layer.id);
+      }
+      return next;
+    });
+    setRangeHours(pointer.rangeHours);
+    resetToNewestFrame();
+    setPlaying(true);
+  };
   const prebuiltSelectionOffered = Boolean(
     activeComposite
     || (
@@ -3907,7 +3944,14 @@ export function RadarViewer() {
             : "Loading prebuilt",
           description: "A pre-rendered loop is available and is being prepared; image layers are shown until it is ready.",
         }
-    : {
+    : publishedComboEndTime
+      ? {
+          mode: "delayed",
+          label: publishedComboFresh
+            ? "Prebuilt unavailable" : "Prebuilt delayed",
+          description: `This combination has a published prebuilt loop through ${shortClock(publishedComboEndTime)}. Using image layers while the prebuilt loop is behind or unavailable.${videoFallbackReason ? ` ${videoFallbackReason}` : ""}`,
+        }
+      : {
         mode: "dynamic",
         label: "Dynamic layers",
         description: videoFallbackReason
@@ -4210,46 +4254,36 @@ export function RadarViewer() {
         </div>
 
         <aside className="legend-rail" aria-label="Map legends">
-          <div className={`layer-toolbar${optional.length ? "" : " decoder-only"}`}>
-            <div
-              className={`decoder-selector${decoderMenuOpen ? " is-open" : ""}`}
-              onMouseLeave={(event) => {
-                setDecoderMenuOpen(false);
-                const focused = document.activeElement;
-                if (focused instanceof HTMLElement && event.currentTarget.contains(focused)) {
-                  focused.blur();
-                }
-              }}
-            >
-              <button
-                className="layers-summary decoder-summary"
-                type="button"
-                aria-label={`Decoder: ${playbackQualityOption.label}`}
-                aria-expanded={decoderMenuOpen}
-                onClick={() => {
-                  setLayersMenuOpen(false);
-                  setDecoderMenuOpen((open) => !open);
-                }}
-              >
+          <div className="layer-toolbar">
+            <details className="prebuilt-selector">
+              <summary className="layers-summary">
                 <span className="layers-summary-heading">
-                  <span className="selector-label">Decoder</span>
-                  <span className="layers-count">{playbackQualityOption.shortLabel}</span>
+                  <span className="selector-label">Prebuilt combos</span>
+                  <span className="layers-count">{prebuiltCombos.length}</span>
                 </span>
                 <span className="layers-chevron" aria-hidden="true">⌄</span>
-              </button>
-              <div className="layers-popover decoder-popover" role="group" aria-label="Playback decoder">
-                <div className="layers-popover-heading">
-                  <span>Decoder</span>
-                  <span>{playbackQualityOption.label}</span>
-                </div>
-                <div className="decoder-options">
-                  <div className="decoder-choice decoder-information">
-                    <span>{playbackQualityOption.label}</span>
-                    <small>{playbackQualityOption.description}</small>
-                  </div>
+              </summary>
+              <div className="prebuilt-popover" role="group" aria-label="Published prebuilt combinations">
+                <div className="layers-popover-heading"><span>Prebuilt combos</span><span>{product.title}</span></div>
+                <p>Choose a combo to set its layers and duration. Core loops allow extra layers above the video.</p>
+                {prebuiltCombos.length === 0 && <p>No prebuilt combos are published for this region. Layers remain available.</p>}
+                <div className="prebuilt-combo-list">
+                  {prebuiltCombos.map(({ anchor, pointer, labels, fresh, failed }) => {
+                    const selected = anchor === activeAnchorId && pointer.rangeHours === effectiveRangeHours
+                      && sameLayerSet(enabledVideoLayerIds, pointer.bakedLayerIds ?? pointer.layerIds);
+                    return <button type="button" className="prebuilt-combo" key={`${anchor}/${pointer.rangeHours}/${pointer.presetId}`}
+                      aria-pressed={selected} onClick={(event) => {
+                        selectPrebuiltCombo(pointer);
+                        event.currentTarget.closest("details")?.removeAttribute("open");
+                      }}>
+                      <strong>{pointer.rangeHours === 168 ? "7 days" : `${pointer.rangeHours} hours`} · {pointer.compositeKind === "hybrid-prefix" ? "Prebuilt core" : "Full loop"}{selected ? " · Selected" : ""}</strong>
+                      <span>{labels.join(" + ")}</span>
+                      <small>{failed ? "Unavailable · image fallback" : fresh ? "Published" : "Delayed · image fallback"} · through {shortClock(pointer.endSourceTime)}</small>
+                    </button>;
+                  })}
                 </div>
               </div>
-            </div>
+            </details>
             {optional.length > 0 && (
               <div
                 className={`layer-selector${layersMenuOpen ? " is-open" : ""}`}
@@ -4266,7 +4300,6 @@ export function RadarViewer() {
                   type="button"
                   aria-expanded={layersMenuOpen}
                   onClick={() => {
-                    setDecoderMenuOpen(false);
                     setLayersMenuOpen((open) => !open);
                   }}
                 >
