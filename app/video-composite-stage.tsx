@@ -11,7 +11,7 @@ import {
 } from "react";
 import Hls from "hls.js";
 
-import { shouldWaitForSequentialSurface } from "./video-playback-guard";
+import { selectHlsEngine, shouldWaitForSequentialSurface } from "./video-playback-guard";
 import {
   VideoLoopManifest,
   VideoManifestFrame,
@@ -529,6 +529,7 @@ export function VideoCompositeStage({
   const overlayHostRef = useRef<HTMLDivElement>(null);
   const visibleSurfacesRef = useRef<PreparedSurfaces>({});
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsEngineRef = useRef<"native" | "hls-js" | "unavailable">("unavailable");
   const [surfaceSize] = useState(() => playbackSurfaceSize(manifest.width, manifest.height));
   const [surfaceBudgetBytes] = useState(surfaceCacheBudgetBytes);
   const fullyComposited = Boolean(compositePresetId) && plans.every((plan) => (
@@ -1061,7 +1062,17 @@ export function VideoCompositeStage({
     const video = videoRef.current;
     if (!video) return;
     if (manifest.transport === "hls-ts") {
-      if (Hls.isSupported()) {
+      const engine = selectHlsEngine(Boolean(video.canPlayType(manifest.media.mimeType)), Hls.isSupported());
+      hlsEngineRef.current = engine;
+      if (stageRef.current) stageRef.current.dataset.hlsEngine = engine;
+      if (engine === "native") {
+        video.src = mediaUrl;
+        return () => {
+          video.removeAttribute("src");
+          video.load();
+        };
+      }
+      if (engine === "hls-js") {
         // A live 24-hour weather loop is only about 25-33 seconds of encoded
         // media, so retaining it in full is what makes repeated 4x playback
         // smooth. Seven-day tracks are 2-4 minutes of media: cap those to a
@@ -1123,13 +1134,6 @@ export function VideoCompositeStage({
         hls.loadSource(mediaUrl);
         hls.attachMedia(video);
         return () => hls.destroy();
-      }
-      if (video.canPlayType(manifest.media.mimeType)) {
-        video.src = mediaUrl;
-        return () => {
-          video.removeAttribute("src");
-          video.load();
-        };
       }
       fail(new Error("Segmented H.264 playback is unavailable in this browser."));
       return;
@@ -1220,7 +1224,7 @@ export function VideoCompositeStage({
       // handler own failures when the browser is not using native HLS.
       if (
         manifest.transport === "hls-ts"
-        && Hls.isSupported()
+        && hlsEngineRef.current === "hls-js"
       ) return;
       const mediaError = video.error;
       const detail = mediaError

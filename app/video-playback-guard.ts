@@ -19,3 +19,10 @@ export function shouldWaitForSequentialSurface({
   // the media clock, so it needs no separate sequential guard here.
   return nativeLoop || currentIndex < frameCount - 1;
 }
+
+// Native HLS handles buffering and decoding on Safari/iPad. MediaSource support
+// alone is not a reason to route that browser through the JavaScript player.
+export function selectHlsEngine(nativeSupported: boolean, javascriptSupported: boolean): "native" | "hls-js" | "unavailable" {
+  if (nativeSupported) return "native";
+  return javascriptSupported ? "hls-js" : "unavailable";
+}

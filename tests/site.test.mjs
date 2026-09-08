@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
+import { selectHlsEngine, shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
 import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
 
 test("adds one combined live-edge frame after a regular timeline", () => {
@@ -857,4 +857,20 @@ test("deploy workflow uses the GitHub Pages artifact flow", async () => {
   assert.match(workflow, /npm run build:pages/);
   assert.match(workflow, /actions\/upload-pages-artifact@v3/);
   assert.match(workflow, /actions\/deploy-pages@v4/);
+});
+
+test("prefers native HLS on iPad even when JavaScript HLS is supported", () => {
+  assert.equal(selectHlsEngine(true, true), "native");
+  assert.equal(selectHlsEngine(true, false), "native");
+  assert.equal(selectHlsEngine(false, true), "hls-js");
+  assert.equal(selectHlsEngine(false, false), "unavailable");
+});
+
+test("native HLS failures reach the fallback and expose touch-accessible retry", async () => {
+  const stage = await readFile(new URL("../app/video-composite-stage.tsx", import.meta.url), "utf8");
+  const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
+  assert.match(stage, /hlsEngineRef.current === "hls-js"/);
+  assert.match(viewer, /Retry prebuilt loop/);
+  assert.match(viewer, /setFailedCompositeProfiles\(\[\]\)/);
+  assert.match(viewer, /setFailedCompositeMedia\(\{\}\)/);
 });

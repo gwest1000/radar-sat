@@ -1510,3 +1510,7 @@ input:focus-visible {
   }
 
 }
+
+.playback-recovery { grid-column: 1 / -1; font-size: 0.72rem; color: var(--muted); }
+.playback-recovery p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.playback-recovery button { padding: 6px 8px; color: var(--text); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: 5px; cursor: pointer; }

@@ -4386,6 +4386,20 @@ export function RadarViewer() {
               <span className="playback-build-dot" aria-hidden="true" />
               <span>{playbackBuildStatus.label}</span>
             </div>
+            {playbackBuildStatus.mode === "delayed" && publishedComboFresh && (
+              <div className="playback-recovery">
+                <p>{videoFallbackReason || "The prebuilt video could not be loaded on this device."}</p>
+                <button type="button" onClick={() => {
+                  // Explicit retry permits another attempt at the same immutable
+                  // generation after a transient network or decoder failure.
+                  setFailedCompositeProfiles([]);
+                  setFailedCompositeMedia({});
+                  setFailedVideoProfiles([]);
+                  setVideoFallbackReason("");
+                  setPlaying(true);
+                }}>Retry prebuilt loop</button>
+              </div>
+            )}
           </div>
           <div className="legend-content">
             <h2 className="legend-title">Legend</h2>
