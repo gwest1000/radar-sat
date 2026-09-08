@@ -1062,7 +1062,11 @@ export function VideoCompositeStage({
     const video = videoRef.current;
     if (!video) return;
     if (manifest.transport === "hls-ts") {
-      const engine = selectHlsEngine(Boolean(video.canPlayType(manifest.media.mimeType)), Hls.isSupported());
+      const engine = selectHlsEngine(
+        Boolean(video.canPlayType(manifest.media.mimeType)),
+        Hls.isSupported(),
+        navigator.userAgent,
+      );
       hlsEngineRef.current = engine;
       if (stageRef.current) stageRef.current.dataset.hlsEngine = engine;
       if (engine === "native") {

@@ -859,11 +859,25 @@ test("deploy workflow uses the GitHub Pages artifact flow", async () => {
   assert.match(workflow, /actions\/deploy-pages@v4/);
 });
 
-test("prefers native HLS on iPad even when JavaScript HLS is supported", () => {
-  assert.equal(selectHlsEngine(true, true), "native");
-  assert.equal(selectHlsEngine(true, false), "native");
-  assert.equal(selectHlsEngine(false, true), "hls-js");
-  assert.equal(selectHlsEngine(false, false), "unavailable");
+test("uses hls.js for Chromium even when it advertises native HLS", () => {
+  for (const browser of ["Chrome/140.0.0.0", "Chrome/140.0.0.0 Edg/140.0.0.0", "Chromium/140.0.0.0"]) {
+    const ua = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ${browser} Safari/537.36`;
+    assert.equal(selectHlsEngine(true, true, ua), "hls-js");
+    assert.equal(selectHlsEngine(true, false, ua), "native");
+  }
+});
+
+test("retains native HLS for Safari, iPad desktop mode, and iOS browsers", () => {
+  for (const ua of [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15",
+    "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 CriOS/140.0.0.0 Mobile/15E148 Safari/604.1",
+  ]) {
+    assert.equal(selectHlsEngine(true, true, ua), "native");
+    assert.equal(selectHlsEngine(true, false, ua), "native");
+    assert.equal(selectHlsEngine(false, true, ua), "hls-js");
+    assert.equal(selectHlsEngine(false, false, ua), "unavailable");
+  }
 });
 
 test("native HLS failures reach the fallback and expose touch-accessible retry", async () => {

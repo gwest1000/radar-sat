@@ -57,3 +57,34 @@ endpoint with variable request and bandwidth limits, and recommends a custom
 domain for production. This audit did **not** observe a 429, so throttling is a
 remaining infrastructure risk, not a proven cause of the user's specific failure.
 See https://developers.cloudflare.com/r2/platform/limits/.
+
+## Reproduced laptop failure: native Chromium HLS
+
+The next user report narrowed the failure to BC SW 6/12-hour loops and supplied
+the exact error: "The H.264 loop stopped making progress; using image frames."
+This is a playback watchdog failure, independent of the freshness/publishing
+issues above.
+
+On the deployed site, Chrome reproduced the 6-hour failure with generation
+`20260908T2240Z-8ca434219bf7`. Diagnostics showed native HLS, valid 1920x1266
+metadata and an 8-second duration, but **zero presented frames**. After the
+initial newest-frame seek, currentTime stayed at 7.205 with HAVE_METADATA and
+only `[1.6, 2.8]` and `[6.4, 6.6]` buffered. The progress watchdog then emitted
+the user's exact error. Local ffprobe checks of all 3/6/12-hour segments found
+matching dimensions, durations, and continuous presentation timestamps.
+
+The native-HLS preference introduced for iPad was too broad: Chrome now also
+advertises that MIME type. Engine selection now retains hls.js for Chromium
+when available, and prefers native HLS on Safari/iOS WebKit. Native-only browsers
+still retain their supported player. Regression tests cover Chrome, Edge,
+Chromium, Safari/iPad desktop mode, iPad, and iOS Chrome.
+
+The corrected local preview uses the same published public assets through a
+localhost proxy (production CORS does not allow the preview origin). On the
+same failing 6-hour generation, hls.js buffered `[0, 8]`, reached HAVE_ENOUGH_DATA,
+and presented frames through the loop. This isolates engine selection without
+changing the video assets or extending the watchdog timeout.
+Subsequent observations recorded 340 presented frames on the 37-frame 6-hour
+loop and 126 on the 73-frame 12-hour loop. The latter buffered its full
+15.2 seconds and remained in prebuilt playback after crossing the loop boundary.
+The production build, ESLint, and all 19 site tests passed.
