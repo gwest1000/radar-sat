@@ -422,6 +422,45 @@ export function parseVideoLoopManifest(value: unknown): VideoLoopManifest {
   };
 }
 
+class ManifestHttpError extends Error {
+  status: number;
+  constructor(status: number, label: string) {
+    super(`${label} returned ${status}.`);
+    this.status = status;
+  }
+}
+
+export async function fetchManifestJson(
+  url: string,
+  label: string,
+  fetcher: typeof fetch = fetch,
+  pause: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<unknown> {
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
+    try {
+      const response = await fetcher(url, {
+        mode: "cors",
+        cache: attempt === 0 ? "force-cache" : "reload",
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new ManifestHttpError(response.status, label);
+      return await response.json();
+    } catch (error) {
+      const transient = error instanceof ManifestHttpError
+        ? [404, 408, 429].includes(error.status) || error.status >= 500
+        : error instanceof TypeError || (error instanceof Error && error.name === "AbortError");
+      if (!transient || attempt >= 2) throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+    // Give a short network/publishing interruption time to recover, without
+    // permanently blacklisting a healthy immutable generation on first error.
+    await pause(1_000 * (attempt + 1));
+  }
+}
+
 export function loadVideoLoopManifest(url: string): Promise<VideoLoopManifest> {
   const existing = manifestCache.get(url);
   if (existing) {
@@ -429,11 +468,8 @@ export function loadVideoLoopManifest(url: string): Promise<VideoLoopManifest> {
     manifestCache.set(url, existing);
     return existing;
   }
-  const request = fetch(url, { cache: "force-cache", mode: "cors" })
-    .then(async (response) => {
-      if (!response.ok) throw new Error(`Video manifest returned ${response.status}.`);
-      return parseVideoLoopManifest(await response.json());
-    })
+  const request = fetchManifestJson(url, "Video manifest")
+    .then(parseVideoLoopManifest)
     .catch((error) => {
       if (manifestCache.get(url) === request) manifestCache.delete(url);
       throw error;
@@ -671,11 +707,8 @@ export function loadCompositeLoopManifest(url: string): Promise<CompositeLoopMan
     compositeManifestCache.set(url, existing);
     return existing;
   }
-  const request = fetch(url, { cache: "force-cache", mode: "cors" })
-    .then(async (response) => {
-      if (!response.ok) throw new Error(`Composite manifest returned ${response.status}.`);
-      return parseCompositeLoopManifest(await response.json());
-    })
+  const request = fetchManifestJson(url, "Composite manifest")
+    .then(parseCompositeLoopManifest)
     .catch((error) => {
       if (compositeManifestCache.get(url) === request) compositeManifestCache.delete(url);
       throw error;

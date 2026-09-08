@@ -1272,6 +1272,23 @@ def prune_composite_sidecar_manifests(
     manifest_root = output_root / "composite-manifests"
     if not manifest_root.is_dir():
         return 0
+    # The encoder index can advance before the coalesced publisher consumes
+    # catalog.json. Keep both commits reachable until the catalog advances.
+    catalog_manifests: set[Path] = set()
+    catalog_path = output_root / "catalog.json"
+    if catalog_path.exists():
+        try:
+            catalog = json.loads(catalog_path.read_bytes())
+            for anchors in catalog.get("compositeProfiles", {}).values():
+                for tracks in anchors.values():
+                    for pointers in tracks.values():
+                        for pointer in pointers:
+                            path = (output_root / pointer["manifestPath"]).resolve()
+                            if path.is_relative_to(manifest_root):
+                                catalog_manifests.add(path)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            # An unreadable catalog cannot prove anything is unreferenced.
+            return 0
     current = (now or dt.datetime.now(UTC)).timestamp()
     grace_seconds = COMPOSITE_MANIFEST_GRACE_HOURS * 3600
     removed = 0
@@ -1367,7 +1384,7 @@ def prune_composite_sidecar_manifests(
                 ]
             )
         for manifest in manifests:
-            if manifest in retained:
+            if manifest in retained or manifest in catalog_manifests:
                 continue
             try:
                 if current - manifest.stat().st_mtime <= grace_seconds:

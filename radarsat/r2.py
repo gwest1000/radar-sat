@@ -1729,13 +1729,14 @@ def _discover_objects_stable(
     existing_video_keys: set[str] | None = None,
     attempts: int = 12,
 ) -> tuple[list[LocalObject], bytes]:
-    """Retry the narrow frame-rotation race during a live publication.
+    """Retry rotation of optional frame and video assets during publication.
 
     Catalog discovery already removes frame entries whose image/metadata pair
     is incomplete. A concurrent retention worker can still unlink another
     pair in the few milliseconds between that check and the final lstat. The
     next discovery pass sees the completed rotation and safely omits the pair;
-    structural/static/video safety failures remain immediate errors.
+    structural/static safety failures remain immediate errors. Video discovery
+    likewise validates and omits a concurrently retired optional generation.
     """
 
     last_error: PublicationSafetyError | None = None
@@ -1749,10 +1750,12 @@ def _discover_objects_stable(
             )
         except PublicationSafetyError as error:
             message = str(error)
-            if not message.startswith((
-                "Catalog asset is missing or unreadable: frames/",
-                "Catalog asset is missing or unreadable: metadata/",
-            )):
+            rotation_prefixes = ("frames/", "metadata/", *VIDEO_IMMUTABLE_PREFIXES)
+            if not any(
+                message.startswith(f"Catalog asset is {failure}: {prefix}")
+                for failure in ("missing or unreadable", "missing or empty")
+                for prefix in rotation_prefixes
+            ):
                 raise
             last_error = error
             if attempt + 1 < attempts:

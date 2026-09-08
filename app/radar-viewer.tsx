@@ -40,6 +40,7 @@ import {
 } from "./video-loop";
 import {
   canRetainLoadedComposite,
+  catalogGenerationIsOlder,
   pendingMediaFailureTransition,
   preferredCompositeProfile,
   rememberCompositeMediaFailure,
@@ -1968,6 +1969,7 @@ export function RadarViewer() {
   const [failedCompositeProfiles, setFailedCompositeProfiles] = useState<string[]>([]);
   const [acceptedCompositeGeneration, setAcceptedCompositeGeneration] = useState("");
   const [videoFallbackReason, setVideoFallbackReason] = useState("");
+  const [presentedCompositeKey, setPresentedCompositeKey] = useState("");
   const [failedCompositeMedia, setFailedCompositeMedia] = useState<Record<string, string>>({});
   const presentedVideoIndexRef = useRef(NEWEST_FRAME);
   const lastVideoHudUpdateAtRef = useRef(0);
@@ -1997,6 +1999,8 @@ export function RadarViewer() {
   useEffect(() => {
     let cancelled = false;
     let initialized = false;
+    let acceptedCatalogGeneration = "";
+    let acceptedCatalogUrl = "";
     let loading = false;
     let retryTimer: number | undefined;
     const catalogEtags = new Map<string, string>();
@@ -2026,7 +2030,7 @@ export function RadarViewer() {
               try {
                 const head = await fetch(resolved, { method: "HEAD", cache: "no-store" });
                 const headEtag = head.headers.get("etag");
-                if (head.ok && headEtag && headEtag === previousEtag) return;
+                if (head.ok && headEtag && headEtag === previousEtag && resolved === acceptedCatalogUrl) return;
               } catch {
                 // Some development origins do not implement HEAD. A normal GET
                 // below remains the compatibility path.
@@ -2038,17 +2042,22 @@ export function RadarViewer() {
             if (!nextCatalog.products?.length || !nextCatalog.domains) {
               throw new Error("Loop catalog is incomplete.");
             }
+            // A network failure must not roll an open page back to an old
+            // recovery catalog whose immutable videos may already be retired.
+            if (catalogGenerationIsOlder(nextCatalog.generatedAt, acceptedCatalogGeneration)) continue;
             const availableProducts = nextCatalog.products.filter((item) => productHasFrames(nextCatalog, item));
             if (!availableProducts.length) throw new Error("Loop catalog contains no available products.");
             const previousGeneration = catalogGenerations.get(resolved);
             catalogEtags.set(resolved, response.headers.get("etag") ?? "");
             catalogGenerations.set(resolved, nextCatalog.generatedAt);
-            if (initialized && previousGeneration === nextCatalog.generatedAt) return;
+            if (initialized && previousGeneration === nextCatalog.generatedAt && resolved === acceptedCatalogUrl) return;
             if (!cancelled) {
               if (retryTimer !== undefined) {
                 window.clearTimeout(retryTimer);
                 retryTimer = undefined;
               }
+              acceptedCatalogGeneration = nextCatalog.generatedAt;
+              acceptedCatalogUrl = resolved;
               setCatalog(nextCatalog);
               setCatalogBase(
                 nextCatalog.assetBaseUrl
@@ -3340,6 +3349,9 @@ export function RadarViewer() {
   }, []);
 
   const handleVideoFramePresented = useCallback((index: number) => {
+    if (activeCompositeKey && presentedCompositeKey !== activeCompositeKey) {
+      setPresentedCompositeKey(activeCompositeKey);
+    }
     if (
       activeExactComposite === sidecarExactComposite
       && sidecarExactComposite
@@ -3388,6 +3400,8 @@ export function RadarViewer() {
       );
     }
   }, [
+    activeCompositeKey,
+    presentedCompositeKey,
     acceptedCompositeGeneration,
     activeExactComposite,
     anchorFrames.length,
@@ -3410,6 +3424,7 @@ export function RadarViewer() {
 
   const activeVideoGeneration = playbackVideoManifest?.generation ?? "";
   const handleActiveVideoFailure = useCallback((message: string) => {
+    setPresentedCompositeKey("");
     if (activeComposite && activeCompositeKey) {
       setFailedCompositeMedia((current) => (
         rememberCompositeMediaFailure(current, activeCompositeKey, message)
@@ -3926,7 +3941,7 @@ export function RadarViewer() {
     ),
   );
   const playbackBuildStatus = prebuiltSelectionOffered
-    ? videoModeReady
+    ? videoModeReady && Boolean(activeCompositeKey) && presentedCompositeKey === activeCompositeKey
       ? activeCompositeKind === "hybrid-prefix"
         ? {
             mode: "hybrid",
@@ -3950,7 +3965,9 @@ export function RadarViewer() {
           mode: "delayed",
           label: publishedComboFresh
             ? "Prebuilt unavailable" : "Prebuilt delayed",
-          description: `This combination has a published prebuilt loop through ${shortClock(publishedComboEndTime)}. Using image layers while the prebuilt loop is behind or unavailable.${videoFallbackReason ? ` ${videoFallbackReason}` : ""}`,
+          description: publishedComboFresh
+            ? `The prebuilt loop through ${shortClock(publishedComboEndTime)} could not be loaded. Showing image layers.${videoFallbackReason ? ` ${videoFallbackReason}` : ""}`
+            : `The prebuilt loop ends at ${shortClock(publishedComboEndTime)} UTC and is behind the latest satellite imagery. Showing newer image layers while the next prebuilt loop is prepared.`,
         }
       : {
         mode: "dynamic",

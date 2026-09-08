@@ -107,3 +107,7 @@ export function pendingMediaFailureTransition(
     failedProfileKey: source === "sidecar" ? profileKey : "",
   };
 }
+
+export function catalogGenerationIsOlder(incoming: string, accepted: string): boolean {
+  return Boolean(accepted) && Date.parse(incoming) < Date.parse(accepted);
+}

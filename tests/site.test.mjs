@@ -874,3 +874,39 @@ test("native HLS failures reach the fallback and expose touch-accessible retry",
   assert.match(viewer, /setFailedCompositeProfiles\(\[\]\)/);
   assert.match(viewer, /setFailedCompositeMedia\(\{\}\)/);
 });
+
+test("an open viewer never rolls back to an older recovery catalog", async () => {
+  const { catalogGenerationIsOlder } = await import("../app/video-selection-policy.ts");
+  const current = "2026-09-08T22:00:00Z";
+  assert.equal(catalogGenerationIsOlder("2026-09-08T21:00:00Z", current), true);
+  assert.equal(catalogGenerationIsOlder(current, current), false);
+  assert.equal(catalogGenerationIsOlder("2026-09-08T22:01:00Z", current), false);
+  assert.equal(catalogGenerationIsOlder(current, ""), false);
+});
+
+test("manifest loading recovers transient errors without retrying malformed data", async () => {
+  const { fetchManifestJson } = await import("../app/video-loop.ts");
+  const caches = [], pauses = [];
+  let calls = 0;
+  const fetcher = async (_url, options) => {
+    caches.push(options.cache);
+    calls += 1;
+    if (calls === 1) throw new TypeError("Failed to fetch");
+    if (calls === 2) return new Response("busy", { status: 503 });
+    return Response.json({ generation: "still-valid" });
+  };
+  assert.deepEqual(await fetchManifestJson("https://example.test/manifest", "Composite manifest", fetcher,
+    async (ms) => { pauses.push(ms); }), { generation: "still-valid" });
+  assert.deepEqual(caches, ["force-cache", "reload", "reload"]);
+  assert.deepEqual(pauses, [1000, 2000]);
+  for (const status of [403, 404, 429]) {
+    let count = 0;
+    await assert.rejects(fetchManifestJson("https://example.test/manifest", "Composite manifest",
+      async () => { count += 1; return new Response("no", { status }); }, async () => {}));
+    assert.equal(count, status === 403 ? 1 : 3);
+  }
+  let invalidCalls = 0;
+  await assert.rejects(fetchManifestJson("https://example.test/manifest", "Composite manifest",
+    async () => { invalidCalls += 1; return new Response("invalid JSON"); }, async () => {}), SyntaxError);
+  assert.equal(invalidCalls, 1);
+});
