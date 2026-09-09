@@ -581,7 +581,9 @@ test("preserves immutable baked source times for hybrid freshness", async () => 
     renditions: [{ id: "high", media }],
     proxies: { [proxy.path]: proxy },
   });
+  parsed.satelliteStyle = "layered-daylight-soft-50-v1-test";
   const converted = compositeLoopVideoManifest(parsed, "high");
+  assert.equal(converted?.manifest.satelliteStyle, parsed.satelliteStyle);
   assert.ok(converted);
   const finalFrame = converted.manifest.frames[1];
   assert.equal(finalFrame.layerSourceTimes?.["radar-rain"], "2026-08-21T12:06:00Z");
@@ -923,4 +925,17 @@ test("manifest loading recovers transient errors without retrying malformed data
   await assert.rejects(fetchManifestJson("https://example.test/manifest", "Composite manifest",
     async () => { invalidCalls += 1; return new Response("invalid JSON"); }, async () => {}), SyntaxError);
   assert.equal(invalidCalls, 1);
+});
+
+
+test("enhanced BC XL loops keep the encoded final frame instead of an untreated live edge", async () => {
+  const { uniformCloudStyleProfile, permitsLiveEdgeReplacement } = await import("../app/video-selection-policy.ts");
+  for (const hours of [3, 6]) assert.equal(uniformCloudStyleProfile("bc-large-overlay", "eccc-geocolor", hours), true);
+  for (const hours of [12, 24]) assert.equal(uniformCloudStyleProfile("bc-large-overlay", "eccc-geocolor", hours), false);
+  assert.equal(uniformCloudStyleProfile("bc-small-overlay", "eccc-geocolor", 3), false);
+  assert.equal(uniformCloudStyleProfile("bc-large-overlay", "raw-ir", 3), false);
+  assert.equal(permitsLiveEdgeReplacement({ satelliteStyle: "layered-daylight-soft-50-v1-test" }), false);
+  assert.equal(permitsLiveEdgeReplacement({}), true);
+  const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
+  assert.match(viewer, /if \(!permitsLiveEdgeReplacement\(playbackVideoManifest\)/);
 });

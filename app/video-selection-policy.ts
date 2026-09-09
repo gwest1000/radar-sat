@@ -111,3 +111,20 @@ export function pendingMediaFailureTransition(
 export function catalogGenerationIsOlder(incoming: string, accepted: string): boolean {
   return Boolean(accepted) && Date.parse(incoming) < Date.parse(accepted);
 }
+
+// The BC XL short-loop pilot prioritizes a complete, consistently graded loop
+// over unprocessed newer rasters. Observation timestamps remain unchanged.
+export function uniformCloudStyleProfile(
+  productId: string | undefined,
+  layerId: string,
+  rangeHours: number,
+): boolean {
+  return productId === "bc-large-overlay" && layerId === "eccc-geocolor"
+    && (rangeHours === 3 || rangeHours === 6);
+}
+
+export function permitsLiveEdgeReplacement(
+  manifest: Pick<VideoLoopManifest, "satelliteStyle"> | null,
+): boolean {
+  return !manifest?.satelliteStyle;
+}

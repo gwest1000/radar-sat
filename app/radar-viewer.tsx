@@ -40,6 +40,8 @@ import {
 } from "./video-loop";
 import {
   canRetainLoadedComposite,
+  uniformCloudStyleProfile,
+  permitsLiveEdgeReplacement,
   catalogGenerationIsOlder,
   pendingMediaFailureTransition,
   preferredCompositeProfile,
@@ -1324,7 +1326,9 @@ function compositeProfileFreshEnough(
   fallbackFrames: readonly Frame[],
   anchorLayerId: string,
   rangeHours: number,
+  productId?: string,
 ): boolean {
+  if (uniformCloudStyleProfile(productId, anchorLayerId, rangeHours)) return Boolean(pointer);
   if (!pointer || !fallbackFrames.length) return Boolean(pointer);
   const newestFallback = fallbackFrames[fallbackFrames.length - 1];
   const imageNewest = newestFallback
@@ -1354,7 +1358,7 @@ function publishedPrebuiltCombos(
         const labels = product.layers.filter((layer) => selected.has(layer.id) && layer.optional && !layer.enabledWith)
           .map((layer) => layerControlLabel(layer.controlId ?? layer.id))
           .filter((label, index, all) => all.indexOf(label) === index);
-        const fresh = compositeProfileFreshEnough(pointer, liveEdgeDomain?.layers[anchor]?.frames ?? [], anchor, pointer.rangeHours);
+        const fresh = compositeProfileFreshEnough(pointer, liveEdgeDomain?.layers[anchor]?.frames ?? [], anchor, pointer.rangeHours, product.id);
         const failed = failedCompositeProfiles.includes(compositeProfileFailureKey(
           product.id, anchor, track, pointer.presetId, pointer.rangeHours, pointer.generation,
         ));
@@ -2343,7 +2347,7 @@ export function RadarViewer() {
     : null;
   const publishedCombo = exactCompositePointerCandidate ?? hybridCompositePointerCandidate;
   const publishedComboEndTime = publishedCombo?.endSourceTime;
-  const publishedComboFresh = compositeProfileFreshEnough(publishedCombo, fallbackAnchorFrames, activeAnchorId, effectiveRangeHours);
+  const publishedComboFresh = compositeProfileFreshEnough(publishedCombo, fallbackAnchorFrames, activeAnchorId, effectiveRangeHours, product?.id);
   const exactCompositeProfileKey = exactCompositePointerCandidate && product && videoLayerId
     ? compositeProfileFailureKey(
         product.id,
@@ -2375,6 +2379,7 @@ export function RadarViewer() {
         fallbackAnchorFrames,
         activeAnchorId,
         effectiveRangeHours,
+        product?.id,
       ),
     } : null,
     hybridCompositePointerCandidate ? {
@@ -2385,6 +2390,7 @@ export function RadarViewer() {
         fallbackAnchorFrames,
         activeAnchorId,
         effectiveRangeHours,
+        product?.id,
       ),
     } : null,
     failedCompositeProfiles,
@@ -2569,6 +2575,7 @@ export function RadarViewer() {
     fallbackAnchorFrames,
     activeAnchorId,
     effectiveRangeHours,
+    product?.id,
   );
 
   const videoFreshEnough = useMemo(() => {
@@ -2595,6 +2602,7 @@ export function RadarViewer() {
   }, [activeAnchorId, fallbackAnchorFrames, liveEdgeIndex, loadedVideoManifest, product]);
 
   const compositeFreshEnough = useMemo(() => {
+    if (loadedCompositeManifest?.satelliteStyle) return true;
     if (!loadedCompositeManifest || !fallbackAnchorFrames.length) return true;
     const newestFallback = fallbackAnchorFrames[fallbackAnchorFrames.length - 1];
     const imageNewest = newestFallback
@@ -3116,7 +3124,8 @@ export function RadarViewer() {
   const anchorFrames = videoModeReady ? videoAnchorFrames : fallbackAnchorFrames;
 
   const liveEdgeState = useMemo(() => {
-    if (!videoModeReady || !product || !liveEdgeDomain || !videoPlans.length) {
+    if (!permitsLiveEdgeReplacement(playbackVideoManifest)
+        || !videoModeReady || !product || !liveEdgeDomain || !videoPlans.length) {
       return { active: false, anchor: undefined, layers: [] as ComposedLayer[] };
     }
     const lastPlan = videoPlans[videoPlans.length - 1];
@@ -3181,7 +3190,7 @@ export function RadarViewer() {
         true,
       ),
     };
-  }, [catalogBase, liveEdgeDomain, optionalLayers, product, videoAnchorFrames, videoModeReady, videoPlans]);
+  }, [catalogBase, liveEdgeDomain, optionalLayers, playbackVideoManifest, product, videoAnchorFrames, videoModeReady, videoPlans]);
 
   const liveEdgeSourceTimes = useMemo(() => liveEdgeState.layers
     .filter((item): item is typeof item & { frame: Frame } => "frame" in item && Boolean(item.frame))

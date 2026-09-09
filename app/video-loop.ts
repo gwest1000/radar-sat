@@ -103,6 +103,7 @@ export type CompositeLoopFrame = {
 };
 
 export type CompositeLoopManifest = {
+  satelliteStyle?: string;
   schemaVersion: 1 | 2;
   compositeKind?: "exact" | "hybrid-prefix";
   generation: string;
@@ -128,6 +129,7 @@ export type CompositeLoopManifest = {
 };
 
 export type VideoLoopManifest = {
+  satelliteStyle?: string;
   schemaVersion: 1 | 2;
   generation: string;
   generatedAt: string;
@@ -764,6 +766,7 @@ export function compositeLoopVideoManifest(
     renditionId: rendition.id,
     manifest: {
       schemaVersion: 2,
+      satelliteStyle: manifest.satelliteStyle,
       generation: manifest.generation,
       generatedAt: manifest.generatedAt,
       productId: manifest.productId,
