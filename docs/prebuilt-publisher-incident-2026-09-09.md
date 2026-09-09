@@ -22,6 +22,14 @@ Health monitoring also crawled every output file, calling stat twice per file.
 One check started at 15:08 and finished at 15:37; publication freshness was
 evaluated against its start time, concealing the growing stall.
 
+Production verification also exposed severe macOS Background-job throttling.
+The publisher spent over three minutes discovering assets, while a read-only
+foreground diagnostic validated the same ~22,000 assets in 2.23 seconds and
+planned cleanup over ~30,000 uploaded records in 0.67 seconds. Sampling showed
+active Python/filesystem work rather than a blocked network operation. The
+publisher now uses launchd's Standard service priority. Renderers retain their
+existing priorities and concurrency limits.
+
 ## Changes
 
 - Reconciliation inventories remote objects before snapshotting. Unchanged files
@@ -35,6 +43,9 @@ evaluated against its start time, concealing the growing stall.
   a 300-second deadline covering its complete process group, including lock
   waiters and uploader children. Failed requests remain queued; failed
   maintenance backs off for five minutes while fresh requests can proceed.
+  If fast publication itself cannot succeed, already queued reconciliation gets
+  one bounded repair attempt, preserving a recovery path for capacity/index
+  problems. New arrivals during that repair remain queued.
 - Publisher progress identifies its current stage separately from the last
   acknowledged public catalog commit. Upload progress cannot reset catalog age.
 - A durable dependency journal protects both sides of an interrupted catalog

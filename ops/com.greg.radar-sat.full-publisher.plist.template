@@ -16,7 +16,9 @@
   <key>StartInterval</key>
   <integer>15</integer>
   <key>ProcessType</key>
-  <string>Background</string>
+  <!-- Catalog commits serve the live viewer. Background resource throttling
+       made a three-second validation take minutes under normal ingest load. -->
+  <string>Standard</string>
   <key>ThrottleInterval</key>
   <integer>10</integer>
   <key>StandardOutPath</key>
