@@ -1,7 +1,7 @@
 # BC XL MSC GeoColour: operational enhancement
 
-All durations (3, 6, 12, 24 and 168 hours), all configured composite presets,
-and satellite video with custom overlays use layered daylight, soft colour,
+All prebuilt durations (3, 6, 12, 24 and 168 hours), all configured composite presets,
+and archive satellite video with custom overlays use layered daylight, soft colour,
 50% depth. Final H.264 uses CRF 22; cached enhanced and composed frames remain
 lossless PNGs. Source WebP ingestion is unchanged.
 
@@ -14,8 +14,10 @@ other products is not changed. Source timestamps still drive solar lighting
 and the daylight/IR transition.
 
 Exact sidecars own 3/6/12/24-hour composite presets. The legacy builder supplies
-styled satellite media for dynamic/custom overlays and 7-day composites,
-without redundantly encoding the short/day exact presets. Both manifest types
+styled satellite media and 7-day composites,
+without redundantly encoding the short/day exact presets. The existing catalog
+retirement policy still hides redundant live/day legacy bundles; unsupported
+custom live/day layer selections can use the existing image fallback. Both manifest types
 carry satelliteStyle and videoEncoding metadata. The viewer does not apply
 its legacy satellite CSS filter to enhanced video, replace its final frame
 with an untreated raster, or reject an enhanced loop merely for trailing raw
