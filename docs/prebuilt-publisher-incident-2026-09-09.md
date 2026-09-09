@@ -73,5 +73,41 @@ failure/backoff, a stuck descendant that ignores TERM, retained requests and
 subsequent lock acquisition, incremental reconciliation and repair, and timely
 health reporting with stale acknowledged catalog commits.
 
-Production recovery and sustained-publication measurements are recorded after
-deployment below.
+Validation passed: 105 selected Python tests (47 operational publisher, 2
+playback reliability, 9 snapshot/reconciliation, 12 health, 26 operational
+scripts, 5 publisher worker, 4 hybrid scheduler), all 19 site tests, shell syntax,
+Python compilation, plist parsing, and whitespace checks. GitHub Pages builds
+and deployments for the implementation and service-priority changes succeeded.
+
+## Production recovery
+
+The old reconciliation eventually committed at 16:12:25, approximately 75 minutes
+after starting, still using its old snapshot. The first new Background-priority
+run hit the five-minute watchdog, retained its requests, and entered the bounded
+repair path. This exposed the service-priority problem rather than silently
+holding the publication lock indefinitely.
+
+After the Standard-priority job reload at 16:20:47:
+
+- Discovery and snapshotting 21,914 assets, including 1,210 pending uploads,
+  reached the upload stage in **4.4 seconds**.
+- The recovery catalog committed at **16:21:25**, after **38.5 seconds**.
+- The subsequent authoritative reconciliation completed in **37.5 seconds**,
+  snapshotting only 69 changed assets instead of the complete archive.
+- Subsequent fast publications took **5.2, 5.5, 6.4, and 10.7 seconds**. The queue
+  drained; new requests continued to complete after maintenance.
+- An already open Southwest BC 12-hour viewer automatically returned from
+  "Prebuilt delayed" to "Prebuilt loop" without reload. The 6-hour loop presented
+  397 frames with its complete 8-second buffer, and the 3-hour loop presented
+  480 frames with its complete 4.4-second buffer; both had zero overlay stalls.
+- At **16:25:41 UTC / 09:25:41 PDT**, all **49/49** public composite profiles
+  met the unchanged freshness limits. All **196/196** sampled manifest, playlist,
+  first-segment and last-segment requests returned HTTP 200 with the expected
+  GitHub Pages CORS origin. There were no failed requests or retries.
+
+The first public audit had one lingering North America 24-hour weather core;
+the scheduler rebuilt it at 16:24:33 and its next ordinary publication cleared
+that final delayed profile. These HTTP checks sample segment availability;
+browser playback checks were performed in Chrome, not on every supported device.
+Separate health alerts for the upstream precipitation-type layer and aggregate
+ingest status remain visible and are not relabelled as successful publication.
