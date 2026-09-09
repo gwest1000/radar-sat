@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 
 from PIL import Image
 
+from . import cloud_style, cloud_policy
 from .catalog import build_catalog
 from .config import (
     BROAD_VIEWPORTS,
@@ -1155,6 +1156,7 @@ def _prepare_satellite_images(
     spec: ProfileSpec,
     selected: Sequence[SelectedFrame],
     temporary_root: Path,
+    *, output_root: Path | None = None,
 ) -> list[Path]:
     base_path = _safe_path(
         source_root,
@@ -1173,7 +1175,9 @@ def _prepare_satellite_images(
         key = (frame.source_path, frame.source_fetched_at)
         cached = rendered.get(key)
         destination = temporary_root / f"sat-{index:04d}.png"
-        if cached is None:
+        if cached is None and output_root is not None and cloud_policy.enabled(spec):
+            composed = cloud_policy.frame_image(source_root, output_root, spec, frame)
+        elif cached is None:
             with Image.open(_safe_path(source_root, frame.source_path)) as source_image:
                 satellite = _crop_resize(
                     source_image,
@@ -1277,7 +1281,13 @@ def _prepare_composite_images(
     for index, frame in enumerate(selected):
         key = (frame.source_path, frame.source_fetched_at)
         satellite_base = last_satellite if key == last_satellite_key else None
-        if satellite_base is None:
+        if satellite_base is None and cloud_policy.enabled(spec):
+            satellite_base = cloud_policy.frame_image(source_root, output_root, spec, frame)
+            if last_satellite is not None:
+                last_satellite.close()
+            last_satellite_key = key
+            last_satellite = satellite_base
+        elif satellite_base is None:
             with Image.open(_safe_path(source_root, frame.source_path)) as source_image:
                 satellite = _crop_resize(
                     source_image,
@@ -1955,7 +1965,7 @@ def _build_exact_composite_range(
             media_viewport=dict(spec.viewport),
             media_width=width,
             media_height=height,
-            crf=COMPOSITE_VIDEO_CRF,
+            crf=22 if cloud_policy.enabled(spec) else COMPOSITE_VIDEO_CRF,
         )
         def prepare_composite(
             group_frames: Sequence[SelectedFrame],
@@ -2437,6 +2447,10 @@ def _build_profile_from_snapshot(
     source_root = source_root.resolve()
     output_root = output_root.resolve()
     build_now = (now or dt.datetime.now(UTC)).astimezone(UTC)
+    enhanced = cloud_policy.enabled(spec)
+    if enhanced:
+        spec = replace(spec, media_group="bc-xl-enhanced", media_viewport=dict(spec.viewport),
+                       media_width=spec.width, media_height=spec.height, crf=22)
     index_path = output_root / "video-index" / spec.product_id / f"{spec.layer_id}.json"
     current_index = _load_index(index_path)
     current_profile = current_index.get("profiles", {}).get(spec.track, {})
@@ -2462,6 +2476,8 @@ def _build_profile_from_snapshot(
     ]
     if len(selected) < 2:
         raise RuntimeError(f"{spec.product_id} has fewer than two usable satellite frames")
+    if enhanced and previous_manifest and previous_manifest.get("satelliteStyle") != cloud_style.STYLE_VERSION:
+        previous_manifest = None  # Never reuse an untreated exact range in a styled manifest.
     media_inputs = [_source_fingerprint(source_root, frame) for frame in selected]
     media_path, media_fingerprint, segment_entries, durations = _build_hls_media(
         source_root,
@@ -2471,6 +2487,10 @@ def _build_profile_from_snapshot(
         media_inputs,
         _frame_durations(selected, spec.cadence_minutes),
         ffmpeg=ffmpeg,
+        variant={"satelliteStyle": cloud_style.STYLE_VERSION} if enhanced else None,
+        prepare_images=(lambda frames, temporary: _prepare_satellite_images(
+            source_root, spec, frames, temporary, output_root=output_root
+        )) if enhanced else None,
     )
     end_stamp = selected[-1].valid_time.strftime("%Y%m%dT%H%MZ")
 
@@ -2615,7 +2635,7 @@ def _build_profile_from_snapshot(
                 layer_id: opacities.get(layer_id, 1.0)
                 for layer_id in composite_layer_ids
             },
-            "satelliteFilter": "saturate(0.52) brightness(0.78) contrast(1.06)",
+            "satelliteFilter": cloud_style.STYLE_VERSION if enhanced else cloud_style.LEGACY_STYLE,
             "base": {
                 "path": f"static/{spec.domain_id}/base-dark.png",
                 "size": base_stat.st_size,
@@ -2632,6 +2652,10 @@ def _build_profile_from_snapshot(
                 or (spec.track == "day" and range_hours == 24)
             )
         )
+        # Exact sidecars own live/day presets; dynamic styled media is the fallback.
+        # Avoid encoding a second copy of every exact range in the legacy builder.
+        if enhanced:
+            track_ranges = ()
         for range_hours in track_ranges:
             exact_range = _reusable_exact_range(
                 output_root,
@@ -2674,7 +2698,7 @@ def _build_profile_from_snapshot(
                     media_viewport=dict(spec.viewport),
                     media_width=width,
                     media_height=height,
-                    crf=COMPOSITE_VIDEO_CRF,
+                    crf=22 if cloud_policy.enabled(spec) else COMPOSITE_VIDEO_CRF,
                 )
 
                 def prepare_composite(
@@ -2841,6 +2865,9 @@ def _build_profile_from_snapshot(
         "frames": frame_manifest,
         "proxies": proxy_entries,
     }
+    if enhanced:
+        manifest["satelliteStyle"] = cloud_style.STYLE_VERSION
+        manifest["videoEncoding"] = {"codec": "h264", "crf": 22, "preset": spec.preset, "pixelFormat": "yuv420p"}
     if proxy_warnings:
         manifest["proxyWarnings"] = proxy_warnings
     if composites:

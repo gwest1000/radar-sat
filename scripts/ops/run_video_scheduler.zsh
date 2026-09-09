@@ -226,7 +226,9 @@ import radarsat.config as config
 package = Path(config.__file__).parent
 video_path = package / "video.py"
 composite_path = package / "composite_video.py"
-source_paths = (Path(config.__file__), video_path, composite_path)
+source_paths = (Path(config.__file__), video_path, composite_path, package / "cloud_style.py", package / "cloud_policy.py",
+                *sorted((package / "cloud_light").glob("*.mjs")),
+                *sorted((package / "cloud_light").glob("*.json")))
 digest = hashlib.sha256()
 for path in source_paths:
     digest.update(path.name.encode())

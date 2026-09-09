@@ -112,7 +112,7 @@ export function catalogGenerationIsOlder(incoming: string, accepted: string): bo
   return Boolean(accepted) && Date.parse(incoming) < Date.parse(accepted);
 }
 
-// The BC XL short-loop pilot prioritizes a complete, consistently graded loop
+// The BC XL MSC GeoColour loops prioritizes a complete, consistently graded loop
 // over unprocessed newer rasters. Observation timestamps remain unchanged.
 export function uniformCloudStyleProfile(
   productId: string | undefined,
@@ -120,7 +120,7 @@ export function uniformCloudStyleProfile(
   rangeHours: number,
 ): boolean {
   return productId === "bc-large-overlay" && layerId === "eccc-geocolor"
-    && (rangeHours === 3 || rangeHours === 6);
+    && rangeHours > 0;
 }
 
 export function permitsLiveEdgeReplacement(

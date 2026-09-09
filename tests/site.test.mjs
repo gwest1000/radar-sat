@@ -202,7 +202,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(videoLoop, /const composites = Array\.isArray\(parsed\.composites\)/);
   assert.match(viewer, /sameLayerSet\(enabledVideoLayerIds, candidateDefaultComposite\.layerIds\)/);
   assert.match(viewer, /mediaViewport: activeExactComposite\.manifest\.mediaViewport \?\? FULL_VIEWPORT/);
-  assert.match(viewer, /satelliteFilter=\{activeComposite \? undefined : satelliteFilter\}/);
+  assert.match(viewer, /satelliteFilter=\{activeComposite \|\| playbackVideoManifest\.satelliteStyle \? undefined : satelliteFilter\}/);
   assert.match(viewer, /nativeLoop=\{activeComposite\?\.nativeLoop\}/);
   assert.match(viewer, /playbackQuality/);
   assert.match(viewer, /label: "Prebuilt loop"/);
@@ -930,8 +930,7 @@ test("manifest loading recovers transient errors without retrying malformed data
 
 test("enhanced BC XL loops keep the encoded final frame instead of an untreated live edge", async () => {
   const { uniformCloudStyleProfile, permitsLiveEdgeReplacement } = await import("../app/video-selection-policy.ts");
-  for (const hours of [3, 6]) assert.equal(uniformCloudStyleProfile("bc-large-overlay", "eccc-geocolor", hours), true);
-  for (const hours of [12, 24]) assert.equal(uniformCloudStyleProfile("bc-large-overlay", "eccc-geocolor", hours), false);
+  for (const hours of [3, 6, 12, 24, 168]) assert.equal(uniformCloudStyleProfile("bc-large-overlay", "eccc-geocolor", hours), true);
   assert.equal(uniformCloudStyleProfile("bc-small-overlay", "eccc-geocolor", 3), false);
   assert.equal(uniformCloudStyleProfile("bc-large-overlay", "raw-ir", 3), false);
   assert.equal(permitsLiveEdgeReplacement({ satelliteStyle: "layered-daylight-soft-50-v1-test" }), false);

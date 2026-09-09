@@ -2579,6 +2579,7 @@ export function RadarViewer() {
   );
 
   const videoFreshEnough = useMemo(() => {
+    if (loadedVideoManifest?.satelliteStyle) return true;
     if (!loadedVideoManifest || !fallbackAnchorFrames.length || !product) return true;
     const videoNewest = Date.parse(
       loadedVideoManifest.frames[loadedVideoManifest.frames.length - 1]?.sourceValidTime ?? "",
@@ -4196,7 +4197,7 @@ export function RadarViewer() {
                 requestedIndex={currentFrameIndex}
                 playing={isAnimating}
                 speed={speed}
-                satelliteFilter={activeComposite ? undefined : satelliteFilter}
+                satelliteFilter={activeComposite || playbackVideoManifest.satelliteStyle ? undefined : satelliteFilter}
                 compositePresetId={activeComposite?.id}
                 compositeMediaPath={activeComposite?.media.path}
                 nativeLoop={activeComposite?.nativeLoop}

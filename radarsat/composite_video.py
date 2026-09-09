@@ -13,6 +13,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from PIL import Image
 
 from .catalog import build_catalog
+from . import cloud_style, cloud_policy
 from .config import (
     VIDEO_COMPOSITE_PRESETS,
     VIDEO_EXACT_RANGES,
@@ -54,6 +55,7 @@ from .video import (
 
 COMPOSITE_SIDECAR_SCHEMA_VERSION = 1
 HYBRID_COMPOSITE_SIDECAR_SCHEMA_VERSION = 2
+CLOUD_PILOT_VIDEO_CRF = 22
 COMPOSITE_FRAME_CACHE_VERSION = 1
 COMPOSITE_FRAME_CACHE_MAX_AGE_HOURS = 36.0
 COMPOSITE_FRAME_CACHE_MAX_BYTES = 6_000_000_000
@@ -70,7 +72,9 @@ class CompositeFrame:
 class _RenderContext:
     """Small bounded decode cache used only while filling missing frame caches."""
 
-    def __init__(self, source_root: Path, spec: ProfileSpec, *, limit: int = 16) -> None:
+    def __init__(self, source_root: Path, spec: ProfileSpec, *, limit: int = 16, output_root: Path | None = None, enhanced: bool = False) -> None:
+        self.output_root = output_root or source_root
+        self.enhanced = enhanced
         self.source_root = source_root
         self.spec = spec
         self.limit = limit
@@ -117,6 +121,12 @@ class _RenderContext:
         if cached is not None:
             self.satellites.move_to_end(key)
             return cached
+        enhanced_path = None
+        if self.enhanced:
+            enhanced_path = cloud_style.cache_path(self.output_root, self.source_root, self.spec, frame)
+            cached = cloud_style.read_cache(enhanced_path, (self.spec.width, self.spec.height))
+            if cached is not None:
+                return self._remember(self.satellites, key, cached)
         with Image.open(_safe_path(self.source_root, frame.source_path)) as source:
             satellite = _crop_resize(
                 source,
@@ -130,8 +140,12 @@ class _RenderContext:
                 (0, 0),
                 satellite.getchannel("A"),
             )
-        filtered = _operational_satellite_filter(composed)
-        composed.close()
+        try:
+            filtered = (cloud_style.render_cached(composed, frame.source_valid_time,
+                         enhanced_path, _atomic_png) if enhanced_path is not None
+                        else _operational_satellite_filter(composed))
+        finally:
+            composed.close()
         return self._remember(self.satellites, key, filtered)
 
     def overlay(self, selection: ProxyLayerSelection) -> Image.Image:
@@ -373,6 +387,7 @@ def _frame_fingerprint(
     frame: SelectedFrame,
     selections: Sequence[ProxyLayerSelection],
     opacities: Mapping[str, float],
+    enhanced: bool = False,
 ) -> str:
     base = _asset_fingerprint(
         source_root,
@@ -400,7 +415,7 @@ def _frame_fingerprint(
             "width": spec.width,
             "height": spec.height,
             "viewport": dict(spec.viewport),
-            "satelliteFilter": "saturate(0.52) brightness(0.78) contrast(1.06)",
+            "satelliteFilter": cloud_style.STYLE_VERSION if enhanced else cloud_style.LEGACY_STYLE,
             "base": base,
             "satellite": _source_fingerprint(source_root, frame),
             "overlays": overlays,
@@ -656,6 +671,12 @@ def _requested_ranges(spec: ProfileSpec, ranges: Iterable[int] | None) -> tuple[
     return tuple(value for value in track_ranges if value in requested)
 
 
+def _composite_video_crf(spec: ProfileSpec, hours: int) -> int:
+    # Keep all intermediates lossless; apply the delivery-quality tradeoff only
+    # at the final encoder, scoped to the accepted BC XL short-loop pilot.
+    return CLOUD_PILOT_VIDEO_CRF if cloud_policy.enabled(spec, hours) else COMPOSITE_VIDEO_CRF
+
+
 def _build_range_sidecar(
     output_root: Path,
     spec: ProfileSpec,
@@ -674,6 +695,7 @@ def _build_range_sidecar(
     ffmpeg: str,
     generated_at: str,
 ) -> Mapping[str, Any]:
+    video_crf = _composite_video_crf(spec, hours)
     first, range_frames = _range_frames(selected, hours)
     range_plans = list(frame_plans[first:])
     range_overlay_layers = list(frame_overlay_layers[first:])
@@ -699,7 +721,7 @@ def _build_range_sidecar(
             media_viewport=dict(spec.viewport),
             media_width=width,
             media_height=height,
-            crf=COMPOSITE_VIDEO_CRF,
+            crf=video_crf,
         )
         images_by_valid_time = {
             frame.valid_time: image for frame, image in zip(range_frames, images, strict=True)
@@ -721,7 +743,7 @@ def _build_range_sidecar(
             "rendition": rendition_id,
             "width": width,
             "height": height,
-            "crf": COMPOSITE_VIDEO_CRF,
+            "crf": video_crf,
             "preset": spec.preset,
         }
         destination, media_fingerprint, segments, _ = _build_hls_media(
@@ -815,6 +837,10 @@ def _build_range_sidecar(
         "frames": frames,
         "renditions": renditions,
     }
+    if cloud_policy.enabled(spec, hours):
+        manifest_basis["satelliteStyle"] = cloud_style.STYLE_VERSION
+        manifest_basis["videoEncoding"] = {"codec": "h264", "crf": video_crf,
+                                           "preset": spec.preset, "pixelFormat": "yuv420p"}
     if composite_kind == "hybrid-prefix":
         manifest_basis.update(
             {
@@ -910,6 +936,19 @@ def build_composite_profile(
     requested_ranges = _requested_ranges(spec, ranges)
     if not requested_ranges:
         return {"status": "skipped", "profiles": [], "failures": []}
+    # A style is uniform for an entire generation. Split mixed range requests
+    # so the 3/6-hour pilot cannot alter the 12/24-hour products or reuse old pixels.
+    pilot_ranges = [h for h in requested_ranges if cloud_policy.enabled(spec, h)]
+    other_ranges = [h for h in requested_ranges if h not in pilot_ranges]
+    if pilot_ranges and other_ranges:
+        parts = [build_composite_profile(source_root, output_root, catalog, spec,
+                    ffmpeg=ffmpeg, ranges=group, preset_ids=preset_ids, now=build_now)
+                 for group in (pilot_ranges, other_ranges)]
+        return {"status": "warning" if any(p["failures"] for p in parts) else "ok",
+                "profiles": [v for p in parts for v in p["profiles"]],
+                "failures": [v for p in parts for v in p["failures"]],
+                "framesSelected": sum(p.get("framesSelected", 0) for p in parts)}
+    enhanced = bool(pilot_ranges)
     # Preserve the existing exact-only default. Reusable cores are an explicit
     # lower-priority lane selected with ``preset_ids``/``--preset`` so their
     # proxy preparation can never delay an operational exact commit.
@@ -1002,6 +1041,7 @@ def build_composite_profile(
                     frame,
                     active,
                     opacities,
+                    enhanced=enhanced,
                 )
                 plans.append(
                     CompositeFrame(
@@ -1073,7 +1113,7 @@ def build_composite_profile(
     # lets the two common presets share the currently decoded satellite and
     # overlay sources during a cold build.
     preset_errors: dict[str, Exception] = {}
-    with _RenderContext(source_root, spec) as context:
+    with _RenderContext(source_root, spec, output_root=output_root, enhanced=enhanced) as context:
         for index, frame in enumerate(selected):
             for preset_id, plans in plans_by_preset.items():
                 if preset_id in preset_errors:

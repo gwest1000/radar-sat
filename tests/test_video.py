@@ -897,7 +897,8 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(unchanged["status"], "unchanged")
 
-    def test_configured_composites_build_shared_segment_ranges(self) -> None:
+    @mock.patch("radarsat.video.cloud_policy.enabled", new=lambda *args: False)
+    def test_legacy_configured_composites_build_shared_segment_ranges(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             catalog, original_spec = self.make_source(root)
@@ -1184,8 +1185,27 @@ class VideoBuildTests(unittest.TestCase):
             )
             self.assertEqual(
                 len(list((output / "composite-frame-cache").rglob("*.png"))),
-                3,
+                6,  # Three final frames plus three reusable enhanced satellite layers.
             )
+
+            # A delivery-quality change must create new encoded media without
+            # recomputing the lossless enhanced images or composite frame cache.
+            with mock.patch("radarsat.composite_video.CLOUD_PILOT_VIDEO_CRF", 20), mock.patch(
+                "radarsat.composite_video._render_high_frame", wraps=_render_high_frame,
+            ) as render:
+                recompressed = build_composite_profile(
+                    root / "source", output, catalog, spec,
+                    ffmpeg=str(shutil.which("ffmpeg")), ranges=(3,),
+                    preset_ids=("operational-default-v1",),
+                    now=now + dt.timedelta(minutes=2),
+                )
+                self.assertEqual(render.call_count, 0)
+            self.assertEqual(recompressed["status"], "ok")
+            newer = recompressed["profiles"][0]
+            self.assertNotEqual(newer["generation"], profile["generation"])
+            newer_manifest = json.loads((output / newer["manifestPath"]).read_text())
+            self.assertEqual(newer_manifest["videoEncoding"]["crf"], 20)
+            self.assertNotEqual(newer_manifest["renditions"][0]["media"]["path"], manifest["renditions"][0]["media"]["path"])
 
     def test_composite_sidecar_failure_preserves_last_good_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
