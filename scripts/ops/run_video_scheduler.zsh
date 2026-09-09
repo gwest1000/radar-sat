@@ -25,6 +25,8 @@ FAILURE_BACKOFF_SECONDS="${RADARSAT_VIDEO_FAILURE_BACKOFF_SECONDS:-120}"
 PRUNE_INTERVAL_SECONDS="${RADARSAT_VIDEO_PRUNE_INTERVAL_SECONDS:-3600}"
 MAX_EXACT_WORKERS="${RADARSAT_VIDEO_MAX_EXACT_WORKERS:-2}"
 HYBRID_CORE_ENABLED="${RADARSAT_HYBRID_CORE_ENABLED:-1}"
+MAX_HYBRID_UNITS="${RADARSAT_VIDEO_MAX_HYBRID_UNITS:-3}"
+HYBRID_BUDGET_SECONDS="${RADARSAT_VIDEO_HYBRID_BUDGET_SECONDS:-90}"
 HYBRID_CORE_PRESETS=(weather-core-v1 weather-smoke-core-v1)
 
 if (( MAX_EXACT_WORKERS < 1 || MAX_EXACT_WORKERS > 2 )); then
@@ -32,6 +34,8 @@ if (( MAX_EXACT_WORKERS < 1 || MAX_EXACT_WORKERS > 2 )); then
   exit 2
 fi
 if [[ ! "${MAX_RUNTIME_SECONDS}" =~ '^[1-9][0-9]*$' ]] \
+  || [[ ! "${MAX_HYBRID_UNITS}" =~ '^[1-9][0-9]*$' ]] \
+  || [[ ! "${HYBRID_BUDGET_SECONDS}" =~ '^[1-9][0-9]*$' ]] \
   || [[ ! "${TERMINATE_GRACE_SECONDS}" =~ '^[0-9]+$' ]] \
   || [[ ! "${KILL_REAP_SECONDS}" =~ '^[0-9]+$' ]]; then
   print -u2 "Video scheduler runtime and termination limits must be whole seconds."
@@ -575,6 +579,15 @@ range_track() {
   esac
 }
 
+range_freshness_seconds() {
+  case "$1" in
+    3) print 1200 ;;
+    6) print 1500 ;;
+    12|24) print 2400 ;;
+    *) return 1 ;;
+  esac
+}
+
 range_products() {
   case "$1" in
     3|6)
@@ -759,14 +772,14 @@ run_hybrid_worker() {
 run_one_hybrid_profile() {
   local now_epoch="$1" range product preset token task_id track worker_result=0 worker_pid=0
   local selected_preset="" selected_range="" selected_product="" selected_token=""
-  local selected_task_id="" selected_success=0 preset_served=0 selected_preset_served=0
+  local selected_task_id="" preset_served=0 selected_preset_served=0
   local task_success=0
+  local task_deadline=0 selected_deadline=0
   local -a products
   [[ "${HYBRID_CORE_ENABLED}" == "1" ]] || return 2
-  # Pick between hybrid families by the time each family was last served, then
-  # pick its stalest due task. This prevents the frequently changing weather
-  # family from indefinitely starving smoke while retaining deterministic
-  # oldest-success ordering within each family.
+  # Short loops have tighter freshness targets. Scheduling only one oldest
+  # family task per launch allowed their refresh interval to reach 35 minutes.
+  # Earliest service deadline wins; family fairness breaks equal deadlines.
   for preset in "${HYBRID_CORE_PRESETS[@]}"; do
     preset_served="$(read_epoch "${SCHEDULER_STATE}/$(state_key "hybrid-family-${preset}").served-epoch")"
     for range in 3 6 12 24; do
@@ -784,18 +797,18 @@ run_one_hybrid_profile() {
           continue
         fi
         task_success="$(read_epoch "${SCHEDULER_STATE}/$(state_key "${task_id}").success-epoch")"
+        task_deadline=$(( task_success + $(range_freshness_seconds "${range}") ))
         if [[ -z "${selected_preset}" ]] \
-          || (( preset_served < selected_preset_served )) \
-          || { (( preset_served == selected_preset_served )) \
-            && [[ "${preset}" == "${selected_preset}" ]] \
-            && (( task_success < selected_success )); }; then
+          || (( task_deadline < selected_deadline )) \
+          || { (( task_deadline == selected_deadline )) \
+            && (( preset_served < selected_preset_served )); }; then
           selected_preset="${preset}"
           selected_preset_served="${preset_served}"
           selected_range="${range}"
           selected_product="${product}"
           selected_token="${token}"
           selected_task_id="${task_id}"
-          selected_success="${task_success}"
+          selected_deadline="${task_deadline}"
         fi
       done
     done
@@ -824,6 +837,20 @@ run_one_hybrid_profile() {
       "${selected_task_id}" "${selected_token}" "${now_epoch}"
   fi
   return "${worker_result}"
+}
+
+exact_work_due() {
+  local now_epoch="$1" range product token
+  for range in 3 6 12 24; do
+    for product in "${(@f)$(range_products "${range}")}"; do
+      token="$(latest_token "${product}" "${range}" || true)"
+      if [[ -n "${token}" ]] \
+        && batch_due "${range}" "${token}" "${now_epoch}" "exact-${range}-${product}"; then
+        return 0
+      fi
+    done
+  done
+  return 1
 }
 
 typeset -gA SELECTED_TOKENS
@@ -1020,9 +1047,26 @@ while true; do
 done
 
 now_epoch="$(date +%s)"
-if (( now_epoch - started_epoch < MAX_RUNTIME_SECONDS )); then
+exact_pending=0
+hybrid_deadline=$(( now_epoch + HYBRID_BUDGET_SECONDS ))
+for hybrid_unit in {1..${MAX_HYBRID_UNITS}}; do
+  now_epoch="$(date +%s)"
+  if (( now_epoch >= SCHEDULER_DEADLINE_EPOCH || now_epoch >= hybrid_deadline )); then
+    break
+  fi
+  if (( hybrid_unit > 1 )) && exact_work_due "${now_epoch}"; then
+    log_message "New exact-video work is due; deferring remaining hybrid and archive work."
+    exact_pending=1
+    break
+  fi
   hybrid_status=0
+  scheduler_deadline="${SCHEDULER_DEADLINE_EPOCH}"
+  if (( hybrid_deadline < SCHEDULER_DEADLINE_EPOCH )); then
+    SCHEDULER_DEADLINE_EPOCH="${hybrid_deadline}"
+  fi
   run_one_hybrid_profile "${now_epoch}" || hybrid_status=$?
+  SCHEDULER_DEADLINE_EPOCH="${scheduler_deadline}"
+  (( hybrid_status == 2 )) && break
   if (( hybrid_status != 2 )); then
     ran_batch=1
     if ! publish_dirty; then
@@ -1030,10 +1074,14 @@ if (( now_epoch - started_epoch < MAX_RUNTIME_SECONDS )); then
     fi
     (( hybrid_status == 0 )) || exit "${hybrid_status}"
   fi
-fi
+done
 
 now_epoch="$(date +%s)"
-if (( now_epoch - started_epoch < MAX_RUNTIME_SECONDS )); then
+if (( ! exact_pending && ran_batch )) && exact_work_due "${now_epoch}"; then
+  exact_pending=1
+  log_message "New exact-video work is due; deferring archive work."
+fi
+if (( ! exact_pending && now_epoch - started_epoch < MAX_RUNTIME_SECONDS )); then
   archive_status=0
   run_one_archive_product "${now_epoch}" || archive_status=$?
   if (( archive_status != 2 )); then

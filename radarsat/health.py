@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import time
 from typing import Any
 
 from .catalog import PUBLIC_VIDEO_LAYERS
@@ -35,7 +36,20 @@ def directory_size(root: Path) -> int:
     return total
 
 
-def storage_breakdown(root: Path) -> dict[str, int]:
+def storage_breakdown(
+    root: Path,
+    *,
+    max_seconds: float = 5,
+    previous: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Bound routine disk accounting so it cannot hide a stopped publisher.
+
+    DirEntry caches file type information; avoid the two extra stat calls per
+    file made by Path.is_file()/Path.stat() on the external data volume.
+    A timed-out scan reports its coverage and retains a dated complete sample
+    when one is available. Free-disk guards still run on every health check.
+    """
+    started = time.monotonic()
     categories = {
         "compositeCacheBytes": 0,
         "videoSegmentBytes": 0,
@@ -53,19 +67,133 @@ def storage_breakdown(root: Path) -> dict[str, int]:
         "frames": "sourceFrameBytes",
         "metadata": "sourceFrameBytes",
     }
-    if not root.exists():
-        return {"totalBytes": 0, **categories}
-    for path in root.rglob("*"):
+    pending = [(root, "otherBytes")]
+    complete = True
+    files = 0
+    while pending:
+        if time.monotonic() - started >= max_seconds:
+            complete = False
+            break
+        directory, inherited_category = pending.pop()
         try:
-            if not path.is_file():
-                continue
-            size = path.stat().st_size
-            relative = path.relative_to(root)
-        except (OSError, ValueError):
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if time.monotonic() - started >= max_seconds:
+                        complete = False
+                        break
+                    category = (
+                        roots.get(entry.name, "otherBytes")
+                        if directory == root else inherited_category
+                    )
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            pending.append((Path(entry.path), category))
+                        elif entry.is_file(follow_symlinks=False):
+                            categories[category] += entry.stat(follow_symlinks=False).st_size
+                            files += 1
+                    except FileNotFoundError:
+                        # Concurrent pruning is normal; the removed file no
+                        # longer contributes to current storage.
+                        continue
+                    except OSError:
+                        complete = False
+        except FileNotFoundError:
             continue
-        category = roots.get(relative.parts[0], "otherBytes")
-        categories[category] += size
-    return {"totalBytes": sum(categories.values()), **categories}
+        except OSError:
+            complete = False
+        if not complete:
+            break
+    sample = {"totalBytes": sum(categories.values()), **categories}
+    metadata = {
+        "scanComplete": complete,
+        "scanDurationSeconds": round(time.monotonic() - started, 3),
+        "scannedFiles": files,
+    }
+    if complete:
+        return {
+            **sample, **metadata, "measurement": "complete",
+            "measuredAt": format_utc(dt.datetime.now(UTC)),
+        }
+    if previous and previous.get("measurement") in {"complete", "cached"}:
+        if all(isinstance(previous.get(key), int) for key in sample):
+            return {
+                **{key: previous[key] for key in sample}, **metadata,
+                "measurement": "cached", "measuredAt": previous.get("measuredAt"),
+                "partialBytes": sample["totalBytes"],
+            }
+    return {**sample, **metadata, "measurement": "partial", "measuredAt": None}
+
+
+def inspect_publication(
+    status_path: Path,
+    *,
+    now: dt.datetime,
+    max_age_minutes: int,
+) -> tuple[dict[str, Any], list[str]]:
+    """Inspect acknowledged catalog commits, independently of local rendering."""
+    errors: list[str] = []
+    publication: dict[str, Any] = {}
+    try:
+        publication = read_json(status_path)
+    except RuntimeError as error:
+        errors.append(str(error))
+    progress_path = status_path.with_name(f"{status_path.stem}-progress.json")
+    progress: dict[str, Any] = {}
+    if progress_path.exists():
+        try:
+            progress = read_json(progress_path)
+        except RuntimeError as error:
+            errors.append(str(error))
+
+    commits = []
+    for payload, stamp, generated in (
+        (publication, publication.get("lastCatalogCommitAt") or (
+            publication.get("updatedAt") if publication.get("status") == "ok" else None
+        ),
+         publication.get("catalogGeneratedAt")),
+        (progress, progress.get("lastCatalogCommitAt"),
+         progress.get("lastCommittedCatalogGeneratedAt")),
+    ):
+        if not stamp:
+            continue
+        try:
+            commits.append((parse_utc(str(stamp)), generated, payload))
+        except ValueError:
+            errors.append("publication has an invalid catalog commit timestamp")
+    summary: dict[str, Any] = {}
+    if commits:
+        committed, generated, _payload = max(commits, key=lambda item: (item[0], bool(item[1])))
+        age = max(0.0, (now - committed).total_seconds() / 60)
+        summary.update(lastCatalogCommitAt=format_utc(committed), commitAgeMinutes=round(age, 1))
+        if age > max_age_minutes:
+            errors.append(f"public catalog has not committed for {age:.0f} minutes")
+        if generated:
+            try:
+                generated_time = parse_utc(str(generated))
+                catalog_age = max(0.0, (now - generated_time).total_seconds() / 60)
+                summary.update(catalogGeneratedAt=format_utc(generated_time), catalogAgeMinutes=round(catalog_age, 1))
+                if catalog_age > max_age_minutes:
+                    errors.append(f"published catalog was generated {catalog_age:.0f} minutes ago")
+            except ValueError:
+                errors.append("publication has an invalid committed catalog generation timestamp")
+    else:
+        errors.append("publication has no acknowledged catalog commit")
+    if publication.get("status") not in {None, "ok", "warning"}:
+        errors.append(f"publication status is {publication.get('status')}")
+    if progress:
+        summary.update(publisherStatus=progress.get("status"), publisherStage=progress.get("stage"))
+        try:
+            stage_time = parse_utc(str(progress["stageUpdatedAt"]))
+            stage_age = max(0.0, (now - stage_time).total_seconds() / 60)
+            summary["publisherStageAgeMinutes"] = round(stage_age, 1)
+            if progress.get("status") == "running" and stage_age > 10:
+                errors.append(f"publisher has made no progress in {progress.get('stage', 'unknown')} for {stage_age:.0f} minutes")
+        except (KeyError, ValueError):
+            if progress.get("status") == "running":
+                errors.append("running publisher has no valid progress timestamp")
+        if progress.get("status") == "error":
+            errors.append(f"publisher failed during {progress.get('stage', 'unknown')}")
+    return summary, errors
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -127,7 +255,11 @@ def inspect_health(
     local_max_bytes: int | None = None,
     disk_warn_free_bytes: int | None = None,
     disk_min_free_bytes: int | None = None,
+    storage_budget_seconds: float = 5,
+    previous_storage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    started = time.monotonic()
+    supplied_now = now is not None
     now = (now or dt.datetime.now(UTC)).astimezone(UTC)
     warnings: list[str] = []
     errors: list[str] = []
@@ -148,11 +280,6 @@ def inspect_health(
     if require_publish:
         try:
             publication = read_json(publish_status_path)
-            issue = status_age_issue(
-                publication, "publication", now, service_max_age_minutes
-            )
-            if issue:
-                errors.append(issue)
             projected = publication.get("projectedBytes")
             if isinstance(projected, (int, float)) and not isinstance(projected, bool):
                 r2_warning = int(os.environ.get("RADARSAT_R2_WARN_BYTES", 9_000_000_000))
@@ -384,22 +511,34 @@ def inspect_health(
     except (RuntimeError, KeyError, ValueError) as error:
         errors.append(str(error))
 
-    storage = storage_breakdown(output_root)
+    storage = storage_breakdown(
+        output_root, max_seconds=storage_budget_seconds, previous=previous_storage,
+    )
+    if not storage["scanComplete"]:
+        if storage["measurement"] == "cached":
+            warnings.append(
+                f"storage scan incomplete; using complete measurement from {storage.get('measuredAt')}"
+            )
+        else:
+            warnings.append("storage scan incomplete; local bytes are a lower bound")
     local_bytes = storage["totalBytes"]
+    # A partial current scan is already a valid lower bound. Retaining an old
+    # complete sample must not suppress a newly observed storage overrun.
+    guard_bytes = max(local_bytes, storage.get("partialBytes", 0))
     warning_threshold = local_warn_bytes or int(
         os.environ.get("RADARSAT_LOCAL_WARN_BYTES", 20_000_000_000)
     )
     maximum_threshold = local_max_bytes or int(
         os.environ.get("RADARSAT_LOCAL_MAX_BYTES", 30_000_000_000)
     )
-    if local_bytes >= maximum_threshold:
+    if guard_bytes >= maximum_threshold:
         errors.append(
-            f"local working set is {local_bytes / 1_000_000_000:.2f} GB "
+            f"local working set is at least {guard_bytes / 1_000_000_000:.2f} GB "
             f"(limit {maximum_threshold / 1_000_000_000:.2f} GB)"
         )
-    elif local_bytes >= warning_threshold:
+    elif guard_bytes >= warning_threshold:
         warnings.append(
-            f"local working set is {local_bytes / 1_000_000_000:.2f} GB "
+            f"local working set is at least {guard_bytes / 1_000_000_000:.2f} GB "
             f"(warning {warning_threshold / 1_000_000_000:.2f} GB)"
         )
 
@@ -429,13 +568,27 @@ def inspect_health(
     except OSError as error:
         errors.append(f"cannot inspect forecast-data disk usage: {error}")
 
+    # Read the latest acknowledged public commit after optional disk work.
+    # Previously a 28-minute stat crawl delayed the report while publication
+    # age remained frozen at the time the crawl began.
+    completed = now if supplied_now else dt.datetime.now(UTC)
+    publication_health: dict[str, Any] = {}
+    if require_publish:
+        publication_health, publication_errors = inspect_publication(
+            publish_status_path, now=completed, max_age_minutes=service_max_age_minutes,
+        )
+        errors.extend(publication_errors)
+
     return {
         "status": "ok" if not errors else "error",
         "checkedAt": format_utc(now),
+        "completedAt": format_utc(completed),
+        "durationSeconds": round(time.monotonic() - started, 3),
         "errors": errors,
         "warnings": warnings,
         "localBytes": local_bytes,
         "storage": storage,
         "frameCounts": frame_counts,
         "videoCoverage": video_coverage,
+        "publication": publication_health,
     }

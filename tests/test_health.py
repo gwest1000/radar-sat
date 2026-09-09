@@ -7,13 +7,133 @@ import tempfile
 import unittest
 from unittest import mock
 
-from radarsat.health import inspect_health, recent_layer_source_count
+from radarsat.health import (
+    inspect_health,
+    inspect_publication,
+    recent_layer_source_count,
+    storage_breakdown,
+)
 
 
 UTC = dt.timezone.utc
 
 
 class HealthTests(unittest.TestCase):
+    def test_fresh_local_catalog_does_not_hide_stalled_publication(self) -> None:
+        now = dt.datetime(2026, 9, 9, 16, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            publish = self._fixture(root, now, 1_000_000)
+            publish.write_text(json.dumps({
+                "status": "ok", "updatedAt": "2026-09-09T14:57:00Z",
+                "lastCatalogCommitAt": "2026-09-09T14:57:00Z",
+                "catalogGeneratedAt": "2026-09-09T14:53:00Z",
+            }))
+            publish.with_name("publish-progress.json").write_text(json.dumps({
+                "status": "running", "stage": "snapshot",
+                "stageUpdatedAt": "2026-09-09T15:10:00Z",
+                "lastCatalogCommitAt": "2026-09-09T14:57:00Z",
+                "catalogGeneratedAt": "2026-09-09T15:59:00Z",
+                "lastCommittedCatalogGeneratedAt": "2026-09-09T14:53:00Z",
+            }))
+            result = inspect_health(root, publish, now=now, storage_budget_seconds=0)
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["publication"]["catalogGeneratedAt"], "2026-09-09T14:53:00Z")
+        self.assertIn("public catalog has not committed for 63 minutes", result["errors"])
+        self.assertIn("publisher has made no progress in snapshot for 50 minutes", result["errors"])
+        self.assertEqual(result["storage"]["measurement"], "partial")
+
+    def test_recent_commit_of_old_catalog_is_still_unhealthy(self) -> None:
+        now = dt.datetime(2026, 9, 9, 16, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temporary:
+            publish = Path(temporary) / "publish.json"
+            publish.write_text(json.dumps({
+                "status": "ok", "updatedAt": "2026-09-09T15:59:00Z",
+                "lastCatalogCommitAt": "2026-09-09T15:59:00Z",
+                "catalogGeneratedAt": "2026-09-09T14:53:00Z",
+            }))
+            summary, errors = inspect_publication(publish, now=now, max_age_minutes=15)
+        self.assertEqual(summary["commitAgeMinutes"], 1)
+        self.assertEqual(errors, ["published catalog was generated 67 minutes ago"])
+
+    def test_commit_progress_is_visible_before_cleanup_finishes(self) -> None:
+        now = dt.datetime(2026, 9, 9, 16, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temporary:
+            publish = Path(temporary) / "publish.json"
+            publish.write_text(json.dumps({
+                "status": "ok", "updatedAt": "2026-09-09T14:57:00Z",
+            }))
+            publish.with_name("publish-progress.json").write_text(json.dumps({
+                "status": "running", "stage": "cleanup",
+                "stageUpdatedAt": "2026-09-09T15:59:00Z",
+                "lastCatalogCommitAt": "2026-09-09T15:58:00Z",
+                "lastCommittedCatalogGeneratedAt": "2026-09-09T15:57:00Z",
+            }))
+            summary, errors = inspect_publication(publish, now=now, max_age_minutes=15)
+        self.assertEqual(summary["commitAgeMinutes"], 2)
+        self.assertEqual(summary["catalogAgeMinutes"], 3)
+        self.assertEqual(errors, [])
+
+    def test_failed_or_dry_run_attempt_does_not_replace_acknowledged_commit(self) -> None:
+        now = dt.datetime(2026, 9, 9, 16, tzinfo=UTC)
+        for status in ("error", "dry-run"):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as temporary:
+                publish = Path(temporary) / "publish.json"
+                publish.write_text(json.dumps({
+                    "status": status, "updatedAt": "2026-09-09T15:59:00Z",
+                }))
+                publish.with_name("publish-progress.json").write_text(json.dumps({
+                    "status": "ok", "stage": "complete",
+                    "stageUpdatedAt": "2026-09-09T14:57:00Z",
+                    "lastCatalogCommitAt": "2026-09-09T14:57:00Z",
+                    "lastCommittedCatalogGeneratedAt": "2026-09-09T14:53:00Z",
+                }))
+                summary, errors = inspect_publication(publish, now=now, max_age_minutes=15)
+                self.assertEqual(summary["lastCatalogCommitAt"], "2026-09-09T14:57:00Z")
+                self.assertEqual(summary["commitAgeMinutes"], 63)
+                self.assertEqual(summary["catalogAgeMinutes"], 67)
+                self.assertIn("public catalog has not committed for 63 minutes", errors)
+                self.assertIn("published catalog was generated 67 minutes ago", errors)
+
+    def test_storage_budget_keeps_dated_complete_measurement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "frames").mkdir()
+            (root / "frames" / "a.png").write_bytes(b"abc")
+            complete = storage_breakdown(root)
+            with mock.patch("radarsat.health.os.scandir") as scan:
+                cached = storage_breakdown(root, max_seconds=0, previous=complete)
+            scan.assert_not_called()
+        self.assertEqual(complete["totalBytes"], 3)
+        self.assertEqual(cached["totalBytes"], 3)
+        self.assertEqual(cached["measuredAt"], complete["measuredAt"])
+        self.assertEqual(cached["measurement"], "cached")
+        self.assertFalse(cached["scanComplete"])
+
+    def test_storage_does_not_follow_symlink_outside_data_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "output"
+            root.mkdir()
+            external = Path(temporary) / "external"
+            external.mkdir()
+            (external / "large.bin").write_bytes(b"x" * 100)
+            (root / "linked").symlink_to(external)
+            result = storage_breakdown(root)
+        self.assertEqual(result["totalBytes"], 0)
+        self.assertTrue(result["scanComplete"])
+
+    def test_partial_scan_overrun_is_not_hidden_by_cached_size(self) -> None:
+        now = dt.datetime(2026, 9, 9, 16, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            publish = self._fixture(root, now, 1_000_000)
+            with mock.patch("radarsat.health.storage_breakdown", return_value={
+                "totalBytes": 10_000_000_000, "partialBytes": 31_000_000_000,
+                "scanComplete": False, "measurement": "cached", "measuredAt": "earlier",
+            }):
+                result = inspect_health(root, publish, now=now)
+        self.assertTrue(any("at least 31.00 GB" in value for value in result["errors"]))
+
     def test_recent_layer_source_count_uses_latest_hour(self) -> None:
         base = dt.datetime(2026, 9, 3, 20, tzinfo=UTC)
         frames = [

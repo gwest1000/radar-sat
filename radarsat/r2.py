@@ -16,8 +16,9 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .config import (
     DOMAINS,
@@ -170,6 +171,56 @@ class RemoteInventory:
     modified_at: dict[str, dt.datetime]
 
 
+class PublicationProgress:
+    """Report work in flight without making an old catalog look newly published."""
+
+    def __init__(self, status_path: Path, *, fast: bool, enabled: bool = True) -> None:
+        self.path = status_path.with_name(f"{status_path.stem}-progress.json")
+        self.enabled = enabled
+        self.started = time.monotonic()
+        self.last_reported = self.started
+        self.values: dict[str, Any] = {
+            "status": "running",
+            "startedAt": format_utc(dt.datetime.now(UTC)),
+            "fast": fast,
+        }
+        previous_reports = []
+        for path in (status_path, self.path):
+            try:
+                previous = json.loads(path.read_text())
+            except (OSError, ValueError):
+                continue
+            if isinstance(previous, dict):
+                previous_reports.append(previous)
+        for previous in previous_reports:
+            committed = previous.get("lastCatalogCommitAt")
+            if not committed and previous.get("status") == "ok":
+                committed = previous.get("updatedAt")
+            if committed and str(committed) > str(self.values.get("lastCatalogCommitAt", "")):
+                self.values["lastCatalogCommitAt"] = committed
+                generation = previous.get("lastCommittedCatalogGeneratedAt") or (
+                    previous.get("catalogGeneratedAt") if previous.get("status") == "ok" else None
+                )
+                if generation:
+                    self.values["lastCommittedCatalogGeneratedAt"] = generation
+
+    def report(self, stage: str, *, force: bool = True, **values: Any) -> None:
+        if not self.enabled:
+            return
+        monotonic = time.monotonic()
+        if not force and stage == self.values.get("stage") and monotonic - self.last_reported < 5:
+            return
+        self.last_reported = monotonic
+        self.values.update(values)
+        self.values.update({
+            "stage": stage,
+            "stageUpdatedAt": format_utc(dt.datetime.now(UTC)),
+            "elapsedSeconds": round(monotonic - self.started, 1),
+        })
+        write_status(self.path, self.values)
+        print(json.dumps({"publicationProgress": self.values}), flush=True)
+
+
 class PublishState:
     def __init__(self, path: Path, scope: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,6 +246,9 @@ class PublishState:
         ).fetchone()
         if previous is not None and str(previous[0]) != scope:
             self.connection.execute("DELETE FROM objects")
+            self.connection.execute(
+                "DELETE FROM metadata WHERE key IN ('public_video_keys', 'retired_video_keys')"
+            )
         self.connection.execute(
             "INSERT INTO metadata(key, value) VALUES('scope', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -260,6 +314,79 @@ class PublishState:
                 "SELECT object_key, size_bytes, mtime_ns FROM objects"
             )
         }
+
+    def public_video_keys(self) -> set[str] | None:
+        """Dependencies that may still be referenced by the public catalog."""
+        row = self.connection.execute(
+            "SELECT value FROM metadata WHERE key = 'public_video_keys'"
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            values = json.loads(row[0])
+        except (TypeError, ValueError):
+            return None
+        return set(values) if isinstance(values, list) and all(isinstance(v, str) for v in values) else None
+
+    def _retired_video_keys(self) -> dict[str, str]:
+        row = self.connection.execute(
+            "SELECT value FROM metadata WHERE key = 'retired_video_keys'"
+        ).fetchone()
+        if row is None:
+            return {}
+        values = json.loads(row[0])
+        if not isinstance(values, dict):
+            raise PublicationSafetyError("Invalid retired video protection state")
+        return values
+
+    def protected_video_keys(self, now: dt.datetime) -> set[str] | None:
+        current = self.public_video_keys()
+        if current is None:
+            return None
+        stamp = format_utc(now)
+        return current | {key for key, until in self._retired_video_keys().items() if until > stamp}
+
+    def deletable_keys(self, keys: Iterable[str], now: dt.datetime) -> list[str]:
+        protected = self.protected_video_keys(now)
+        return [key for key in keys if not key.startswith(VIDEO_IMMUTABLE_PREFIXES)
+                or (protected is not None and key not in protected)]
+
+    def protect_catalog(
+        self, keys: Iterable[str], *, committed: bool = False,
+        now: dt.datetime | None = None, previous_remote_keys: Iterable[str] = (),
+    ) -> None:
+        """Journal both sides of a catalog handoff before the remote pointer PUT."""
+        protected = {key for key in keys if key.startswith(VIDEO_IMMUTABLE_PREFIXES)}
+        previous = self.public_video_keys()
+        if not committed:
+            if previous is None:
+                # On rollout we do not know the old public dependency set.
+                # Keep precommit deletion disabled until a commit completes.
+                return
+            protected.update(previous)
+        else:
+            now = now or dt.datetime.now(UTC)
+            retired = {key: until for key, until in self._retired_video_keys().items()
+                       if until > format_utc(now) and key not in protected}
+            if previous is None:
+                # First rollout has no trustworthy public dependency journal;
+                # retain all previously remote video objects for one handoff.
+                previous = {key for key in previous_remote_keys
+                            if key.startswith(VIDEO_IMMUTABLE_PREFIXES)}
+            until = format_utc(now + VIDEO_ORPHAN_GRACE)
+            for key in previous.difference(protected):
+                retired[key] = until
+            self.connection.execute(
+                "INSERT INTO metadata(key, value) VALUES('retired_video_keys', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (json.dumps(retired, separators=(",", ":")),),
+            )
+        self.connection.execute(
+            "INSERT INTO metadata(key, value) VALUES('public_video_keys', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (json.dumps(sorted(protected), separators=(",", ":")),),
+        )
+        self.connection.commit()
 
 
 def sha256_file(path: Path) -> str:
@@ -1798,6 +1925,49 @@ def build_catalog_index(catalog_bytes: bytes) -> bytes:
     return json.dumps(catalog, separators=(",", ":")).encode()
 
 
+@lru_cache(maxsize=1)
+def _macos_clonefile() -> Any | None:
+    if sys.platform != "darwin":
+        return None
+    import ctypes
+
+    try:
+        clone = ctypes.CDLL(None, use_errno=True).clonefile
+    except AttributeError:
+        return None
+    clone.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+    clone.restype = ctypes.c_int
+    return clone
+
+
+def _clone_snapshot(source: Path, destination: Path) -> bool:
+    clone = _macos_clonefile()
+    return clone is not None and clone(os.fsencode(source), os.fsencode(destination), 0) == 0
+
+
+def _publication_snapshot_parent(root: Path, state_path: Path) -> Path:
+    """Keep snapshots beside their source so recovery uses links, not copies."""
+    source = root.resolve()
+    source_device = source.stat().st_dev
+    # Prefer a sibling outside the archive's retention and storage walks.
+    # If root itself is a mount point or only root is writable, use its hidden
+    # child instead. Catalog discovery only includes explicitly referenced files.
+    candidates = (
+        source.parent / f".{source.name}-r2-publish-snapshots",
+        source / ".r2-publish-snapshots",
+    )
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            if candidate.stat().st_dev == source_device:
+                return candidate
+        except OSError:
+            continue
+    # Read-only source archives remain publishable using the portable copy path.
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    return state_path.parent
+
+
 def publication_snapshot(
     root: Path,
     state_path: Path,
@@ -1808,25 +1978,34 @@ def publication_snapshot(
     existing_video_keys: set[str] | None = None,
     initial_discovery: tuple[list[LocalObject], bytes] | None = None,
     attempts: int = 12,
+    progress: Callable[..., None] | None = None,
 ) -> tuple[Path, list[LocalObject], bytes]:
-    """Hard-link the upload set while live retention continues.
+    """Capture the upload set while live retention and corrections continue.
 
-    A fast publication already trusts its durable successful-upload index.
-    Objects unchanged in that index are never read during the PUT phase, so
-    leave those in place and snapshot only new or modified objects. This keeps
-    a current-catalog commit fast even when the retained archive has tens of
-    thousands of files.
+    The caller supplies successful-upload records that it can still trust.
+    Reconciliation first checks those against the authoritative remote listing.
+    Unchanged, confirmed remote objects are never read during the PUT phase, so
+    snapshot only new or modified objects. Snapshots live on the output disk so
+    even a large recovery batch can use links or APFS copy-on-write clones.
     """
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    for stale in state_path.parent.glob("r2-publish-snapshot-*"):
-        if stale.is_dir():
-            shutil.rmtree(stale, ignore_errors=True)
+    snapshot_parent = _publication_snapshot_parent(root, state_path)
+    # Also remove interrupted snapshots made by the previous state-disk layout.
+    # The publisher's existing advisory lock protects both cleanup locations.
+    for parent in dict.fromkeys((state_path.parent, snapshot_parent)):
+        for stale in parent.glob("r2-publish-snapshot-*"):
+            if stale.is_dir():
+                if progress:
+                    progress("snapshot-cleanup", force=False)
+                shutil.rmtree(stale, ignore_errors=True)
     last_error: Exception | None = None
     for attempt in range(attempts):
         snapshot_root = Path(
-            tempfile.mkdtemp(prefix="r2-publish-snapshot-", dir=state_path.parent)
+            tempfile.mkdtemp(prefix="r2-publish-snapshot-", dir=snapshot_parent)
         )
         try:
+            if progress:
+                progress("discovery", attempt=attempt + 1)
             if attempt == 0 and initial_discovery is not None:
                 objects, catalog_bytes = initial_discovery
             else:
@@ -1837,7 +2016,13 @@ def publication_snapshot(
                     existing_video_keys=existing_video_keys,
                 )
             snapshot_objects: list[LocalObject] = []
-            for item in objects:
+            captured = 0
+            if progress:
+                progress("snapshot", objects=len(objects), capturedObjects=0)
+            for position, item in enumerate(objects):
+                if progress and position % 100 == 0:
+                    progress("snapshot", force=False, processedObjects=position,
+                             capturedObjects=captured)
                 if known_objects is not None and known_objects.get(item.key) == (
                     item.size,
                     item.mtime_ns,
@@ -1846,13 +2031,18 @@ def publication_snapshot(
                     continue
                 destination = snapshot_root / item.key
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    os.link(item.path, destination)
-                except OSError:
-                    # Preserve portability when output/state roots are placed
-                    # on separate filesystems. The normal configuration uses
-                    # hard links and therefore consumes no duplicate blocks.
+                if item.key.startswith(VIDEO_IMMUTABLE_PREFIXES):
+                    try:
+                        os.link(item.path, destination)
+                    except OSError:
+                        shutil.copy2(item.path, destination)
+                elif not _clone_snapshot(item.path, destination):
+                    # Mutable images may be overwritten in place. A hard link
+                    # would change beneath an upload; APFS clones preserve the
+                    # captured bytes without reading/copying the whole image.
+                    # Other filesystems retain the portable independent copy.
                     shutil.copy2(item.path, destination)
+                captured += 1
                 snapshot_objects.append(
                     LocalObject(
                         key=item.key,
@@ -1861,6 +2051,8 @@ def publication_snapshot(
                         mtime_ns=item.mtime_ns,
                     )
                 )
+            if progress:
+                progress("snapshot-ready", objects=len(objects), capturedObjects=captured)
             return snapshot_root, snapshot_objects, catalog_bytes
         except (OSError, PublicationSafetyError) as error:
             last_error = error
@@ -1916,7 +2108,9 @@ def _as_utc(value: dt.datetime) -> dt.datetime:
     )
 
 
-def list_remote_inventory(client: Any, bucket: str) -> RemoteInventory:
+def list_remote_inventory(
+    client: Any, bucket: str, *, progress: Callable[..., None] | None = None,
+) -> RemoteInventory:
     objects: dict[str, int] = {}
     modified_at: dict[str, dt.datetime] = {}
     token: str | None = None
@@ -1934,6 +2128,8 @@ def list_remote_inventory(client: Any, bucket: str) -> RemoteInventory:
             modified = item.get("LastModified")
             if isinstance(modified, dt.datetime):
                 modified_at[key] = _as_utc(modified)
+        if progress:
+            progress("inventory", force=False, remoteObjects=len(objects))
         if not response.get("IsTruncated"):
             break
         token = str(response.get("NextContinuationToken", ""))
@@ -2496,6 +2692,8 @@ def safe_precommit_composite_keys(
     root: Path,
     keys: Iterable[str],
     now: dt.datetime,
+    *,
+    protected_keys: set[str] | None = None,
 ) -> list[str]:
     """Return two-away generations old enough to remove before a new commit.
 
@@ -2504,6 +2702,10 @@ def safe_precommit_composite_keys(
     manifest older than the browser handoff grace are eligible, so an upload
     failure cannot damage the currently published loop.
     """
+    # A local catalog can be an hour ahead of the public one during a backlog.
+    # Build age and prospective reachability alone cannot prove deletion safe.
+    if protected_keys is None:
+        return []
     root = root.resolve()
     candidates = set(keys)
     cutoff = _as_utc(now) - VIDEO_ORPHAN_GRACE
@@ -2548,7 +2750,8 @@ def safe_precommit_composite_keys(
         }
         # Never broaden a precommit deletion beyond the prospective cleanup's
         # independently established unreachable set.
-        if generation_owned and generation_owned.issubset(candidates):
+        if (generation_owned and generation_owned.issubset(candidates)
+                and generation_owned.isdisjoint(protected_keys)):
             safe.update(generation_owned)
     return sorted(safe)
 
@@ -2662,16 +2865,41 @@ def publish(
         else None
     )
     state = PublishState(state_path, f"{config.account_id}/{config.bucket}")
+    progress = PublicationProgress(status_path, fast=fast, enabled=not dry_run)
     precommit_deleted = 0
     try:
+        progress.report("starting")
         known_objects = state.known_objects()
         existing_video_keys = set(known_objects) if existing_video_only else None
         preflight_discovery: tuple[list[LocalObject], bytes] | None = None
+        remote_modified: dict[str, dt.datetime] = {}
+        if not fast:
+            # Inventory before snapshotting: an unchanged object already in R2
+            # does not need a local copy. Previously every reconciliation copied
+            # the entire retained archive across disks before publishing anything,
+            # blocking current loops for an hour when local I/O was busy.
+            progress.report("inventory")
+            client = client or boto3_client(config)
+            inventory = list_remote_inventory(client, config.bucket, progress=progress.report)
+            remote = inventory.sizes
+            remote_modified = inventory.modified_at
+            invalid = {
+                key for key, value in known_objects.items()
+                if remote.get(key) != value[0]
+            }
+            if invalid:
+                # Externally missing or truncated assets must be snapshotted and
+                # repaired before the catalog can reference them again.
+                state.forget(invalid)
+                known_objects = {
+                    key: value for key, value in known_objects.items() if key not in invalid
+                }
         if fast and not dry_run:
             # Refuse a known-over-cap rapid commit before creating thousands of
             # hard links for a snapshot that cannot be uploaded. The regular
             # reconciliation path still inventories R2 and can make space by
             # deleting expired objects after its atomic catalog commit.
+            progress.report("discovery")
             preflight_objects, preflight_catalog = _discover_objects_stable(
                 root,
                 whole_frame_only=whole_frame_only,
@@ -2690,15 +2918,18 @@ def publish(
                 if sync_delete
                 else []
             )
+            preflight_expired = state.deletable_keys(preflight_expired, now)
             safe_precommit = safe_precommit_composite_keys(
                 root,
                 preflight_expired,
                 now,
+                protected_keys=state.protected_video_keys(now),
             )
             if safe_precommit:
                 # These are unreachable immutable generations older than the
                 # browser grace. Removing them before upload bounds the physical
                 # bucket peak while the current generation remains published.
+                progress.report("precommit-cleanup", deleteObjects=len(safe_precommit))
                 client = client or boto3_client(config)
                 precommit_deleted = delete_objects(
                     client,
@@ -2720,6 +2951,7 @@ def publish(
                     preflight_remote,
                     preflight_objects,
                 )
+                preflight_expired = state.deletable_keys(preflight_expired, now)
             preflight_sizes = size_guard(
                 preflight_objects,
                 preflight_catalog,
@@ -2742,10 +2974,13 @@ def publish(
                 state_path,
                 whole_frame_only=whole_frame_only,
                 minimum_valid_time=minimum_valid_time,
-                known_objects=known_objects if fast else None,
+                known_objects=known_objects,
                 existing_video_keys=existing_video_keys,
                 initial_discovery=preflight_discovery,
+                progress=progress.report,
             )
+        catalog_generated_at = json.loads(catalog_bytes).get("generatedAt")
+        progress.report("planning", catalogGeneratedAt=catalog_generated_at)
         westwx_catalog_bytes = json.dumps(
             build_westwx_catalog(json.loads(catalog_bytes)),
             separators=(",", ":"),
@@ -2758,24 +2993,6 @@ def publish(
         # and expiry deletion, repairing any externally removed object.
         if fast:
             remote = {key: values[0] for key, values in known_objects.items()}
-            remote_modified: dict[str, dt.datetime] = {}
-        else:
-            inventory = list_remote_inventory(client, config.bucket)
-            remote = inventory.sizes
-            remote_modified = inventory.modified_at
-        if not fast:
-            # The fast path deliberately trusts this index, so a periodic
-            # authoritative listing must discard records for objects no longer
-            # present in R2. This keeps size estimates accurate and prevents a
-            # later fast catalog from assuming a missing archive object exists.
-            absent = set(known_objects).difference(remote)
-            if absent:
-                state.forget(absent)
-                known_objects = {
-                    key: value
-                    for key, value in known_objects.items()
-                    if key in remote
-                }
         desired_keys = {item.key for item in objects}
         retained_video_keys = (
             retained_local_video_keys(
@@ -2807,6 +3024,7 @@ def publish(
             )
         else:
             expired = []
+        expired = state.deletable_keys(expired, now)
         sizes = size_guard(
             objects,
             catalog_bytes,
@@ -2844,6 +3062,7 @@ def publish(
             return item, upload_object(client, config, item)
 
         uploaded = 0
+        progress.report("upload", pendingObjects=len(pending), uploadedObjects=0)
         with ThreadPoolExecutor(
             max_workers=min(UPLOAD_WORKERS, max(1, len(pending)))
         ) as executor:
@@ -2856,10 +3075,15 @@ def publish(
                 # hiding the successful progress of every later upload.
                 state.record(item, sha256)
                 uploaded += 1
+                progress.report("upload", force=False, uploadedObjects=uploaded)
 
         # Commit complete compatibility catalogs first. The small operational
         # index is last, so new clients cannot discover a generation until all
         # of its assets and its on-demand full fallback are public.
+        progress.report("catalog-commit", uploadedObjects=uploaded)
+        # If the worker is interrupted between the remote pointer PUT and the
+        # final local state write, the union preserves both possible catalogs.
+        state.protect_catalog(desired_keys)
         upload_catalog(
             client,
             config,
@@ -2873,11 +3097,21 @@ def publish(
             catalog_index_bytes,
             key="catalog-index.json",
         )
+        commit_time = now + dt.timedelta(seconds=time.monotonic() - progress.started)
+        catalog_committed_at = format_utc(commit_time)
+        state.protect_catalog(
+            desired_keys, committed=True, now=commit_time, previous_remote_keys=remote,
+        )
+        progress.report(
+            "catalog-committed", lastCatalogCommitAt=catalog_committed_at,
+            lastCommittedCatalogGeneratedAt=catalog_generated_at,
+        )
 
         # All non-aged handoff cleanup remains after the catalog commit.
         # Regular reconciliation applies its broader policies from an
         # authoritative bucket listing.
-        post_commit_expired = list(expired)
+        post_commit_expired = state.deletable_keys(expired, commit_time)
+        progress.report("remote-cleanup", deleteObjects=len(post_commit_expired))
         postcommit_deleted = (
             delete_objects(client, config, post_commit_expired)
             if post_commit_expired
@@ -2889,6 +3123,10 @@ def publish(
         result = {
             "status": "ok",
             "updatedAt": format_utc(dt.datetime.now(UTC)),
+            "startedAt": progress.values["startedAt"],
+            "lastCatalogCommitAt": catalog_committed_at,
+            "catalogGeneratedAt": catalog_generated_at,
+            "durationSeconds": round(time.monotonic() - progress.started, 1),
             "bucket": config.bucket,
             "objects": len(objects),
             "uploaded": uploaded,
@@ -2907,7 +3145,11 @@ def publish(
                 f"{config.public_base_url}/catalog-index.json"
             )
         write_status(status_path, result)
+        progress.report("complete", status="ok")
         return result
+    except Exception as error:
+        progress.report("failed", status="error", errorType=type(error).__name__)
+        raise
     finally:
         state.close()
         if snapshot_root is not None:

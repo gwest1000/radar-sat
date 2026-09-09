@@ -130,6 +130,7 @@ class OpsScriptTests(unittest.TestCase):
             "RADARSAT_ENV_FILE": str(root / "missing.env"),
             "RADARSAT_VIDEO_ENABLED": "1",
             "RADARSAT_HYBRID_CORE_ENABLED": "0",
+            "RADARSAT_VIDEO_MAX_HYBRID_UNITS": "1",
             "RADARSAT_COMPOSITE_VIDEO_BUILDER": str(driver),
             "RADARSAT_LEGACY_VIDEO_BUILDER": str(driver),
             "RADARSAT_VIDEO_CATALOG_WRITER": str(driver),
@@ -209,6 +210,7 @@ class OpsScriptTests(unittest.TestCase):
             publisher.chmod(0o755)
             environment = os.environ.copy()
             environment.update({
+                "RADARSAT_PYTHON": sys.executable,
                 "RADARSAT_STATE_ROOT": str(state),
                 "RADARSAT_OUTPUT_ROOT": str(root / "output"),
                 "RADARSAT_ENV_FILE": str(root / "missing.env"),
@@ -255,6 +257,7 @@ class OpsScriptTests(unittest.TestCase):
             publisher.chmod(0o755)
             environment = os.environ.copy()
             environment.update({
+                "RADARSAT_PYTHON": sys.executable,
                 "RADARSAT_STATE_ROOT": str(state),
                 "RADARSAT_OUTPUT_ROOT": str(root / "output"),
                 "RADARSAT_ENV_FILE": str(root / "missing.env"),

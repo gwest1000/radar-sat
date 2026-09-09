@@ -44,13 +44,14 @@ change during this audit.
 
 ## Remaining operational limits
 
-The scheduler prioritizes exact short loops. Hybrid cores are intentionally
-lower priority (one unit per scheduler pass); 6-hour exact work has a 15-minute
+The scheduler prioritizes exact short loops; 6-hour exact work has a 15-minute
 minimum rebuild interval, and 12/24-hour exact work has a 30-minute interval.
-Encoding, publication, and the source cadence can carry a view past the frontend
-freshness limits. These limits remain intact: older imagery is not relabelled as
-current to hide delays. Reducing the frequency of delayed hybrid/day views needs
-an explicit capacity/scheduling adjustment, not another decoder change.
+The September 9 investigation identified and fixed an hour-long reconciliation
+blocker, stale health reports, unsafe publication handoffs, and insufficient
+hybrid scheduling capacity. See
+[the publisher incident report](prebuilt-publisher-incident-2026-09-09.md).
+Frontend freshness limits remain intact: older imagery is not relabelled as
+current to hide delays.
 
 The public asset host is still `r2.dev`. Cloudflare documents it as a development
 endpoint with variable request and bandwidth limits, and recommends a custom

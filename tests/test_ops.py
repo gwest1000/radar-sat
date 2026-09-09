@@ -1443,7 +1443,7 @@ class PublisherTests(unittest.TestCase):
         for generation in generations:
             self.assertTrue(any(generation in key for key in retired))
 
-    def test_expired_video_generation_is_deleted_only_after_catalog_commit(self) -> None:
+    def test_rollout_retains_unknown_public_generations_for_a_full_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             root = base / "output"
@@ -1476,6 +1476,17 @@ class PublisherTests(unittest.TestCase):
                 base / "publish.json",
                 client=fake,
                 now=now,
+            )
+
+            self.assertFalse(any(event[0] == "delete" for event in fake.events))
+            fake.events.clear()
+            publish(
+                root,
+                self.config(max_bytes=10_000_000),
+                base / "state.sqlite3",
+                base / "publish.json",
+                client=fake,
+                now=now + dt.timedelta(minutes=16),
             )
 
             catalog_index = fake.events.index(("put", "catalog.json"))
@@ -1690,22 +1701,19 @@ class PublisherTests(unittest.TestCase):
                     )
                 )
 
-            self.assertEqual(results[-1]["deleted"], 2)
-            self.assertEqual(results[-1]["precommitDeleted"], 0)
+            # Old footage was just retired despite having been rendered much
+            # earlier; open viewers still need its assets for the full grace.
+            self.assertEqual(results[-1]["deleted"], 0)
+            self.assertTrue(all(keys.issubset(fake.remote) for keys in keys_by_generation))
+            result = publish(
+                root, self.config(), state, status, client=fake,
+                now=now + dt.timedelta(minutes=16), fast=True,
+            )
+            self.assertEqual(result["deleted"], 4)
             self.assertTrue(keys_by_generation[0].isdisjoint(fake.remote))
             self.assertTrue(keys_by_generation[1].isdisjoint(fake.remote))
             self.assertTrue(keys_by_generation[2].issubset(fake.remote))
-            catalog_commit = max(
-                index
-                for index, event in enumerate(fake.events)
-                if event == ("put", "catalog-index.json")
-            )
-            cleanup = max(
-                index for index, event in enumerate(fake.events) if event[0] == "delete"
-            )
-            self.assertGreater(cleanup, catalog_commit)
-
-    def test_fast_composite_publish_recovers_before_physical_peak_cap(self) -> None:
+    def test_fast_composite_publish_never_reclaims_current_public_assets_before_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             root = base / "output"
@@ -1772,19 +1780,13 @@ class PublisherTests(unittest.TestCase):
                 fast=True,
             )
 
-            self.assertEqual(result["precommitDeleted"], 2)
-            self.assertEqual(result["deleted"], 2)
+            self.assertEqual(result["precommitDeleted"], 0)
+            self.assertEqual(result["deleted"], 0)
             self.assertLessEqual(result["peakProjectedBytes"], cap)
-            self.assertTrue(oldest.isdisjoint(fake.remote))
-            self.assertTrue(previous.isdisjoint(fake.remote))
+            self.assertTrue(oldest.issubset(fake.remote))
+            self.assertTrue(previous.issubset(fake.remote))
             self.assertTrue(current.issubset(fake.remote))
-            delete_index = next(
-                index for index, event in enumerate(fake.events) if event[0] == "delete"
-            )
-            first_put = next(
-                index for index, event in enumerate(fake.events) if event[0] == "put"
-            )
-            self.assertLess(delete_index, first_put)
+            self.assertFalse(any(event[0] == "delete" for event in fake.events))
 
     def test_fast_publish_retries_frames_rotated_during_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
