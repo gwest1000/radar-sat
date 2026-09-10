@@ -719,6 +719,7 @@ export function VideoCompositeStage({
       mediaTime + 0.001 < plan.frame.ptsSeconds
       || mediaTime >= plan.frame.ptsSeconds + plan.frame.durationSeconds + 0.001
     ) {
+      stage.dataset.timestampRepairs = String(Number(stage.dataset.timestampRepairs ?? 0) + 1);
       seekToIndexRef.current(requestedIndexRef.current);
       return;
     }
@@ -1073,7 +1074,6 @@ export function VideoCompositeStage({
       const engine = selectHlsEngine(
         Boolean(video.canPlayType(manifest.media.mimeType)),
         Hls.isSupported(),
-        navigator.userAgent,
       );
       hlsEngineRef.current = engine;
       if (stageRef.current) stageRef.current.dataset.hlsEngine = engine;
@@ -1102,7 +1102,9 @@ export function VideoCompositeStage({
           maxMaxBufferLength: liveTrack
             ? HLS_LIVE_BUFFER_SECONDS
             : HLS_ARCHIVE_MAX_BUFFER_SECONDS,
-          backBufferLength: HLS_BACK_BUFFER_SECONDS,
+          // Keep the start of a short loop when reaching its end. A 15-second
+          // back buffer evicts the beginning of 24h loops on every circuit.
+          backBufferLength: liveTrack ? HLS_LIVE_BUFFER_SECONDS : HLS_BACK_BUFFER_SECONDS,
           // After an archive loops from its end back to zero, the former tail
           // becomes a disconnected future range. Without this threshold hls.js
           // leaves that range resident and repeated loops eventually refill the
@@ -1248,12 +1250,19 @@ export function VideoCompositeStage({
       if (committedIndexRef.current === lastIndex) scheduleLoop(lastIndex);
       else handleVideoFrame(plans[lastIndex].frame.ptsSeconds);
     };
+    const onWaiting = () => {
+      if (!playingRef.current || seekingRef.current || loopTimerRef.current !== undefined) return;
+      stage.dataset.mediaWaits = String(Number(stage.dataset.mediaWaits ?? 0) + 1);
+      stage.dataset.mediaWaitTime = video.currentTime.toFixed(3);
+    };
+    video.addEventListener("waiting", onWaiting);
     video.addEventListener("loadedmetadata", onMetadata);
     video.addEventListener("error", onError);
     video.addEventListener("ended", onEnded);
     requestFrameRef.current();
     if (video.readyState >= HTMLMediaElement.HAVE_METADATA) onMetadata();
     return () => {
+      video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("loadedmetadata", onMetadata);
       video.removeEventListener("error", onError);
       video.removeEventListener("ended", onEnded);
@@ -1292,6 +1301,8 @@ export function VideoCompositeStage({
       data-composite-preset={compositePresetId ?? "dynamic"}
       data-composite-path={compositeMediaPath}
       data-overlay-stalls="0"
+      data-media-waits="0"
+      data-timestamp-repairs="0"
       data-presented-frames="0"
       data-video-dropped="0"
       data-video-dropped-ratio="0"

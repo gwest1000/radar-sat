@@ -23,17 +23,15 @@ export function shouldWaitForSequentialSurface({
 export function selectHlsEngine(
   nativeSupported: boolean,
   javascriptSupported: boolean,
-  userAgent: string,
 ): "native" | "hls-js" | "unavailable" {
-  // Chromium now advertises native HLS too, but its native demuxer can stall
-  // when our short VOD loops seek straight to the newest observation. Keep
-  // hls.js on Chromium. Safari (including iPad's desktop user agent and iOS
-  // browsers using WebKit) retains its native player.
-  const appleWebKit = /AppleWebKit\//.test(userAgent)
-    && !/(?:Chrome|Chromium|Edg|OPR)\//.test(userAgent)
-    && !/Android/.test(userAgent);
-  if (nativeSupported && (appleWebKit || !javascriptSupported)) return "native";
-  return javascriptSupported ? "hls-js" : "unavailable";
+  // Prefer explicit buffering of our short VOD loops on every capable browser,
+  // including iPad/iOS through MediaSource or ManagedMediaSource. Native HLS
+  // controls its own short-segment fetching and fast-forward behavior; that
+  // path can stutter repeatedly even after a complete circuit. The hls.js
+  // support check is capability based, so desktop-mode user agents cannot
+  // accidentally select a different player. Older devices retain native HLS.
+  if (javascriptSupported) return "hls-js";
+  return nativeSupported ? "native" : "unavailable";
 }
 
 // Validate decoded media pixels, not HTMLVideoElement's intrinsic display size.
