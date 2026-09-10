@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { selectHlsEngine, shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
+import { decodedVideoDimensionsError, selectHlsEngine, shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
 import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
 
 test("adds one combined live-edge frame after a regular timeline", () => {
@@ -937,4 +937,24 @@ test("enhanced BC XL loops keep the encoded final frame instead of an untreated 
   assert.equal(permitsLiveEdgeReplacement({}), true);
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
   assert.match(viewer, /if \(!permitsLiveEdgeReplacement\(playbackVideoManifest\)/);
+});
+
+
+test("decoded-frame dimensions validate BC XL independently of provisional iPad display metadata", async () => {
+  const expected = { width: 1920, height: 1342 };
+  assert.equal(decodedVideoDimensionsError({ width: 1920, height: 1342 }, expected), null);
+  for (const frame of [
+    { width: 1920, height: 1080 }, // a genuinely different media aspect
+    { width: 1280, height: 894 }, // a different encoded rendition
+    { width: 1920, height: 1326 }, // missing encoded clock strip
+    { width: 0, height: 0 },
+  ]) {
+    assert.equal(decodedVideoDimensionsError(frame, expected),
+      `Decoded video dimensions ${frame.width}×${frame.height} do not match its manifest (1920×1342).`);
+  }
+  const stage = await readFile(new URL("../app/video-composite-stage.tsx", import.meta.url), "utf8");
+  const metadataHandler = stage.slice(stage.indexOf("const onMetadata = () => {"), stage.indexOf("const onError = () => {"));
+  assert.doesNotMatch(metadataHandler, /fail\(|videoWidth !==|videoHeight !==/);
+  assert.match(metadataHandler, /seekToIndexRef.current/);
+  assert.match(stage, /requestVideoFrameCallback[\s\S]*?decodedVideoDimensionsError\(metadata, manifest.media\)[\s\S]*?if \(dimensionError\) \{[\s\S]*?return;[\s\S]*?handleVideoFrame\(metadata.mediaTime\)/);
 });

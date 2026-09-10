@@ -11,7 +11,7 @@ import {
 } from "react";
 import Hls from "hls.js";
 
-import { selectHlsEngine, shouldWaitForSequentialSurface } from "./video-playback-guard";
+import { decodedVideoDimensionsError, selectHlsEngine, shouldWaitForSequentialSurface } from "./video-playback-guard";
 import {
   VideoLoopManifest,
   VideoManifestFrame,
@@ -899,10 +899,18 @@ export function VideoCompositeStage({
       callbackIdRef.current = video.requestVideoFrameCallback((_now, metadata) => {
         callbackIdRef.current = undefined;
         if (operationEpochRef.current !== operationEpoch) return;
+        const dimensionError = decodedVideoDimensionsError(metadata, manifest.media);
+        if (stageRef.current) {
+          stageRef.current.dataset.decodedDimensions = `${metadata.width}x${metadata.height}`;
+        }
+        if (dimensionError) {
+          fail(new Error(dimensionError));
+          return;
+        }
         handleVideoFrame(metadata.mediaTime);
       });
     };
-  }, [handleVideoFrame]);
+  }, [fail, handleVideoFrame, manifest.media.width, manifest.media.height]);
 
   useEffect(() => {
     seekToIndexRef.current = (index: number) => {
@@ -1213,13 +1221,8 @@ export function VideoCompositeStage({
     if (!video || !stage) return;
     const onMetadata = () => {
       stage.dataset.hlsMetadata = `${video.videoWidth}x${video.videoHeight}@${video.duration}`;
-      if (
-        video.videoWidth !== manifest.media.width
-        || video.videoHeight !== manifest.media.height
-      ) {
-        fail(new Error("Video dimensions do not match its manifest."));
-        return;
-      }
+      // This is intrinsic display metadata, not decoded pixel dimensions.
+      // Validate the actual media pixels in requestVideoFrameCallback instead.
       seekToIndexRef.current(requestedIndexRef.current);
     };
     const onError = () => {

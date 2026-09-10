@@ -35,3 +35,15 @@ export function selectHlsEngine(
   if (nativeSupported && (appleWebKit || !javascriptSupported)) return "native";
   return javascriptSupported ? "hls-js" : "unavailable";
 }
+
+// Validate decoded media pixels, not HTMLVideoElement's intrinsic display size.
+// Native HLS can report provisional display dimensions at loadedmetadata;
+// display dimensions also account for aperture/aspect ratio and need not equal
+// the encoded pixels. A delivered frame is the reliable point for this check.
+export function decodedVideoDimensionsError(
+  frame: { width: number; height: number },
+  expected: { width: number; height: number },
+): string | null {
+  if (frame.width === expected.width && frame.height === expected.height) return null;
+  return `Decoded video dimensions ${frame.width}×${frame.height} do not match its manifest (${expected.width}×${expected.height}).`;
+}
