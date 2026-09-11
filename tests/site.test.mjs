@@ -140,7 +140,7 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.doesNotMatch(viewer, /value=\{currentFrameIndex\}/);
   assert.match(viewer, /PlaybackStatusLines/);
   assert.match(viewer, /playbackStatusLinesRef\.current\?\.update\(displayedFrame\.validTime, times, missing\)/);
-  assert.match(viewer, /useEffect\(\(\) => \{\s*update\(initialValidTime, initialSourceTimes, initialMissing\)/);
+  assert.match(viewer, /useEffect\(\(\) => \{\s*update\(initialValidTime, initialSourceTimes\)/);
   assert.doesNotMatch(viewer, /validLineRef/);
   assert.doesNotMatch(viewer, /setFrameIndex\(\(current\) => current === index \? current : index\)/);
   assert.match(videoLoop, /transport: "progressive-mp4"/);

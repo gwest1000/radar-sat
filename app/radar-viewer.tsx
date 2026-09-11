@@ -1956,8 +1956,17 @@ const PlaybackStatusLines = memo(forwardRef<PlaybackStatusLinesHandle, {
   // viewer. A paused slider/arrow change does rerender, so reconcile the DOM
   // with those props as well instead of leaving the last animated timestamp.
   useEffect(() => {
-    update(initialValidTime, initialSourceTimes, initialMissing);
-  }, [initialMissing, initialSourceTimes, initialValidTime, update]);
+    update(initialValidTime, initialSourceTimes);
+  }, [initialSourceTimes, initialValidTime, update]);
+  // Array identity changes when menus render. Reconcile the warning by its
+  // text only, without resetting the timestamp owned by the playing video.
+  const initialWarning = initialMissing.length ? `Unavailable: ${initialMissing.join(", ")}` : "";
+  useEffect(() => {
+    if (warningRef.current) {
+      warningRef.current.textContent = initialWarning;
+      warningRef.current.hidden = !initialWarning;
+    }
+  }, [initialWarning]);
   return (
     <>
       <p ref={validRef} className="valid-line">VALID {utcClock(initialValidTime)} UTC · {localClock(initialValidTime)}</p>
