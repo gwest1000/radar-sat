@@ -516,6 +516,11 @@ class VideoSelectionTests(unittest.TestCase):
         choices = _proxy_selections(catalog, spec, selected)
         self.assertEqual([len(x) for x in choices], [1, 1, 0])
         self.assertTrue(all(x[0].recipe_id == "hotspots" and x[0].rendered_layer_id == "active-fire-points" for x in choices[:2]))
+        # The short-loop compositor reads raster inputs directly; JSON fallback
+        # belongs only to the legacy archive renderer that can rasterize it.
+        for track in ("live", "day"):
+            self.assertTrue(all(not layers for layers in
+                                _proxy_selections(catalog, replace(spec, track_name=track), selected)))
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); source = root / relative
             source.parent.mkdir(parents=True)

@@ -1127,7 +1127,8 @@ def _proxy_selections(
                 ) or _at_or_before(frames, anchor, max_age_minutes)
             else:
                 frame = _at_or_before(frames, anchor, max_age_minutes)
-            if frame is None and prepared_recipe_id == "hotspots" and spec.domain_id == "north-pacific":
+            if (frame is None and prepared_recipe_id == "hotspots"
+                    and spec.domain_id == "north-pacific" and spec.track == "archive"):
                 # Agency reports are independent of the thermal-detection feed.
                 # When its combined raster stops, preserve available agency
                 # fires using only records at/before this frame (at most 6h old).
