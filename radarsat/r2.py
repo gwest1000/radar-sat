@@ -20,6 +20,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+from .catalog import video_prebuilt_summaries
 from .config import (
     DOMAINS,
     PRODUCTS,
@@ -1168,10 +1169,19 @@ def _sanitize_video_profiles(
                 if selected is None:
                     continue
                 generation, manifest_path, paths = selected
-                sanitized.setdefault(product_id, {}).setdefault(layer_id, {})[track] = {
+                published_pointer: dict[str, Any] = {
                     "generation": generation,
                     "manifestPath": manifest_path,
                 }
+                # Rebuild the menu from the selected, verified generation.
+                # A fallback bundle must never inherit a newer bundle's menu.
+                try:
+                    summaries = video_prebuilt_summaries(json.loads((root / manifest_path).read_bytes()))
+                except (OSError, ValueError):
+                    summaries = []
+                if summaries:
+                    published_pointer["composites"] = summaries
+                sanitized.setdefault(product_id, {}).setdefault(layer_id, {})[track] = published_pointer
                 relative_paths.update(paths)
     if sanitized:
         catalog["videoProfiles"] = sanitized

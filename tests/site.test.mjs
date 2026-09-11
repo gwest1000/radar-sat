@@ -139,8 +139,8 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /defaultValue=\{currentFrameIndex\}/);
   assert.doesNotMatch(viewer, /value=\{currentFrameIndex\}/);
   assert.match(viewer, /PlaybackStatusLines/);
-  assert.match(viewer, /playbackStatusLinesRef\.current\?\.update\(displayedFrame\.validTime, times\)/);
-  assert.match(viewer, /useEffect\(\(\) => \{\s*update\(initialValidTime, initialSourceTimes\)/);
+  assert.match(viewer, /playbackStatusLinesRef\.current\?\.update\(displayedFrame\.validTime, times, missing\)/);
+  assert.match(viewer, /useEffect\(\(\) => \{\s*update\(initialValidTime, initialSourceTimes, initialMissing\)/);
   assert.doesNotMatch(viewer, /validLineRef/);
   assert.doesNotMatch(viewer, /setFrameIndex\(\(current\) => current === index \? current : index\)/);
   assert.match(videoLoop, /transport: "progressive-mp4"/);
@@ -945,4 +945,19 @@ test("decoded-frame dimensions validate BC XL independently of provisional iPad 
   assert.doesNotMatch(metadataHandler, /fail\(|videoWidth !==|videoHeight !==/);
   assert.match(metadataHandler, /seekToIndexRef.current/);
   assert.match(stage, /requestVideoFrameCallback[\s\S]*?decodedVideoDimensionsError\(metadata, manifest.media\)[\s\S]*?if \(dimensionError\) \{[\s\S]*?return;[\s\S]*?handleVideoFrame\(metadata.mediaTime\)/);
+});
+
+
+test("legacy prebuilt bundles expose selectable menu entries without fetching every manifest", async () => {
+  const { videoPrebuiltPointers } = await import("../app/video-loop.ts");
+  const bundle = {
+    generation: "archive-generation", manifestPath: "video-manifests/pacific/archive.json",
+    composites: [{presetId: "default", layerIds: ["raw-visir", "radar-rain"], rangeHours: 168,
+      generatedAt: "2026-09-11T18:30:00Z", endValidTime: "2026-09-11T18:00:00Z",
+      endSourceTime: "2026-09-11T18:00:00Z", cadenceMinutes: 180}],
+  };
+  assert.deepEqual(videoPrebuiltPointers(bundle), [{...bundle.composites[0],
+    generation: bundle.generation, manifestPath: bundle.manifestPath}]);
+  assert.deepEqual(videoPrebuiltPointers({...bundle, composites: [null, {rangeHours: 168}]}), []);
+  assert.deepEqual(videoPrebuiltPointers({generation: "old", manifestPath: "old.json"}), []);
 });

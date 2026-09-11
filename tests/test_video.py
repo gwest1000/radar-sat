@@ -181,7 +181,7 @@ class VideoSelectionTests(unittest.TestCase):
             if "day" in tracks:
                 self.assertEqual(tracks["day"], 30)
             if "archive" in tracks:
-                self.assertEqual(tracks["archive"], 60)
+                self.assertEqual(tracks["archive"], 180 if product_id in {"pacific-wna-overlay", "north-pacific-overlay"} else 60)
 
         specs = {
             (spec.product_id, spec.layer_id, spec.track): spec
@@ -472,6 +472,58 @@ class VideoSelectionTests(unittest.TestCase):
             ],
         )
         self.assertEqual(selected[1].source_path, selected[0].source_path)
+
+    def test_pacific_archive_uses_retained_slots_and_primary_geocolor_clock(self) -> None:
+        base = dt.datetime(2026, 9, 7, tzinfo=UTC)
+        satellite = []
+        overlays = []
+        for hour in (0, 3, 6, 12):
+            valid = base + dt.timedelta(hours=hour)
+            item = frame(f"frames/north-pacific/raw-visir/{hour}.webp", valid)
+            item["sourceTimes"] = {
+                "NOAA STAR GOES-18 full-disk GeoColor": stamp(valid),
+                "GOES-18": stamp(valid + dt.timedelta(minutes=10, seconds=21)),
+            }
+            satellite.append(item)
+            overlays.append(frame(f"frames/north-pacific/radar-rain/{hour}.png", valid))
+        catalog = {"domains": {"north-pacific": {"layers": {
+            "raw-visir": {"maxAgeMinutes": 90, "frames": satellite},
+            "radar-rain": {"maxAgeMinutes": 20, "frames": overlays},
+            "smoke": {"maxAgeMinutes": 40, "frames": overlays},
+        }}}}
+        for product_id in ("pacific-wna-overlay", "north-pacific-overlay"):
+            spec = next(s for s in VIDEO_PROFILES if s.product_id == product_id
+                        and s.layer_id == "raw-visir" and s.track == "archive")
+            selected = _selected_satellite_frames(catalog, spec, 12)
+            self.assertEqual(spec.cadence_minutes, 180)
+            self.assertEqual([f.valid_time for f in selected],
+                             [base + dt.timedelta(hours=h) for h in (0, 3, 6, 12)])
+            self.assertTrue(all(f.source_valid_time == f.valid_time for f in selected))
+            self.assertEqual(len({f.source_path for f in selected}), len(selected))
+            for layers in _proxy_selections(catalog, spec, selected):
+                self.assertTrue({"radar-rain", "smoke"}.issubset({x.recipe_id for x in layers}))
+
+    def test_pacific_agency_fires_survive_missing_thermal_raster(self) -> None:
+        base = dt.datetime(2026, 9, 11, tzinfo=UTC)
+        spec = next(s for s in VIDEO_PROFILES if s.product_id == "pacific-wna-overlay"
+                    and s.layer_id == "raw-visir" and s.track == "archive")
+        spec = replace(spec, width=240, height=148)
+        relative = "frames/north-pacific/active-fire-points/report.json"
+        catalog = {"domains": {"north-pacific": {"layers": {
+            "active-fire-points": {"frames": [frame(relative, base)]},
+        }}}}
+        selected = [SelectedFrame(base + dt.timedelta(hours=h), base, {}, "raw-visir", "sat.webp", "") for h in (0, 3, 9)]
+        choices = _proxy_selections(catalog, spec, selected)
+        self.assertEqual([len(x) for x in choices], [1, 1, 0])
+        self.assertTrue(all(x[0].recipe_id == "hotspots" and x[0].rendered_layer_id == "active-fire-points" for x in choices[:2]))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = root / relative
+            source.parent.mkdir(parents=True)
+            source.write_text(json.dumps({"domain": "north-pacific", "points": [[0.6, 0.5, None, 250, 1, 1, 1]]}))
+            proxy = _render_proxy(root, root, spec, "active-fire-points", "agency-test", relative, stage_aligned=False)
+            with Image.open(root / proxy["path"]) as image:
+                self.assertEqual(image.size, (240, 148))
+                self.assertIsNotNone(image.getbbox())
 
     def test_broad_archive_accepts_scan_seconds_after_nominal_hour(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)

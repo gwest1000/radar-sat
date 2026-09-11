@@ -28,6 +28,7 @@ import {
   loadCompositeLoopManifest,
   loadVideoLoopManifest,
   parseCompositeProfilePointer,
+  videoPrebuiltPointers,
   matchingCompositeProfile,
   matchingHybridCompositeProfile,
   selectVideoFrames,
@@ -1306,6 +1307,9 @@ function composeLayers(
 }
 
 function actualSourceTime(layerId: string, frame: Frame): string {
+  const primaryGeoColor = layerId === "raw-visir"
+    ? frame.sourceTimes?.["NOAA STAR GOES-18 full-disk GeoColor"] : undefined;
+  if (primaryGeoColor && Number.isFinite(Date.parse(primaryGeoColor))) return primaryGeoColor;
   if (layerId.includes("lightning") && frame.sourceTimes) {
     const values = Object.values(frame.sourceTimes)
       .filter((value) => Number.isFinite(Date.parse(value)))
@@ -1336,8 +1340,10 @@ function compositeProfileFreshEnough(
     : NaN;
   const compositeNewest = Date.parse(pointer.endSourceTime);
   if (!Number.isFinite(imageNewest) || !Number.isFinite(compositeNewest)) return false;
-  const allowanceMinutes = COMPOSITE_FRESHNESS_MINUTES[rangeHours]
-    ?? Math.max(20, Math.ceil(rangeHours / 24) * 10);
+  const pacificArchive = rangeHours === 168
+    && ["pacific-wna-overlay", "north-pacific-overlay"].includes(productId ?? "");
+  const allowanceMinutes = pacificArchive ? 200 : (COMPOSITE_FRESHNESS_MINUTES[rangeHours]
+    ?? Math.max(20, Math.ceil(rangeHours / 24) * 10));
   return imageNewest - compositeNewest
     <= allowanceMinutes * 60_000 + SAME_SLOT_TOLERANCE_MS;
 }
@@ -1347,25 +1353,36 @@ function publishedPrebuiltCombos(
   product: Product,
   liveEdgeDomain: Domain | undefined,
   failedCompositeProfiles: string[],
+  failedVideoProfiles: string[],
 ) {
-  return Object.entries(catalog.compositeProfiles?.[product.id] ?? {})
+  const sidecars = Object.entries(catalog.compositeProfiles?.[product.id] ?? {})
     .flatMap(([anchor, tracks]) => Object.entries(tracks).flatMap(([track, pointers]) =>
       (pointers ?? []).flatMap((value) => {
-        let pointer: CompositeProfilePointer;
-        try { pointer = parseCompositeProfilePointer(value); } catch { return []; }
-        if (pointer.rangeHours > (product.maxHours ?? 168)) return [];
-        const selected = new Set(pointer.bakedLayerIds ?? pointer.layerIds);
-        const labels = product.layers.filter((layer) => selected.has(layer.id) && layer.optional && !layer.enabledWith)
-          .map((layer) => layerControlLabel(layer.controlId ?? layer.id))
-          .filter((label, index, all) => all.indexOf(label) === index);
-        const fresh = compositeProfileFreshEnough(pointer, liveEdgeDomain?.layers[anchor]?.frames ?? [], anchor, pointer.rangeHours, product.id);
-        const failed = failedCompositeProfiles.includes(compositeProfileFailureKey(
-          product.id, anchor, track, pointer.presetId, pointer.rangeHours, pointer.generation,
-        ));
-        return [{ anchor, pointer, labels, fresh, failed }];
+        try { return [{ anchor, track, pointer: parseCompositeProfilePointer(value), legacy: false }]; }
+        catch { return []; }
       }),
-    ))
-    .sort((a, b) => a.pointer.rangeHours - b.pointer.rangeHours || a.anchor.localeCompare(b.anchor));
+    ));
+  const bundles = Object.entries(catalog.videoProfiles?.[product.id] ?? {})
+    .flatMap(([anchor, tracks]) => Object.entries(tracks).flatMap(([track, bundle]) =>
+      bundle ? videoPrebuiltPointers(bundle).map((pointer) => ({ anchor, track, pointer, legacy: true })) : [],
+    ));
+  const seen = new Set<string>();
+  return [...sidecars, ...bundles].flatMap(({ anchor, track, pointer, legacy }) => {
+    const key = `${anchor}/${pointer.rangeHours}/${pointer.presetId}`;
+    if (seen.has(key) || pointer.rangeHours > (product.maxHours ?? 168)) return [];
+    seen.add(key);
+    const selected = new Set(pointer.bakedLayerIds ?? pointer.layerIds);
+    const labels = product.layers.filter((layer) => selected.has(layer.id) && layer.optional && !layer.enabledWith)
+      .map((layer) => layerControlLabel(layer.controlId ?? layer.id))
+      .filter((label, index, all) => all.indexOf(label) === index);
+    const fresh = compositeProfileFreshEnough(pointer, liveEdgeDomain?.layers[anchor]?.frames ?? [], anchor, pointer.rangeHours, product.id);
+    const failed = legacy
+      ? failedVideoProfiles.includes(videoProfileFailureKey(product.id, anchor, track, pointer.generation))
+      : failedCompositeProfiles.includes(compositeProfileFailureKey(
+        product.id, anchor, track, pointer.presetId, pointer.rangeHours, pointer.generation,
+      ));
+    return [{ anchor, pointer, labels, fresh, failed }];
+  }).sort((a, b) => a.pointer.rangeHours - b.pointer.rangeHours || a.anchor.localeCompare(b.anchor));
 }
 
 function atOrBefore(frames: Frame[], target: string, maxAgeMinutes?: number): Frame | undefined {
@@ -1913,32 +1930,41 @@ function InfraredLegend() {
 }
 
 type PlaybackStatusLinesHandle = {
-  update: (validTime: string, sourceTimes: string) => void;
+  update: (validTime: string, sourceTimes: string, missing?: readonly string[]) => void;
 };
 
 const PlaybackStatusLines = memo(forwardRef<PlaybackStatusLinesHandle, {
   initialValidTime: string;
   initialSourceTimes: string;
-}>(function PlaybackStatusLines({ initialValidTime, initialSourceTimes }, ref) {
+  initialMissing: readonly string[];
+}>(function PlaybackStatusLines({ initialValidTime, initialSourceTimes, initialMissing }, ref) {
   const validRef = useRef<HTMLParagraphElement>(null);
   const sourcesRef = useRef<HTMLParagraphElement>(null);
-  const update = useCallback((validTime: string, sourceTimes: string) => {
+  const warningRef = useRef<HTMLParagraphElement>(null);
+  const update = useCallback((validTime: string, sourceTimes: string, missing?: readonly string[]) => {
     if (validRef.current) {
       validRef.current.textContent = `VALID ${utcClock(validTime)} UTC · ${localClock(validTime)}`;
     }
     if (sourcesRef.current) sourcesRef.current.textContent = sourceTimes;
+    if (warningRef.current && missing) {
+      warningRef.current.textContent = missing.length ? `Unavailable: ${missing.join(", ")}` : "";
+      warningRef.current.hidden = !missing.length;
+    }
   }, []);
   useImperativeHandle(ref, () => ({ update }), [update]);
   // Playback updates these lines imperatively to avoid rerendering the whole
   // viewer. A paused slider/arrow change does rerender, so reconcile the DOM
   // with those props as well instead of leaving the last animated timestamp.
   useEffect(() => {
-    update(initialValidTime, initialSourceTimes);
-  }, [initialSourceTimes, initialValidTime, update]);
+    update(initialValidTime, initialSourceTimes, initialMissing);
+  }, [initialMissing, initialSourceTimes, initialValidTime, update]);
   return (
     <>
       <p ref={validRef} className="valid-line">VALID {utcClock(initialValidTime)} UTC · {localClock(initialValidTime)}</p>
       <p ref={sourcesRef} className="source-times">{initialSourceTimes}</p>
+      <p ref={warningRef} className="source-warning" hidden={!initialMissing.length}>
+        {initialMissing.length ? `Unavailable: ${initialMissing.join(", ")}` : ""}
+      </p>
     </>
   );
 }));
@@ -2326,8 +2352,8 @@ export function RadarViewer() {
     return appendLiveEdgeFrame(regularFrames, candidateTimes, 3 * 60);
   }, [activeAnchorId, effectiveRangeHours, liveEdgeDomain, optionalLayers, product]);
   const prebuiltCombos = useMemo(() => catalog && product
-    ? publishedPrebuiltCombos(catalog, product, liveEdgeDomain, failedCompositeProfiles)
-    : [], [catalog, product, liveEdgeDomain, failedCompositeProfiles]);
+    ? publishedPrebuiltCombos(catalog, product, liveEdgeDomain, failedCompositeProfiles, failedVideoProfiles)
+    : [], [catalog, product, liveEdgeDomain, failedCompositeProfiles, failedVideoProfiles]);
   const compositeProfilePointers = product && videoLayerId
     ? catalog?.compositeProfiles?.[product.id]?.[videoLayerId]?.[videoTrack] ?? []
     : [];
@@ -2589,6 +2615,12 @@ export function RadarViewer() {
       ? Date.parse(actualSourceTime(activeAnchorId, newestFallback))
       : NaN;
     if (!Number.isFinite(videoNewest) || !Number.isFinite(imageNewest)) return false;
+    // A three-hour archive snapshot cannot match a ten-minute live edge.
+    // Allow one retained interval plus ordinary publication latency; keep
+    // the fully composited archive stable instead of rejecting it mid-slot.
+    if (loadedVideoManifest.track === "archive" && product.domain === "north-pacific") {
+      return imageNewest - videoNewest <= (loadedVideoManifest.cadenceMinutes + 20) * 60_000;
+    }
     // Compare observation clocks, not rounded presentation slots.  A current
     // hot-edge index can completely replace the last video image with fresh
     // satellite/radar/lightning rasters, so retain the efficient historical
@@ -3126,6 +3158,7 @@ export function RadarViewer() {
 
   const liveEdgeState = useMemo(() => {
     if (!permitsLiveEdgeReplacement(playbackVideoManifest)
+        || (playbackVideoManifest?.track === "archive" && product?.domain === "north-pacific")
         || !videoModeReady || !product || !liveEdgeDomain || !videoPlans.length) {
       return { active: false, anchor: undefined, layers: [] as ComposedLayer[] };
     }
@@ -3402,7 +3435,21 @@ export function RadarViewer() {
     const times = isHotEdge && liveEdgeSourceTimes
       ? liveEdgeSourceTimes
       : videoHudSourceTimes[index] ?? "";
-    playbackStatusLinesRef.current?.update(displayedFrame.validTime, times);
+    // Missing-data warnings must follow the same media frame as the clock.
+    // Leaving them in React's paused frame state shows stale warnings over
+    // fields that have already returned in the moving video.
+    const presentIds = new Set(isHotEdge ? liveEdgeState.layers.map((layer) => layer.id) : [
+      "base-dark", videoLayerId,
+      ...(activeCompositeKind === "hybrid-prefix"
+        ? candidateCompositeManifest?.bakedLayerIds ?? candidateCompositeManifest?.layerIds ?? [] : []),
+      ...plan.frame.proxyLayers.flatMap((layer) => layer.ids ?? [layer.id]),
+    ]);
+    const missing = product.layers.filter((recipe) => (
+      enabledVideoLayerIds.includes(recipe.id) && !recipe.enabledWith
+      && !domain?.staticLayers[recipe.id] && !presentIds.has(recipe.id)
+    )).map((recipe) => layerControlLabel(recipe.id))
+      .filter((label, index, all) => all.indexOf(label) === index);
+    playbackStatusLinesRef.current?.update(displayedFrame.validTime, times, missing);
     if (mapStageRef.current) {
       mapStageRef.current.setAttribute(
         "aria-label",
@@ -3411,6 +3458,11 @@ export function RadarViewer() {
     }
   }, [
     activeCompositeKey,
+    activeCompositeKind,
+    candidateCompositeManifest,
+    domain,
+    enabledVideoLayerIds,
+    videoLayerId,
     presentedCompositeKey,
     acceptedCompositeGeneration,
     activeExactComposite,
@@ -4011,7 +4063,9 @@ export function RadarViewer() {
     const recipe = product.layers.find((layer) => layer.id === legendLayerId(legendId));
     return !recipe || isLayerEnabled(recipe);
   });
-  const selectedArchiveSpan = archiveSpan(anchorFrames);
+  const archiveCadence = playbackVideoManifest?.cadenceMinutes ?? product.archiveFrameIntervalMinutes ?? 60;
+  const selectedArchiveSpan = archiveSpan(anchorFrames)
+    + (effectiveRangeHours === 168 && archiveCadence >= 180 ? ` · ${archiveCadence / 60}-hour snapshots` : "");
   const viewport = product.viewport ?? FULL_VIEWPORT;
   const mapAspect = (domain.width * viewport.width) / (domain.height * viewport.height);
   const cropStyle: CSSProperties = {
@@ -4269,10 +4323,8 @@ export function RadarViewer() {
                   ref={playbackStatusLinesRef}
                   initialValidTime={displayAnchor.validTime}
                   initialSourceTimes={sourceTimes || `SOURCE ${shortClock(displayAnchor.validTime)}`}
+                  initialMissing={missingLayers}
                 />
-                {missingLayers.length > 0 && (
-                  <p className="source-warning">Unavailable: {missingLayers.join(", ")}</p>
-                )}
               </div>
             )}
             {hasCoverage && (

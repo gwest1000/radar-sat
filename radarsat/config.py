@@ -600,7 +600,7 @@ def _broad_product(
         "anchorLayer": anchor_layer,
         "frameIntervalMinutes": 20,
         "dayFrameIntervalMinutes": 30,
-        "archiveFrameIntervalMinutes": 60,
+        "archiveFrameIntervalMinutes": 180 if domain == "north-pacific" else 60,
         "defaultHours": 24,
         "description": description,
         "layers": [

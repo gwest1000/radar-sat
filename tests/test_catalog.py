@@ -407,6 +407,30 @@ class CatalogTests(unittest.TestCase):
             )
             self.assertNotIn("frames", json.dumps(catalog["videoProfiles"]))
 
+    def test_video_pointer_includes_actual_prebuilt_menu_without_frame_payloads(self) -> None:
+        from radarsat.catalog import video_prebuilt_summaries
+        payload = {
+            "generatedAt": "2026-09-11T18:30:00Z", "cadenceMinutes": 180,
+            "frames": [{"validTime": f"2026-09-11T{hour}:00:00Z",
+                        "sourceValidTime": f"2026-09-11T{hour}:00:00Z"} for hour in ("15", "18")],
+            "composites": [{"id": "operational-default-v1", "layerIds": ["raw-visir", "radar-rain"],
+                            "ranges": [{"hours": 168, "firstFrame": 0, "frameCount": 2,
+                                        "renditions": [{"id": "display"}]}]}],
+        }
+        summaries = video_prebuilt_summaries(payload)
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["rangeHours"], 168)
+        self.assertEqual(summaries[0]["endSourceTime"], "2026-09-11T18:00:00Z")
+        self.assertNotIn("frames", json.dumps(summaries))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_video_pointer(root, manifest_updates=payload)
+            catalog = build_catalog(root)
+            pointer = catalog["videoProfiles"]["bc-northeast-overlay"]["eccc-geocolor"]["live"]
+            self.assertEqual(pointer["composites"], summaries)
+        payload["composites"][0]["ranges"][0]["frameCount"] = 3
+        self.assertEqual(video_prebuilt_summaries(payload), [])
+
     def test_catalog_exposes_independent_composite_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

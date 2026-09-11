@@ -151,13 +151,50 @@ def _known_product_layers() -> dict[str, frozenset[str]]:
     return result
 
 
+def video_prebuilt_summaries(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Small menu entries from the actual published bundle, without its frames."""
+    frames = payload.get("frames")
+    presets = payload.get("composites")
+    generated = payload.get("generatedAt")
+    if not isinstance(frames, list) or not isinstance(presets, list) or not _parse_frame_time(generated):
+        return []
+    entries: list[dict[str, Any]] = []
+    for preset in presets:
+        if not isinstance(preset, dict) or not isinstance(preset.get("id"), str):
+            continue
+        layers = preset.get("layerIds")
+        ranges = preset.get("ranges")
+        if not isinstance(layers, list) or not layers or not all(isinstance(x, str) and x for x in layers):
+            continue
+        if not isinstance(ranges, list):
+            continue
+        for value in ranges:
+            if not isinstance(value, dict):
+                continue
+            first, count, hours = value.get("firstFrame"), value.get("frameCount"), value.get("hours")
+            if (type(first) is not int or type(count) is not int or type(hours) is not int
+                or first < 0 or count < 2 or first + count > len(frames) or hours not in (3, 6, 12, 24, 168)
+                or not value.get("renditions")):
+                continue
+            end = frames[first + count - 1]
+            if not isinstance(end, dict) or not all(_parse_frame_time(end.get(k)) for k in ("validTime", "sourceValidTime")):
+                continue
+            entries.append({
+                "presetId": preset["id"], "layerIds": layers, "rangeHours": hours,
+                "generatedAt": generated, "endValidTime": end["validTime"],
+                "endSourceTime": end["sourceValidTime"],
+                "cadenceMinutes": payload.get("cadenceMinutes"),
+            })
+    return entries
+
+
 def _valid_video_manifest_pointer(
     root: Path,
     product_id: str,
     layer_id: str,
     track: str,
     pointer: object,
-) -> dict[str, str] | None:
+) -> dict[str, Any] | None:
     """Return a safe immutable video pointer, or omit the optional fast path.
 
     The local index is mutable, but it may only point at a versioned manifest
@@ -213,7 +250,11 @@ def _valid_video_manifest_pointer(
         )
     ):
         return None
-    return {"generation": generation, "manifestPath": manifest_value}
+    result: dict[str, Any] = {"generation": generation, "manifestPath": manifest_value}
+    summaries = video_prebuilt_summaries(payload)
+    if summaries:
+        result["composites"] = summaries
+    return result
 
 
 def read_video_profiles(root: Path) -> dict[str, Any]:

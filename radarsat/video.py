@@ -19,8 +19,10 @@ from PIL import Image
 
 from . import cloud_style, cloud_policy
 from .catalog import build_catalog
+from .hotspots import render_fire_overlay
 from .config import (
     BROAD_VIEWPORTS,
+    DOMAINS,
     PRODUCTS,
     VIDEO_ARCHIVE_PRODUCTS,
     VIDEO_COMPOSITE_PRESETS,
@@ -338,6 +340,13 @@ def _format_time(value: dt.datetime) -> str:
 def _frame_source_time(frame: Mapping[str, Any]) -> dt.datetime | None:
     source_times = frame.get("sourceTimes")
     if isinstance(source_times, Mapping):
+        # Pacific GeoColor's main image owns the clock. Metadata also records
+        # the western-disk fill, whose IR scan can start ten minutes later.
+        # Taking max(all inputs) rejects the matching GeoColor slot as future
+        # imagery and substitutes the previous three-hour archive image.
+        primary = _parse_time(source_times.get("NOAA STAR GOES-18 full-disk GeoColor"))
+        if primary is not None:
+            return primary
         parsed = [_parse_time(value) for value in source_times.values()]
         values = [value for value in parsed if value is not None]
         if values:
@@ -664,7 +673,7 @@ def _selected_satellite_frames(
             # nor the deadline-qualified NOAA fill exists for this slot, omit
             # it instead of disguising an older satellite observation as a
             # new frame. This matches the browser's live-edge selector.
-            if msc_first:
+            if msc_first or (spec.track == "archive" and spec.domain_id == "north-pacific"):
                 continue
             if not selected:
                 continue
@@ -845,14 +854,26 @@ def _render_proxy(
         pass
 
     try:
-        with Image.open(source) as image:
-            rendered = _crop_resize(
-                image,
-                spec.viewport,
-                spec.width,
-                spec.height,
-                stage_aligned=stage_aligned,
-            )
+        if rendered_layer_id == "active-fire-points" and spec.domain_id == "north-pacific":
+            payload = json.loads(source.read_text())
+            if payload.get("domain") != spec.domain_id or not isinstance(payload.get("points"), list):
+                raise ProxySourceUnreadableError(str(source))
+            with tempfile.TemporaryDirectory(prefix=".agency-fire-proxy-", dir=output_root) as temporary_dir:
+                raster = Path(temporary_dir) / "fires.png"
+                render_fire_overlay(
+                    [], payload["points"], DOMAINS[spec.domain_id], raster,
+                    viewport=dict(spec.viewport), output_width=spec.width,
+                    symbol_reference_width=max(1, round(1920 * spec.viewport["width"])),
+                    supersample=1, blur_glow=False,
+                )
+                with Image.open(raster) as image:
+                    rendered = _crop_resize(image, spec.viewport, spec.width, spec.height, stage_aligned=True)
+        else:
+            with Image.open(source) as image:
+                rendered = _crop_resize(
+                    image, spec.viewport, spec.width, spec.height,
+                    stage_aligned=stage_aligned,
+                )
     except FileNotFoundError:
         raise
     except OSError as error:
@@ -1044,7 +1065,10 @@ def _proxy_selections(
         rendered_id = _rendered_layer_id(recipe_id, spec, domain)
         layer = domain.get("layers", {}).get(rendered_id)
         if not isinstance(layer, Mapping):
-            continue
+            if recipe_id == "hotspots" and spec.domain_id == "north-pacific":
+                layer = {}
+            else:
+                continue
         max_age = layer.get("maxAgeMinutes")
         frames = list(layer.get("frames", []))
         if "-region-" in rendered_id:
@@ -1103,6 +1127,14 @@ def _proxy_selections(
                 ) or _at_or_before(frames, anchor, max_age_minutes)
             else:
                 frame = _at_or_before(frames, anchor, max_age_minutes)
+            if frame is None and prepared_recipe_id == "hotspots" and spec.domain_id == "north-pacific":
+                # Agency reports are independent of the thermal-detection feed.
+                # When its combined raster stops, preserve available agency
+                # fires using only records at/before this frame (at most 6h old).
+                active_layer = domain.get("layers", {}).get("active-fire-points", {})
+                frame = _at_or_before(active_layer.get("frames", []), anchor, 360)
+                if frame is not None:
+                    rendered_id = "active-fire-points"
             if frame is None or not frame.get("path"):
                 continue
             key = _source_url_key(frame)

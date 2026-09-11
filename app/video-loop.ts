@@ -1,18 +1,23 @@
 export type VideoProfilePointer = {
   generation: string;
   manifestPath: string;
+  composites?: VideoPrebuiltSummary[];
 };
 
-export type CompositeProfilePointer = VideoProfilePointer & {
-  compositeKind?: "exact" | "hybrid-prefix";
+export type VideoPrebuiltSummary = {
   presetId: string;
   layerIds: string[];
-  bakedLayerIds?: string[];
-  eligibleOverlayLayerIds?: string[];
   rangeHours: number;
   generatedAt: string;
   endValidTime: string;
   endSourceTime: string;
+  cadenceMinutes?: number;
+};
+
+export type CompositeProfilePointer = VideoProfilePointer & VideoPrebuiltSummary & {
+  compositeKind?: "exact" | "hybrid-prefix";
+  bakedLayerIds?: string[];
+  eligibleOverlayLayerIds?: string[];
 };
 
 export type VideoProxy = {
@@ -522,6 +527,19 @@ export function parseCompositeProfilePointer(value: unknown): CompositeProfilePo
     throw new Error("Composite profile pointer has an unsupported schema.");
   }
   return pointer as CompositeProfilePointer;
+}
+
+// These entries select layers/range in Views; playback still resolves the
+// original videoProfiles bundle. Never register them as sidecar manifests.
+export function videoPrebuiltPointers(pointer: VideoProfilePointer): CompositeProfilePointer[] {
+  if (!Array.isArray(pointer.composites)) return [];
+  return pointer.composites.flatMap((summary) => {
+    try {
+      return [parseCompositeProfilePointer({
+        ...summary, generation: pointer.generation, manifestPath: pointer.manifestPath,
+      })];
+    } catch { return []; }
+  });
 }
 
 export function matchingCompositeProfile(
