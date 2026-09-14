@@ -962,6 +962,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
         *((layer, trail_anchor_stamps) for layer in derived_layers),
         *((layer, hour_anchor_stamps) for layer in hour_layers),
     ):
+        allowed_stamps = set(allowed_stamps)
         output_metadata_root = root / "metadata" / domain.id / derived_layer.id
         if output_metadata_root.exists():
             for path in output_metadata_root.rglob("*.json"):
@@ -969,10 +970,18 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                     continue
                 try:
                     payload = json.loads(path.read_text())
+                    valid_time = dt.datetime.fromisoformat(payload["validTime"].replace("Z", "+00:00"))
+                    # A short live refresh must not erase completed hourly
+                    # aggregates retained for seven-day playback. Preserve
+                    # their full bins; do not reconstruct them from thinned data.
+                    if (derived_layer in hour_layers and valid_time < archive_cutoff
+                            and keep_layer_frame(valid_time, newest_observation, domain.tier, derived_layer.id)):
+                        allowed_stamps.add(path.stem)
+                        continue
                     image_path = safe_archive_path(root, str(payload.get("path", "")))
                     if image_path.is_file():
                         image_path.unlink()
-                except (OSError, ValueError, json.JSONDecodeError):
+                except (OSError, KeyError, ValueError, json.JSONDecodeError):
                     pass
                 path.unlink(missing_ok=True)
         output_frame_root = root / "frames" / domain.id / derived_layer.id
@@ -1217,13 +1226,15 @@ def derive_fire_overlays(
     output_layer = LAYERS["hotspots"]
     hotspot_times = _archived_layer_times(root, domain, hotspot_layer)
     active_times = _archived_layer_times(root, domain, active_layer)
-    if not hotspot_times:
+    # Agency reports and thermal detections are independent feeds. Either
+    # source must be able to advance the raster used by every prebuilt loop.
+    source_times_available = sorted(set(hotspot_times + active_times))
+    if not source_times_available:
         return {"status": "unavailable", "rendered": 0}
-    cutoff = max(hotspot_times) - dt.timedelta(hours=hours)
-    anchors = [value for value in hotspot_times if value >= cutoff]
+    cutoff = source_times_available[-1] - dt.timedelta(hours=hours)
+    anchors = [value for value in source_times_available if value >= cutoff]
     if latest_only:
-        newest_active = active_times[-1] if active_times else hotspot_times[-1]
-        anchors = [max(hotspot_times[-1], newest_active)]
+        anchors = anchors[-1:]
     rendered = 0
     if domain.id == "bc" and not latest_only:
         retained_stamps = {frame_stamp(value) for value in anchors}
@@ -1289,16 +1300,24 @@ def derive_fire_overlays(
 
     for anchor in anchors:
         selected_hotspot_time = hotspot_time_for(anchor)
-        if selected_hotspot_time is None:
-            continue
-        hotspot_payload = payload(hotspot_layer, selected_hotspot_time)
-        if hotspot_payload is None:
-            continue
+        hotspot_payload = (
+            payload(hotspot_layer, selected_hotspot_time)
+            if selected_hotspot_time is not None else None
+        )
         selected_active_time = active_time_for(anchor)
         active_payload = (
             payload(active_layer, selected_active_time)
             if selected_active_time is not None
             else None
+        )
+        if hotspot_payload is None:
+            selected_hotspot_time = None
+        if active_payload is None:
+            selected_active_time = None
+        if hotspot_payload is None and active_payload is None:
+            continue
+        expected_hotspot_time = (
+            format_utc(selected_hotspot_time) if selected_hotspot_time is not None else None
         )
         expected_active_time = (
             format_utc(selected_active_time)
@@ -1310,9 +1329,21 @@ def derive_fire_overlays(
             if selected_active_time is not None
             else {}
         )
-        source_times = {"hotspots": selected_hotspot_time}
+        source_times = {}
+        if selected_hotspot_time is not None:
+            source_times["hotspots"] = selected_hotspot_time
         if selected_active_time is not None:
             source_times["active fires"] = selected_active_time
+        hotspot_age_offset = 0.0
+        hotspot_rows = hotspot_payload.get("points", []) if hotspot_payload else []
+        if hotspot_payload and selected_hotspot_time is not None:
+            age_reference = dt.datetime.fromisoformat(str(
+                hotspot_payload.get("ageReferenceTime", format_utc(selected_hotspot_time))
+            ).replace("Z", "+00:00"))
+            hotspot_age_offset = max(0, (anchor - age_reference).total_seconds() / 60)
+            hotspot_rows = [row for row in hotspot_rows
+                            if len(row) > 2 and isinstance(row[2], (int, float))
+                            and float(row[2]) + hotspot_age_offset <= 24 * 60]
         standard_fire_version = (
             FIRE_BROAD_OVERLAY_RENDER_VERSION
             if domain.tier == "broad"
@@ -1373,14 +1404,16 @@ def derive_fire_overlays(
                 destination.is_file()
                 and existing_metadata.get(version_key) == render_version
                 and existing_metadata.get("activeFireValidTime") == expected_active_time
+                and existing_metadata.get("hotspotValidTime") == expected_hotspot_time
                 and existing_metadata.get("regionalViewport") == viewport
             ):
                 continue
             summary = render_fire_overlay(
-                hotspot_payload.get("points", []),
+                hotspot_rows,
                 active_payload.get("points", []) if active_payload else [],
                 domain,
                 destination,
+                hotspot_age_offset_minutes=hotspot_age_offset,
                 viewport=viewport,
                 output_width=render_output_width,
                 symbol_reference_width=render_symbol_reference_width,
@@ -1410,6 +1443,9 @@ def derive_fire_overlays(
                 "renderVersion": HOTSPOT_RENDER_VERSION,
                 version_key: render_version,
                 "activeFireValidTime": expected_active_time,
+                "hotspotValidTime": expected_hotspot_time,
+                "thermalHotspotsAvailable": hotspot_payload is not None,
+                "agencyFiresAvailable": active_payload is not None,
                 "activeFirePointCount": int(active_metadata.get("pointCount", 0)),
                 "canadianFeatureCount": int(active_metadata.get("canadianFeatureCount", 0)),
                 "bcwsFeatureCount": int(active_metadata.get("bcwsFeatureCount", 0)),

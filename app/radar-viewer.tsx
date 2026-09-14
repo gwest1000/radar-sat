@@ -1457,6 +1457,9 @@ function utcClock(value: string): string {
 function localClock(value: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Vancouver",
+    weekday: "short",
+    month: "short",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     timeZoneName: "short",
@@ -1943,7 +1946,7 @@ const PlaybackStatusLines = memo(forwardRef<PlaybackStatusLinesHandle, {
   const warningRef = useRef<HTMLParagraphElement>(null);
   const update = useCallback((validTime: string, sourceTimes: string, missing?: readonly string[]) => {
     if (validRef.current) {
-      validRef.current.textContent = `VALID ${utcClock(validTime)} UTC · ${localClock(validTime)}`;
+      validRef.current.textContent = `${localClock(validTime)} · ${utcClock(validTime)} UTC`;
     }
     if (sourcesRef.current) sourcesRef.current.textContent = sourceTimes;
     if (warningRef.current && missing) {
@@ -1969,7 +1972,7 @@ const PlaybackStatusLines = memo(forwardRef<PlaybackStatusLinesHandle, {
   }, [initialWarning]);
   return (
     <>
-      <p ref={validRef} className="valid-line">VALID {utcClock(initialValidTime)} UTC · {localClock(initialValidTime)}</p>
+      <p ref={validRef} className="valid-line">{localClock(initialValidTime)} · {utcClock(initialValidTime)} UTC</p>
       <p ref={sourcesRef} className="source-times">{initialSourceTimes}</p>
       <p ref={warningRef} className="source-warning" hidden={!initialMissing.length}>
         {initialMissing.length ? `Unavailable: ${initialMissing.join(", ")}` : ""}
@@ -3449,8 +3452,7 @@ export function RadarViewer() {
     // fields that have already returned in the moving video.
     const presentIds = new Set(isHotEdge ? liveEdgeState.layers.map((layer) => layer.id) : [
       "base-dark", videoLayerId,
-      ...(activeCompositeKind === "hybrid-prefix"
-        ? candidateCompositeManifest?.bakedLayerIds ?? candidateCompositeManifest?.layerIds ?? [] : []),
+      ...videoFrameSourceTimeMap(plan.frame).keys(),
       ...plan.frame.proxyLayers.flatMap((layer) => layer.ids ?? [layer.id]),
     ]);
     const missing = product.layers.filter((recipe) => (
@@ -3947,11 +3949,8 @@ export function RadarViewer() {
       ? [
           "base-dark",
           videoLayerId,
-          ...(
-            activeCompositeKind === "hybrid-prefix"
-              ? candidateCompositeManifest?.bakedLayerIds ?? candidateCompositeManifest?.layerIds ?? []
-              : []
-          ),
+          ...(videoPlans[currentFrameIndex]
+            ? videoFrameSourceTimeMap(videoPlans[currentFrameIndex].frame).keys() : []),
           ...activeVideoProxyLayers.flatMap((layer) => layer.ids ?? [layer.id]),
         ]
       : composedLayers.map((layer) => layer.id),

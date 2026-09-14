@@ -961,3 +961,28 @@ test("legacy prebuilt bundles expose selectable menu entries without fetching ev
   assert.deepEqual(videoPrebuiltPointers({...bundle, composites: [null, {rangeHours: 168}]}), []);
   assert.deepEqual(videoPrebuiltPointers({generation: "old", manifestPath: "old.json"}), []);
 });
+
+
+test("full prebuilt frames do not claim missing fires or lightning are present", async () => {
+  const { compositeLoopVideoManifest, videoFrameSourceTimeMap } = await import("../app/video-loop.ts");
+  const time = "2026-09-14T12:00:00Z";
+  const converted = compositeLoopVideoManifest({
+    generation: "missing-field-regression", generatedAt: time,
+    productId: "test", domainId: "test", layerId: "satellite", track: "live",
+    presetId: "operational-default-v1", layerIds: ["satellite", "hotspots", "lightning-trail"],
+    rangeHours: 3, cadenceMinutes: 10,
+    viewport: {left: 0, top: 0, width: 1, height: 1},
+    renditions: [{id: "high", media: {path: "videos/test.mp4", width: 10, height: 11, contentHeight: 10}}],
+    frames: [null, time].map(sourceTime => ({
+      validTime: time, sourceValidTime: time, durationSeconds: 1,
+      layerSourceTimes: {satellite: time, "base-dark": null, hotspots: sourceTime, "lightning-trail": sourceTime},
+    })),
+  });
+  assert.ok(converted);
+  const [missing, available] = converted.manifest.frames;
+  assert.deepEqual(missing.proxyLayers.map(layer => layer.id), ["satellite"]);
+  assert.equal(videoFrameSourceTimeMap(missing).has("hotspots"), false);
+  assert.equal(videoFrameSourceTimeMap(missing).has("lightning-trail"), false);
+  assert.equal(videoFrameSourceTimeMap(available).has("hotspots"), true);
+  assert.equal(videoFrameSourceTimeMap(available).has("lightning-trail"), true);
+});

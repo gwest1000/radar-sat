@@ -350,6 +350,50 @@ class ActiveFireTests(unittest.TestCase):
                 frame_path(root, domain, LAYERS["active-fire-points"], second_valid).exists()
             )
 
+    def test_fire_rasters_advance_when_either_feed_is_missing(self) -> None:
+        for unavailable in ("thermal", "agency", "expired-thermal", "corrupt-thermal"):
+            with self.subTest(unavailable=unavailable), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                domain = Domain(id="north-pacific", title="test", west=-125, south=48,
+                                east=-120, north=53, crs="EPSG:4326", width=120, height=100,
+                                tier="broad", projected_bounds=(-125, 48, -120, 53))
+                current = VALID.replace(minute=0, second=0, microsecond=0)
+
+                def snapshot(layer_id, valid_time, rows):
+                    layer = LAYERS[layer_id]
+                    path = frame_path(root, domain, layer, valid_time)
+                    write_point_frame(path, layer=layer.id, domain=domain, valid_time=valid_time,
+                                      window_start=valid_time, window_end=valid_time,
+                                      age_reference_time=valid_time, point_schema=layer.point_schema,
+                                      points=rows, age_mode="source-status-time", age_precision_seconds=60)
+                    write_metadata(root, domain, layer, valid_time, path, extra={"pointCount": len(rows)})
+                    return path
+
+                if unavailable != "agency":
+                    snapshot("active-fire-points", current, [[0.75, 0.75, None, 250, 1, 1, 1]])
+                if unavailable != "thermal":
+                    thermal_time = current - dt.timedelta(hours=26) if unavailable == "expired-thermal" else current
+                    thermal = snapshot("hotspot-points", thermal_time, [[0.25, 0.25, 60, 120, 1]])
+                    if unavailable == "corrupt-thermal":
+                        thermal.write_text("invalid JSON")
+                result = derive_fire_overlays(root, domain, hours=1)
+                meta = json.loads(metadata_path(root, domain, LAYERS["hotspots"], current).read_text())
+                self.assertEqual(result["rendered"], 1)
+                self.assertEqual(meta["agencyFiresAvailable"], unavailable != "agency")
+                self.assertEqual(meta["thermalHotspotsAvailable"], unavailable == "agency")
+                self.assertEqual(meta["activeFireDisplayCount"], int(unavailable != "agency"))
+                self.assertEqual(meta["hotspotDisplayCount"], int(unavailable == "agency"))
+                with Image.open(frame_path(root, domain, LAYERS["hotspots"], current)) as raster:
+                    self.assertIsNotNone(raster.convert("RGBA").getchannel("A").getbbox())
+                self.assertEqual(derive_fire_overlays(root, domain, hours=1)["rendered"], 0)
+                if unavailable == "thermal":
+                    # A recovered thermal source upgrades an existing agency-only raster.
+                    snapshot("hotspot-points", current, [[0.25, 0.25, 60, 120, 1]])
+                    self.assertEqual(derive_fire_overlays(root, domain, hours=1)["rendered"], 1)
+                    upgraded = json.loads(metadata_path(root, domain, LAYERS["hotspots"], current).read_text())
+                    self.assertEqual(upgraded["hotspotDisplayCount"], 1)
+                    self.assertTrue(upgraded["agencyFiresAvailable"])
+
     def test_derived_fire_overlay_combines_point_frames(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

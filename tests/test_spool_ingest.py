@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from dataclasses import replace
 from unittest import mock
 
 import numpy as np
@@ -779,7 +780,7 @@ class NativeRenderTests(unittest.TestCase):
     def test_hourly_lightning_history_extends_beyond_live_trails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
-            domain = test_domain()
+            domain = replace(test_domain(), id="bc")
             newest = VALID.replace(minute=0)
             old_hour = newest - dt.timedelta(hours=30)
             for anchor in (old_hour, newest):
@@ -800,6 +801,16 @@ class NativeRenderTests(unittest.TestCase):
             self.assertFalse(
                 frame_path(output, domain, LAYERS["lightning-trail"], old_hour).exists()
             )
+
+            # Production also runs short refreshes. They must not erase the
+            # already-complete retained hourly aggregate or its regional copy.
+            old_layer = LAYERS["lightning-hour"]
+            before = frame_path(output, domain, old_layer, old_hour).read_bytes()
+            derive_lightning_trails(output, domain, {}, hours=1)
+            self.assertEqual(frame_path(output, domain, old_layer, old_hour).read_bytes(), before)
+            regional = LAYERS[regional_layer_id("lightning-hour", "small")]
+            self.assertTrue(frame_path(output, domain, regional, old_hour).is_file())
+            self.assertEqual(len(json.loads(metadata_path(output, domain, old_layer, old_hour).read_text())["sourceTimes"]), 6)
 
     def test_recovered_lightning_gap_gets_a_derived_trail_anchor(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -767,8 +767,11 @@ export function compositeLoopVideoManifest(
       sourceFetchedAt: manifest.generatedAt,
       ptsSeconds: pts,
       durationSeconds: frame.durationSeconds,
-      proxyLayers: frame.proxyLayers ?? Object.entries(frame.layerSourceTimes ?? {}).map(
-        ([id, sourceValidTime]) => ({
+      proxyLayers: frame.proxyLayers ?? Object.entries(frame.layerSourceTimes ?? {})
+        // A null timestamp is an absent dynamic field or a static decoration,
+        // never evidence that a weather field was baked into this frame.
+        .filter(([, sourceValidTime]) => sourceValidTime !== null)
+        .map(([id, sourceValidTime]) => ({
           id,
           renderId: id,
           sourceKey: `composite:${id}:${sourceValidTime ?? "static"}`,
