@@ -4346,26 +4346,6 @@ export function RadarViewer() {
 
         <aside className="legend-rail" aria-label="Map legends">
           <div className="layer-toolbar">
-            <FrameExportButton disabled={!displayAnchor} capture={() => {
-              const stage = mapStageRef.current;
-              if (!stage || !displayAnchor) throw new Error("Wait for the map to load first.");
-              let validTime = displayAnchor.validTime;
-              if (videoModeReady) {
-                const index = presentedVideoIndexRef.current;
-                const frame = videoAnchorFrames[index];
-                if (!frame) throw new Error("Wait for the video to finish loading, then export again.");
-                stage.querySelector<HTMLVideoElement>(".video-loop-decoder")?.pause();
-                handleVideoFramePresented(index, true);
-                setFrameIndex(index);
-                validTime = index === anchorFrames.length - 1 && liveEdgeState.active && liveEdgeState.anchor
-                  ? liveEdgeState.anchor.validTime : frame.validTime;
-              }
-              setPlaying(false);
-              return {
-                filename: frameExportFilename(product.shortTitle, validTime),
-                image: captureMapFrame(stage, domain.width * viewport.width),
-              };
-            }} />
             <div className={`prebuilt-selector${viewsMenuOpen ? " is-open" : ""}`}
               onPointerEnter={(event) => {
                 if (event.pointerType !== "mouse") return;
@@ -4561,6 +4541,26 @@ export function RadarViewer() {
           <button className="sources-button" type="button" onClick={() => setSourcesOpen(true)}>
             Sources
           </button>
+          <FrameExportButton disabled={!displayAnchor} capture={() => {
+            const stage = mapStageRef.current;
+            if (!stage || !displayAnchor) throw new Error("Wait for the map to load first.");
+            let validTime = displayAnchor.validTime;
+            if (videoModeReady) {
+              const index = presentedVideoIndexRef.current;
+              const frame = videoAnchorFrames[index];
+              if (!frame) throw new Error("Wait for the video to finish loading, then export again.");
+              stage.querySelector<HTMLVideoElement>(".video-loop-decoder")?.pause();
+              handleVideoFramePresented(index, true);
+              setFrameIndex(index);
+              validTime = index === anchorFrames.length - 1 && liveEdgeState.active && liveEdgeState.anchor
+                ? liveEdgeState.anchor.validTime : frame.validTime;
+            }
+            setPlaying(false);
+            return {
+              filename: frameExportFilename(product.shortTitle, validTime),
+              image: captureMapFrame(stage, domain.width * viewport.width),
+            };
+          }} />
         </aside>
       </section>
 
