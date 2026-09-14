@@ -36,8 +36,8 @@ class HrdpsContourTests(unittest.TestCase):
         self.assertAlmostEqual(height.linewidth, 2.15 * 1.75)
         self.assertAlmostEqual(mslp.linewidth, 1.05 * 0.75)
         self.assertEqual((height.lower_colour, height.upper_colour), ("#c98735", "#b95750"))
-        self.assertGreater(height.label_size, 7.2)
-        self.assertGreater(mslp.label_size, 6.4)
+        self.assertEqual(height.label_size, 7.4)
+        self.assertEqual(mslp.label_size, 7.4)
 
     def test_model_url_uses_dated_tree_across_utc_rollover(self) -> None:
         height = FIELD_STYLES[0]

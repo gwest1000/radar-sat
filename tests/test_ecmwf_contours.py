@@ -69,7 +69,8 @@ class EcmwfContourTests(unittest.TestCase):
                 pressure_summary["lineWidth"],
                 FIELD_STYLES[1].linewidth * 0.90,
             )
-            self.assertEqual(height_summary["labelScale"], 0.45)
+            self.assertEqual(height_summary["labelScale"], 1.0)
+            self.assertEqual(pressure_summary["labelScale"], 1.0)
             self.assertEqual(height_summary["centreScale"], 0.50)
 
     def test_newest_three_hour_covering_run_is_preferred(self) -> None:

@@ -37,6 +37,7 @@ GRID_TAG = "RLatLon0.0225"
 RENDER_VERSION = 4
 SOUTH_COAST_STYLE_VERSION = 2
 SOUTH_COAST_OUTPUT_SCALE = 6.2
+CONTOUR_LABEL_SIZE = 7.4  # Match forecast four-panel temperature labels (points).
 DEFAULT_DATA_ROOT = Path(
     os.environ.get(
         "RADARSAT_HRDPS_DATA_ROOT",
@@ -81,7 +82,7 @@ FIELD_STYLES = (
         lower_colour="#c98735",
         upper_colour="#b95750",
         linewidth=3.7625,
-        label_size=9.5,
+        label_size=CONTOUR_LABEL_SIZE,
         contour_smooth_km=18.0,
         smooth_km=90.0,
         background_km=450.0,
@@ -102,7 +103,7 @@ FIELD_STYLES = (
         lower_colour="#ef4dff",
         upper_colour="#42a5ff",
         linewidth=0.7875,
-        label_size=8.5,
+        label_size=CONTOUR_LABEL_SIZE,
         contour_smooth_km=55.0,
         smooth_km=65.0,
         background_km=325.0,
@@ -403,7 +404,7 @@ def render_contours(
         line_scale = 0.5625 if style.kind == "hgt500" else 0.90
     if line_scale_override is not None:
         line_scale = line_scale_override
-    label_scale = 0.45 if ecmwf_overview else 1.0
+    label_scale = 1.0
     if label_scale_override is not None:
         label_scale = label_scale_override
     centre_scale = 0.50 if ecmwf_overview else 1.0
