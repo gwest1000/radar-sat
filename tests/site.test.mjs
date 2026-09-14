@@ -986,3 +986,20 @@ test("full prebuilt frames do not claim missing fires or lightning are present",
   assert.equal(videoFrameSourceTimeMap(available).has("hotspots"), true);
   assert.equal(videoFrameSourceTimeMap(available).has("lightning-trail"), true);
 });
+
+test("frame exports use portable region and unambiguous UTC filenames", async () => {
+  const { frameExportFilename } = await import("../app/frame-export.ts");
+  assert.equal(frameExportFilename("Pacific/WNA", "2026-09-14T03:10:00Z"), "radar-sat-pacific-wna-20260914T031000Z.png");
+  assert.equal(frameExportFilename("BC XL", "2026-09-13T20:10:00-07:00"), "radar-sat-bc-xl-20260914T031000Z.png");
+  assert.throws(() => frameExportFilename("BC XL", ""), /valid timestamp/);
+});
+
+test("Safari image exports preserve colour filtering order and alpha", async () => {
+  const { applyColourFilter } = await import("../app/frame-export.ts");
+  const pixels = new Uint8ClampedArray([200, 100, 50, 80, 255, 255, 255, 255]);
+  applyColourFilter(pixels, "saturate(0) brightness(0.5) contrast(1)");
+  assert.deepEqual([...pixels], [59, 59, 59, 80, 128, 128, 128, 255]);
+  const identity = new Uint8ClampedArray([40, 180, 220, 0]);
+  applyColourFilter(identity, "saturate(1) brightness(1) contrast(1)");
+  assert.deepEqual([...identity], [40, 180, 220, 0]);
+});

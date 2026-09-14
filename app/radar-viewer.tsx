@@ -12,6 +12,9 @@ import {
   useState,
 } from "react";
 
+import { FrameExportButton } from "./frame-export-button";
+import { captureMapFrame, frameExportFilename } from "./frame-export";
+
 import { loadPointFrame, preloadPointFrame } from "./point-data";
 import { appendLiveEdgeFrame } from "./live-edge-timeline";
 import {
@@ -3403,7 +3406,7 @@ export function RadarViewer() {
     setFrameIndex(index);
   }, []);
 
-  const handleVideoFramePresented = useCallback((index: number) => {
+  const handleVideoFramePresented = useCallback((index: number, forceHud = false) => {
     if (activeCompositeKey && presentedCompositeKey !== activeCompositeKey) {
       setPresentedCompositeKey(activeCompositeKey);
     }
@@ -3435,7 +3438,7 @@ export function RadarViewer() {
     if (timelineRangeRef.current) timelineRangeRef.current.value = String(index);
     const now = performance.now();
     if (
-      index !== 0
+      !forceHud && index !== 0
       && index !== anchorFrames.length - 1
       && now - lastVideoHudUpdateAtRef.current < VIDEO_HUD_UPDATE_INTERVAL_MS
     ) return;
@@ -4343,6 +4346,26 @@ export function RadarViewer() {
 
         <aside className="legend-rail" aria-label="Map legends">
           <div className="layer-toolbar">
+            <FrameExportButton disabled={!displayAnchor} capture={() => {
+              const stage = mapStageRef.current;
+              if (!stage || !displayAnchor) throw new Error("Wait for the map to load first.");
+              let validTime = displayAnchor.validTime;
+              if (videoModeReady) {
+                const index = presentedVideoIndexRef.current;
+                const frame = videoAnchorFrames[index];
+                if (!frame) throw new Error("Wait for the video to finish loading, then export again.");
+                stage.querySelector<HTMLVideoElement>(".video-loop-decoder")?.pause();
+                handleVideoFramePresented(index, true);
+                setFrameIndex(index);
+                validTime = index === anchorFrames.length - 1 && liveEdgeState.active && liveEdgeState.anchor
+                  ? liveEdgeState.anchor.validTime : frame.validTime;
+              }
+              setPlaying(false);
+              return {
+                filename: frameExportFilename(product.shortTitle, validTime),
+                image: captureMapFrame(stage, domain.width * viewport.width),
+              };
+            }} />
             <div className={`prebuilt-selector${viewsMenuOpen ? " is-open" : ""}`}
               onPointerEnter={(event) => {
                 if (event.pointerType !== "mouse") return;
