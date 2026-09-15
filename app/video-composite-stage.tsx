@@ -939,6 +939,13 @@ export function VideoCompositeStage({
           if (operationEpochRef.current !== operationEpoch) return;
           seekedListenerRef.current = undefined;
           seekingRef.current = false;
+          // A paused decoder may present the seeked sample before a newly
+          // registered video-frame callback can observe it. Commit its ready
+          // overlays here; no subsequent playback frame is needed.
+          if (!playingRef.current && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            handleVideoFrame(video.currentTime);
+            return;
+          }
           requestFrameRef.current();
           if (
             playingRef.current
@@ -965,7 +972,7 @@ export function VideoCompositeStage({
         if (operationEpochRef.current === operationEpoch) fail(reason);
       });
     };
-  }, [fail, fullyComposited, invalidateOperation, plans, playVideo, surfaceCache]);
+  }, [fail, fullyComposited, handleVideoFrame, invalidateOperation, plans, playVideo, surfaceCache]);
 
   useLayoutEffect(() => {
     if (previousPlanRevisionRef.current === planRevision) return;

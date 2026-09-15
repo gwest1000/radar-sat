@@ -1,9 +1,110 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
+import vm from "node:vm";
+import ts from "typescript";
 
 import { decodedVideoDimensionsError, selectHlsEngine, shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
 import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
+
+async function pausedSeekHarness({ cached = true, playing = false, readyState = 2 } = {}) {
+  // Exercise the production seek routine with a decoder that emits seeked,
+  // but no video-frame callback while paused (the reported browser behaviour).
+  const source = await readFile(new URL("../app/video-composite-stage.tsx", import.meta.url), "utf8");
+  const tree = ts.createSourceFile("stage.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let seek;
+  const visit = (node) => {
+    if (ts.isBinaryExpression(node)
+      && node.left.getText(tree) === "seekToIndexRef.current"
+      && ts.isArrowFunction(node.right)) seek = node.right;
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  assert.ok(seek, "production seek routine exists");
+  const listeners = new Map();
+  const committed = [];
+  const pending = [];
+  let playCalls = 0;
+  const video = {
+    readyState,
+    currentTime: 0,
+    paused: true,
+    pause() { this.paused = true; },
+    addEventListener(name, callback) { listeners.set(name, callback); },
+    removeEventListener(name) { listeners.delete(name); },
+  };
+  const epoch = { current: 0 };
+  const seeking = { current: false };
+  const context = {
+    videoRef: { current: video },
+    plans: [0, 1, 2].map((index) => ({ cacheKey: `overlay-${index}`, frame: { ptsSeconds: index, durationSeconds: 1 } })),
+    failedRef: { current: false },
+    operationEpochRef: epoch,
+    loopTimerRef: { current: undefined },
+    requestedIndexRef: { current: 0 },
+    seekingRef: seeking,
+    seekedListenerRef: { current: undefined },
+    playingRef: { current: playing },
+    overlayStallsRef: { current: 0 },
+    fullyComposited: false,
+    surfaceCache: {
+      peek: () => cached ? {} : undefined,
+      prepare: () => new Promise((resolve) => pending.push(resolve)),
+    },
+    invalidateOperation: () => { listeners.clear(); return ++epoch.current; },
+    requestFrameRef: { current: () => {} },
+    handleVideoFrame: (time) => committed.push(time),
+    playVideo: () => { playCalls += 1; video.paused = false; },
+    fail: (reason) => { throw reason; },
+    HTMLMediaElement: { HAVE_METADATA: 1, HAVE_CURRENT_DATA: 2 },
+    window: { clearTimeout },
+  };
+  const compiled = ts.transpileModule(`const seek = ${seek.getText(tree)}; seek;`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  return {
+    seek: vm.runInNewContext(compiled, context), video, committed, pending,
+    finish: () => listeners.get("seeked")?.(),
+    playCalls: () => playCalls,
+  };
+}
+
+test("paused forward and backward seeks commit overlays without another decoded-frame callback", async () => {
+  const harness = await pausedSeekHarness();
+  for (const index of [1, 2, 1, 0]) {
+    harness.seek(index);
+    harness.finish();
+    assert.equal(harness.committed.at(-1), index + 0.005);
+    assert.equal(harness.video.paused, true);
+  }
+  assert.equal(harness.committed.length, 4);
+  assert.equal(harness.playCalls(), 0);
+});
+
+test("paused seeks wait for target overlays and discard superseded preparations", async () => {
+  const harness = await pausedSeekHarness({ cached: false });
+  harness.seek(1);
+  harness.seek(2);
+  assert.equal(harness.video.currentTime, 0);
+  harness.pending[0]({});
+  await Promise.resolve();
+  assert.equal(harness.video.currentTime, 0);
+  assert.equal(harness.committed.length, 0);
+  harness.pending[1]({});
+  await Promise.resolve();
+  harness.finish();
+  assert.deepEqual(harness.committed, [2.005]);
+});
+
+test("playback and unbuffered seeks still wait for decoded-frame callbacks", async () => {
+  for (const options of [{ playing: true }, { readyState: 1 }]) {
+    const harness = await pausedSeekHarness(options);
+    harness.seek(1);
+    harness.finish();
+    assert.equal(harness.committed.length, 0);
+    assert.equal(harness.playCalls(), 1);
+  }
+});
 
 test("adds one combined live-edge frame after a regular timeline", () => {
   const regular = [
