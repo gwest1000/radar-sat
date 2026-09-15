@@ -3081,13 +3081,14 @@ export function RadarViewer() {
           const validTime = selection.sourceValidTimes?.[id] ?? selection.sourceValidTime;
           return label && validTime ? [{ label, validTime }] : [];
         })
-      )).concat([{ label: "SAT", validTime: plan.frame.sourceValidTime }])
+      )).concat(enabledVideoLayerIds.includes(videoLayerId)
+        ? [{ label: "SAT", validTime: plan.frame.sourceValidTime }] : [])
       .filter((item, index, all) => all.findIndex((candidate) => (
         candidate.label === item.label && candidate.validTime === item.validTime
       )) === index)
       .map((item) => `${item.label} ${shortClock(item.validTime)}`)
       .join(" · ")
-  )), [enabledVideoLayerIds, optionalLayers, product, videoPlans]);
+  )), [enabledVideoLayerIds, optionalLayers, product, videoPlans, videoLayerId]);
 
   useEffect(() => {
     if (catalog?.catalogMode !== "index" || !catalog.fullCatalogPath || !product) return;
@@ -3934,7 +3935,7 @@ export function RadarViewer() {
         .map((item) => ({ label: sourceLabel(item.id), validTime: actualSourceTime(item.id, item.frame) }))
         .filter((item): item is { label: string; validTime: string } => Boolean(item.label)))
     .concat(
-      videoModeReady && videoPlans[currentFrameIndex]
+      videoModeReady && enabledVideoLayerIds.includes(videoLayerId) && videoPlans[currentFrameIndex]
         ? [{ label: "SAT", validTime: videoPlans[currentFrameIndex].frame.sourceValidTime }]
         : [],
     )
