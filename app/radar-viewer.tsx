@@ -4349,11 +4349,6 @@ export function RadarViewer() {
         <aside className="legend-rail" aria-label="Map legends">
           <div className="layer-toolbar">
             <div className={`prebuilt-selector${viewsMenuOpen ? " is-open" : ""}`}
-              onPointerEnter={(event) => {
-                if (event.pointerType !== "mouse") return;
-                setLayersMenuOpen(false);
-                setViewsMenuOpen(true);
-              }}
               onMouseLeave={() => setViewsMenuOpen(false)}
               onKeyDown={(event) => {
                 if (event.key === "Escape") setViewsMenuOpen(false);
