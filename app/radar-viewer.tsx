@@ -1372,7 +1372,7 @@ function publishedPrebuiltCombos(
   const seen = new Set<string>();
   return [...sidecars, ...bundles].flatMap(({ anchor, track, pointer, legacy }) => {
     const key = `${anchor}/${pointer.rangeHours}/${pointer.presetId}`;
-    if (seen.has(key) || pointer.rangeHours > (product.maxHours ?? 168)) return [];
+    if (pointer.compositeKind === "hybrid-prefix" || seen.has(key) || pointer.rangeHours > (product.maxHours ?? 168)) return [];
     seen.add(key);
     const selected = new Set(pointer.bakedLayerIds ?? pointer.layerIds);
     const labels = product.layers.filter((layer) => selected.has(layer.id) && layer.optional && !layer.enabledWith)
@@ -1384,8 +1384,10 @@ function publishedPrebuiltCombos(
       : failedCompositeProfiles.includes(compositeProfileFailureKey(
         product.id, anchor, track, pointer.presetId, pointer.rangeHours, pointer.generation,
       ));
-    return [{ anchor, pointer, labels, fresh, failed }];
-  }).sort((a, b) => a.pointer.rangeHours - b.pointer.rangeHours || a.anchor.localeCompare(b.anchor));
+    return [{ anchor, pointer, labels: labels.map((label) => anchor === "eccc-geocolor" && label.includes("MSC") ? "Enhanced MSC GeoColour" : label), fresh, failed }];
+  }).sort((a, b) => a.pointer.rangeHours - b.pointer.rangeHours
+    || Number(a.pointer.layerIds.includes("hotspots")) - Number(b.pointer.layerIds.includes("hotspots"))
+    || a.anchor.localeCompare(b.anchor));
 }
 
 function atOrBefore(frames: Frame[], target: string, maxAgeMinutes?: number): Frame | undefined {
@@ -1528,7 +1530,7 @@ function layerControlLabel(layerId: string): string {
   if (layerId === "eccc-geocolor") return "MSC GeoColor";
   if (layerId === "convective") return "ECCC Convective";
   if (layerId === "snowfog") return "Snow / Fog";
-  if (layerId === "westwx-visir") return "NOAA VIS/IR";
+  if (layerId === "westwx-visir") return "WestWX VIS/IR";
   if (layerId === "westwx-ir") return "NOAA IR";
   if (layerId === "raw-visir") return "NOAA VIS/IR";
   if (layerId === "raw-visir-5min") return "NOAA VIS/IR";
@@ -4365,14 +4367,14 @@ export function RadarViewer() {
                 }}
               >
                 <span className="layers-summary-heading">
-                  <span className="selector-label">Views</span>
+                  <span className="selector-label">Prebuilt Views</span>
                   <span className="layers-count">{prebuiltCombos.length}</span>
                 </span>
                 <span className="layers-chevron" aria-hidden="true">⌄</span>
               </button>
               <div id="published-views" className="layers-popover prebuilt-popover" role="group" aria-label="Published prebuilt combinations">
-                <div className="layers-popover-heading"><span>Views</span><span>{product.title}</span></div>
-                <p>Choose a combo to set its layers and duration. Core loops allow extra layers above the video.</p>
+                <div className="layers-popover-heading"><span>Prebuilt Views</span><span>{product.title}</span></div>
+                <p>Choose a published loop to set its layers and duration. Fire views include smoke and fire icons.</p>
                 {prebuiltCombos.length === 0 && <p>No prebuilt combos are published for this region. Layers remain available.</p>}
                 <div className="prebuilt-combo-list">
                   {prebuiltCombos.map(({ anchor, pointer, labels, fresh, failed }) => {
@@ -4383,7 +4385,7 @@ export function RadarViewer() {
                         selectPrebuiltCombo(pointer);
                         setViewsMenuOpen(false);
                       }}>
-                      <strong>{pointer.rangeHours === 168 ? "7 days" : `${pointer.rangeHours} hours`} · {pointer.compositeKind === "hybrid-prefix" ? "Prebuilt core" : "Full loop"}{selected ? " · Selected" : ""}</strong>
+                      <strong>{pointer.rangeHours === 168 ? "7 days" : `${pointer.rangeHours} hours`} · {product.id === "bc-south-coast-overlay" ? "Radar/Lightning" : "Full"}{pointer.layerIds.includes("hotspots") ? " + Fire" : ""}{selected ? " · Selected" : ""}</strong>
                       <span>{labels.join(" + ")}</span>
                       <small>{failed ? "Unavailable · image fallback" : fresh ? "Published" : "Delayed · image fallback"} · through {shortClock(pointer.endSourceTime)}</small>
                     </button>;

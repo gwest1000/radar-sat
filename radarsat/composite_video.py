@@ -142,7 +142,8 @@ class _RenderContext:
             )
         try:
             filtered = (cloud_style.render_cached(composed, frame.source_valid_time,
-                         enhanced_path, _atomic_png) if enhanced_path is not None
+                         enhanced_path, _atomic_png,
+                         geography=cloud_style.geography(self.spec.domain_id, self.spec.viewport)) if enhanced_path is not None
                         else _operational_satellite_filter(composed))
         finally:
             composed.close()

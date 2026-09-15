@@ -446,63 +446,23 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(values[0]["rangeHours"], 3)
             self.assertNotIn("frames", json.dumps(values))
 
-    def test_complete_exact_pair_retires_bulky_live_hls_pointer(self) -> None:
+    def test_complete_exact_pair_retires_bulky_live_hls_pointer(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.write_video_pointer(root)
             self.write_composite_pointer(root)
-            self.write_composite_pointer(
-                root,
-                preset_id="operational-default-v1",
-                generation="20260722T1200Z-fedcba543210",
-            )
-
+            self.assertIn("videoProfiles", build_catalog(root))
+            self.write_composite_pointer(root, preset_id="weather-full-v1")
             catalog = build_catalog(root)
-
             self.assertNotIn("videoProfiles", catalog)
-            pointers = catalog["compositeProfiles"]["bc-northeast-overlay"][
-                "eccc-geocolor"
-            ]["live"]
-            self.assertEqual(
-                {pointer["presetId"] for pointer in pointers},
-                {"operational-default-v1"},
-            )
+            pointers = catalog["compositeProfiles"]["bc-northeast-overlay"]["eccc-geocolor"]["live"]
+            self.assertEqual({p["presetId"] for p in pointers}, {"operational-default-v1", "weather-full-v1"})
 
-    def test_catalog_exposes_hybrid_contract_without_requiring_it_for_hls_retirement(
-        self,
-    ) -> None:
+    def test_retired_core_is_not_advertised(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self.write_video_pointer(root)
-            self.write_composite_pointer(root)
-            self.write_composite_pointer(
-                root,
-                preset_id="operational-default-v1",
-                generation="20260722T1200Z-fedcba543210",
-            )
-            self.write_composite_pointer(
-                root,
-                preset_id="weather-smoke-core-v1",
-                generation="20260722T1200Z-012345abcdef",
-            )
-
-            catalog = build_catalog(root)
-
-            self.assertNotIn("videoProfiles", catalog)
-            pointers = catalog["compositeProfiles"]["bc-northeast-overlay"][
-                "eccc-geocolor"
-            ]["live"]
-            hybrid = next(
-                value
-                for value in pointers
-                if value["presetId"] == "weather-smoke-core-v1"
-            )
-            self.assertEqual(hybrid["compositeKind"], "hybrid-prefix")
-            self.assertEqual(hybrid["bakedLayerIds"], hybrid["layerIds"])
-            self.assertEqual(
-                hybrid["eligibleOverlayLayerIds"],
-                ["lightning-trail", "hotspots", "model-mslp", "model-hgt500"],
-            )
+            self.write_composite_pointer(root, preset_id="weather-smoke-core-v1")
+            self.assertNotIn("compositeProfiles", build_catalog(root))
 
     def test_catalog_rejects_noncanonical_hybrid_overlay_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

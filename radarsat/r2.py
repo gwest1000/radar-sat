@@ -68,7 +68,7 @@ DEFAULT_COMPOSITE_PRESET_ID = "operational-default-v1"
 # entirely from config below; no new pilot artifacts are generated.
 LEGACY_DEFAULT_COMPOSITE_PROFILES = frozenset({
     ("bc-large-overlay", "raw-visir"),
-    ("north-america-overlay", "westwx-visir"),
+    ("north-america-overlay", "raw-visir"),
 })
 VIDEO_IMMUTABLE_PREFIXES = (
     "videos/",

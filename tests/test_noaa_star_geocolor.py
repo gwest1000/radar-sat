@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -116,7 +117,7 @@ class StarGeoColorTests(unittest.TestCase):
             )
             with mock.patch.dict(
                 "radarsat.noaa_star_geocolor.DOMAINS",
-                {"bc": domain, "north-pacific": pacific},
+                {"bc": domain, "north-pacific": pacific, "north-america": replace(tiny_domain(), id="north-america")},
                 clear=True,
             ):
                 with ThreadPoolExecutor(max_workers=2) as executor:
@@ -177,7 +178,7 @@ class StarGeoColorTests(unittest.TestCase):
 
             with mock.patch.dict(
                 "radarsat.noaa_star_geocolor.DOMAINS",
-                {"bc": domain, "north-pacific": pacific},
+                {"bc": domain, "north-pacific": pacific, "north-america": replace(tiny_domain(), id="north-america")},
                 clear=True,
             ):
                 result = render_scan(

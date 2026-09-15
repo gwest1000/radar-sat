@@ -24,7 +24,7 @@ KILL_REAP_SECONDS="${RADARSAT_VIDEO_KILL_REAP_SECONDS:-5}"
 FAILURE_BACKOFF_SECONDS="${RADARSAT_VIDEO_FAILURE_BACKOFF_SECONDS:-120}"
 PRUNE_INTERVAL_SECONDS="${RADARSAT_VIDEO_PRUNE_INTERVAL_SECONDS:-3600}"
 MAX_EXACT_WORKERS="${RADARSAT_VIDEO_MAX_EXACT_WORKERS:-2}"
-HYBRID_CORE_ENABLED="${RADARSAT_HYBRID_CORE_ENABLED:-1}"
+HYBRID_CORE_ENABLED="0" # Retired: the configured exact Full / Full + Fire matrix owns these slots.
 MAX_HYBRID_UNITS="${RADARSAT_VIDEO_MAX_HYBRID_UNITS:-3}"
 HYBRID_BUDGET_SECONDS="${RADARSAT_VIDEO_HYBRID_BUDGET_SECONDS:-90}"
 HYBRID_CORE_PRESETS=(weather-core-v1 weather-smoke-core-v1)
@@ -901,7 +901,7 @@ run_archive_worker() {
   local product="$1" layer=""
   case "${product}" in
     bc-large-overlay) layer="eccc-geocolor" ;;
-    north-america-overlay) layer="westwx-visir" ;;
+    north-america-overlay) layer="raw-visir" ;;
     pacific-wna-overlay|north-pacific-overlay) layer="raw-visir" ;;
     *)
       print -u2 "No public archive satellite layer is configured for ${product}."

@@ -36,7 +36,7 @@ PUBLIC_VIDEO_LAYERS = {
     "bc-southeast-overlay": "eccc-geocolor",
     "bc-northeast-overlay": "eccc-geocolor",
     "bc-south-coast-overlay": "eccc-geocolor",
-    "north-america-overlay": "westwx-visir",
+    "north-america-overlay": "raw-visir",
     "pacific-wna-overlay": "raw-visir",
     "north-pacific-overlay": "raw-visir",
 }

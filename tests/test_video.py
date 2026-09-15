@@ -110,7 +110,7 @@ class VideoSelectionTests(unittest.TestCase):
         self.assertEqual(selected[-1].source_valid_time, base + dt.timedelta(hours=1))
         self.assertEqual(
             [value["id"] for value in VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"]],
-            ["operational-default-v1"],
+            ["operational-default-v1", "weather-full-v1"],
         )
         self.assertEqual(COMPOSITE_VIDEO_CRF, 20)
 
@@ -743,48 +743,24 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(set(presets[0]["optionalLayers"]), expected)
             self.assertEqual(
                 len(presets),
-                3 if product_id in {
-                    "bc-large-overlay",
-                    "bc-northeast-overlay",
-                    "north-america-overlay",
-                }
-                else 1,
+                1 if product_id in {"north-america-overlay", "north-pacific-overlay"} else 2,
             )
 
-    def test_hybrid_core_pilots_are_strict_recipe_prefixes(self) -> None:
-        products = {str(product["id"]): product for product in PRODUCTS}
-        for product_id, satellite_layer_id in (
-            ("bc-large-overlay", "eccc-geocolor"),
-            ("bc-northeast-overlay", "eccc-geocolor"),
-            ("north-america-overlay", "westwx-visir"),
-        ):
-            for preset_id, expects_smoke in (
-                ("weather-smoke-core-v1", True),
-                ("weather-core-v1", False),
-            ):
-                self.assertEqual(
-                    video_composite_kind(product_id, preset_id),
-                    "hybrid-prefix",
-                )
-                baked = video_composite_layer_ids(
-                    product_id,
-                    satellite_layer_id,
-                    preset_id,
-                )
-                upper = video_composite_overlay_layer_ids(
-                    product_id,
-                    satellite_layer_id,
-                    preset_id,
-                )
-                recipe_order = [
-                    str(recipe["id"])
-                    for recipe in products[product_id]["layers"]
-                    if str(recipe["id"]) in {*baked, *upper}
-                ]
-                self.assertEqual(list((*baked, *upper)), recipe_order)
-                self.assertEqual("smoke" in baked, expects_smoke)
-                self.assertIn("radar-rain", baked)
-                self.assertEqual(upper[-2:], ("model-mslp", "model-hgt500"))
+    def test_full_and_fire_recipes_have_no_dynamic_upper_layers(self):
+        for product in PRODUCTS:
+            product_id = product["id"]
+            satellite = "eccc-geocolor" if product["domain"] == "bc" else "raw-visir"
+            for preset in VIDEO_COMPOSITE_PRESETS[product_id]:
+                layers = video_composite_layer_ids(product_id, satellite, preset["id"])
+                self.assertEqual(video_composite_kind(product_id, preset["id"]), "exact")
+                self.assertEqual(video_composite_overlay_layer_ids(product_id, satellite, preset["id"]), ())
+                self.assertIn("radar-rain", layers)
+                self.assertIn("smoke", layers) if "hotspots" in layers else self.assertNotIn("smoke", layers)
+                if product_id in {"bc-northeast-overlay", "bc-southeast-overlay", "bc-southwest-overlay", "bc-south-coast-overlay"}:
+                    self.assertNotIn("model-mslp", layers)
+                    self.assertNotIn("model-hgt500", layers)
+                if product["domain"] != "bc":
+                    self.assertNotIn("transmission-lines", layers)
 
     def make_source(self, root: Path) -> tuple[dict[str, object], ProfileSpec]:
         source = root / "source"
@@ -982,7 +958,7 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(first_manifest["schemaVersion"], 2)
             self.assertEqual(
                 [item["id"] for item in first_manifest["composites"]],
-                ["operational-default-v1"],
+                ["operational-default-v1", "weather-full-v1"],
             )
             default_composite = first_manifest["composites"][0]
             self.assertEqual(
@@ -1315,6 +1291,11 @@ class VideoBuildTests(unittest.TestCase):
             for relative, previous in pointers.items():
                 self.assertEqual((output / relative).read_bytes(), previous)
 
+    @mock.patch.dict(VIDEO_COMPOSITE_PRESETS, {"bc-large-overlay": ({
+        "id": "weather-smoke-core-v1", "compositeKind": "hybrid-prefix",
+        "optionalLayers": ("smoke", "radar-rain"),
+        "overlayLayers": ("lightning-trail", "hotspots", "model-mslp", "model-hgt500"),
+    },)})
     def test_weather_smoke_core_freezes_upper_proxies_and_combines_models(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

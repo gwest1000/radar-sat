@@ -5,11 +5,11 @@ from . import cloud_style
 
 
 def enabled(spec, hours=None):
-    return spec.product_id == "bc-large-overlay" and spec.layer_id == "eccc-geocolor"
+    return spec.product_id.startswith("bc-") and spec.layer_id == "eccc-geocolor"
 
 
 def frame_image(source_root, output_root, spec, frame):
-    # Grade the same BC XL crop at the same resolution for every track/rendition.
+    # Grade each map crop once at its canonical resolution for every track/rendition.
     # Reuse the accepted sidecar cache, then downsample efficient renditions.
     from .video import _crop_resize, _display_size
     from .composite_video import _atomic_png
@@ -25,7 +25,10 @@ def frame_image(source_root, output_root, spec, frame):
             base.paste(satellite.convert("RGB"), (0, 0), satellite.getchannel("A"))
             satellite.close()
         try:
-            image = cloud_style.render_cached(base, frame.source_valid_time, path, _atomic_png)
+            image = cloud_style.render_cached(
+                base, frame.source_valid_time, path, _atomic_png,
+                geography=cloud_style.geography(spec.domain_id, spec.viewport),
+            )
         finally:
             base.close()
     if image.size != (spec.width, spec.height):

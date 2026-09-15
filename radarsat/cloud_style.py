@@ -1,4 +1,4 @@
-"""BC XL short-loop pilot: source-preserving layered daylight, soft colour, 50%.
+"""Satellite display enhancement: source-preserving layered daylight, soft colour, 50%.
 
 No model inference. Fail the whole generation on an enhancement error; never
 substitute a differently graded frame. Cache files live in the existing bounded,
@@ -13,12 +13,14 @@ from pathlib import Path
 import shutil
 import subprocess
 
+from .cloud_geo import geography
+
 import numpy as np
 from PIL import Image, ImageFilter
 
 ASSETS = Path(__file__).with_name("cloud_light")
 STYLE_NAME = "layered-daylight-soft-50-v1"
-_STYLE_DIGEST = hashlib.sha256(Path(__file__).read_bytes() + b"".join(
+_STYLE_DIGEST = hashlib.sha256(Path(__file__).read_bytes() + Path(__file__).with_name("cloud_geo.py").read_bytes() + b"".join(
     p.read_bytes() for p in sorted(ASSETS.iterdir()) if p.suffix in {".mjs", ".json"}
 )).hexdigest()[:16]
 STYLE_VERSION = f"{STYLE_NAME}-{_STYLE_DIGEST}"
@@ -44,17 +46,18 @@ def vivid(image):
     return Image.fromarray(np.rint(np.clip(enhanced, 0, 1)*255).astype(np.uint8))
 
 
-def render(image, source_time):
+def render(image, source_time, *, geography=None):
     node = os.environ.get("RADARSAT_CLOUD_NODE") or shutil.which("node")
     if not node and Path("/opt/homebrew/bin/node").is_file():
         node = "/opt/homebrew/bin/node"  # launchd has a minimal PATH on this host.
     if not node:
-        raise RuntimeError("BC XL cloud pilot requires Node.js; retaining complete prior loop")
+        raise RuntimeError("Cloud enhancement requires Node.js; retaining complete prior loop")
     baseline = vivid(image)
     try:
         payload = image.convert("RGBA").tobytes() + baseline.convert("RGBA").tobytes()
         result = subprocess.run([node, str(ASSETS / "worker.mjs"), str(image.width),
-                                 str(image.height), source_time.isoformat()],
+                                 str(image.height), source_time.isoformat(),
+                                 *([json.dumps(geography, separators=(",", ":"))] if geography else [])],
                                 input=payload, capture_output=True, timeout=30, check=True)
     finally:
         baseline.close()
@@ -88,7 +91,7 @@ def read_cache(path, size):
         return None
 
 
-def render_cached(image, source_time, path, write_image):
+def render_cached(image, source_time, path, write_image, *, geography=None):
     # Fixed 256 lock buckets bound disk metadata; flock is released even if a
     # worker is killed. Recheck after waiting so concurrent 3h/6h jobs share work.
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,7 +100,7 @@ def render_cached(image, source_time, path, write_image):
         cached = read_cache(path, image.size)
         if cached is not None:
             return cached
-        result = render(image, source_time)
+        result = render(image, source_time, **({"geography": geography} if geography else {}))
         try:
             write_image(path, result)
         except BaseException:

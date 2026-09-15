@@ -759,7 +759,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /className="point-symbol-layer fire-canvas"/);
   assert.match(viewer, /Medium\/low-confidence smoke tint/);
   assert.match(viewer, /ecccFallbackPointReferences/);
-  assert.match(viewer, /layerId === "westwx-visir"\) return "NOAA VIS\/IR"/);
+  assert.match(viewer, /layerId === "westwx-visir"\) return "WestWX VIS\/IR"/);
   assert.doesNotMatch(viewer, /layerId === "daynight"/);
   assert.match(viewer, /pointDomain = domain\?\.layers\["active-fire-points"\]/);
   assert.match(viewer, /targetDomain === "north-america" \|\| targetDomain === "north-pacific"/);
@@ -873,7 +873,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, false);
   assert.match(viewer, /layerId === "eccc-geocolor"\) return "MSC GeoColor"/);
   assert.equal(overlay.layers.find((layer) => layer.id === "snowfog").defaultEnabled, false);
-  assert.equal(overlay.layers.find((layer) => layer.id === "model-hgt500").defaultEnabled, false);
+  assert.equal(overlay.layers.find((layer) => layer.id === "model-hgt500").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "model-mslp").optional, true);
   assert.equal(overlay.legends.includes("model-hgt500"), false);
   assert.equal(overlay.legends.includes("model-mslp"), false);
@@ -892,7 +892,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.some((product) => product.id === "north-america-overlay"), true);
   assert.equal(demo.products.some((product) => product.id === "north-pacific-overlay"), true);
   const pacificWna = demo.products.find((product) => product.id === "pacific-wna-overlay");
-  assert.equal(pacificWna.shortTitle, "Pacific/WNA");
+  assert.equal(pacificWna.shortTitle, "E Pac/W NA");
   assert.deepEqual(pacificWna.viewport, { left: 0.21, top: 0.1479, width: 0.65, height: 0.7117 });
   const northAmerica = demo.products.find((product) => product.id === "north-america-overlay");
   const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
@@ -905,9 +905,9 @@ test("ships a runtime data configuration", async () => {
   assert.deepEqual(northAmerica.viewport, { left: 0, top: 0.1763, width: 0.86, height: 0.78 });
   assert.deepEqual(
     northAmerica.layers.filter((layer) => layer.choiceGroup === "satellite").map((layer) => layer.id),
-    ["westwx-visir", "westwx-ir"],
+    ["raw-visir", "westwx-ir"],
   );
-  assert.equal(northAmerica.layers.find((layer) => layer.id === "westwx-visir").controlId, "noaa-visir");
+  assert.equal(northAmerica.layers.find((layer) => layer.id === "raw-visir").controlId, "noaa-visir");
   assert.equal(northAmerica.layers.find((layer) => layer.id === "westwx-ir").controlId, "noaa-ir");
   assert.equal(northAmerica.layers.find((layer) => layer.id === "glm-lightning-trail").controlId, "lightning");
   assert.match(viewer, /normalizeLayerChoices/);
@@ -915,7 +915,7 @@ test("ships a runtime data configuration", async () => {
   assert.doesNotMatch(viewer, /if \(!controlId\) continue;[\s\S]{0,500}sharedControls\.set/);
   assert.match(viewer, /Additional BC satellite/);
   assert.doesNotMatch(viewer, /Additional MSC\/ECCC satellite views are available/);
-  assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
+  assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, false);
   assert.equal(northAmerica.layers.find((layer) => layer.id === "model-hgt500").optional, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-ir");
@@ -924,7 +924,7 @@ test("ships a runtime data configuration", async () => {
   assert.match(viewer, /"glm-lightning-hour"/);
   assert.deepEqual(northPacific.viewport, { left: 0, top: 0.075936, width: 0.77, height: 0.9 });
   assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
-  assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
+  assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, false);
   assert.ok(
     overlay.layers.findIndex((layer) => layer.id === "lightning-trail")
       > overlay.layers.findIndex((layer) => layer.id === "transmission-lines"),
@@ -1020,7 +1020,7 @@ test("manifest loading recovers transient errors without retrying malformed data
 test("enhanced BC XL loops keep the encoded final frame instead of an untreated live edge", async () => {
   const { uniformCloudStyleProfile, permitsLiveEdgeReplacement } = await import("../app/video-selection-policy.ts");
   for (const hours of [3, 6, 12, 24, 168]) assert.equal(uniformCloudStyleProfile("bc-large-overlay", "eccc-geocolor", hours), true);
-  assert.equal(uniformCloudStyleProfile("bc-small-overlay", "eccc-geocolor", 3), false);
+  assert.equal(uniformCloudStyleProfile("bc-small-overlay", "eccc-geocolor", 3), true);
   assert.equal(uniformCloudStyleProfile("bc-large-overlay", "raw-ir", 3), false);
   assert.equal(permitsLiveEdgeReplacement({ satelliteStyle: "layered-daylight-soft-50-v1-test" }), false);
   assert.equal(permitsLiveEdgeReplacement({}), true);

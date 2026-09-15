@@ -23,7 +23,7 @@ class CloudStyleTests(unittest.TestCase):
                 self.assertTrue(cloud_policy.enabled(spec, hours))
                 self.assertEqual(_composite_video_crf(spec, hours), 22)
         for spec in (replace(self.spec, layer_id='raw-visir'),
-                     replace(self.spec, product_id='bc-northeast-overlay')):
+                     replace(self.spec, product_id='north-america-overlay')):
             self.assertFalse(cloud_policy.enabled(spec))
             self.assertEqual(_composite_video_crf(spec, 6), 20)
 
@@ -70,7 +70,7 @@ class CloudStyleTests(unittest.TestCase):
             Image.new('RGBA', (64, 48), (30, 40, 50, 255)).save(root / 'static/bc/base-dark.png')
             Image.new('RGBA', (64, 48), (160, 170, 180, 255)).save(root / 'source.png')
             frame = SelectedFrame(self.time, self.time, {}, 'eccc-geocolor', 'source.png', 'fetch1')
-            with mock.patch.object(cloud_style, 'render', side_effect=lambda image, time: image.copy()) as renderer:
+            with mock.patch.object(cloud_style, 'render', side_effect=lambda image, time, **kwargs: image.copy()) as renderer:
                 for track in ('live', 'day', 'archive'):
                     for width, height in ((1920, self.spec.height), (640, 442)):
                         spec = replace(self.spec, track_name=track, width=width, height=height)
@@ -114,6 +114,20 @@ class CloudStyleTests(unittest.TestCase):
                     self.assertTrue(all(c['ranges'][0]['hours'] == 168 for c in manifest['composites']))
                 else:
                     self.assertNotIn('composites', manifest)  # exact sidecars own these ranges
+
+    def test_exact_composites_use_their_own_crop_geography(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            (root/'static/bc').mkdir(parents=True)
+            Image.new('RGBA',(32,24),(30,40,50,255)).save(root/'static/bc/base-dark.png')
+            Image.new('RGBA',(32,24),(160,170,180,255)).save(root/'source.png')
+            frame=SelectedFrame(self.time,self.time,{},'eccc-geocolor','source.png','fetch')
+            spec=next(s for s in VIDEO_PROFILES if s.product_id=='bc-northeast-overlay' and s.layer_id=='eccc-geocolor')
+            spec=replace(spec,width=32,height=24)
+            with mock.patch.object(cloud_style,'render',side_effect=lambda image,time,**kwargs:image.copy()) as render:
+                with _RenderContext(root,spec,output_root=root,enhanced=True) as context:
+                    context.satellite(frame)
+                self.assertEqual(render.call_args.kwargs['geography'],cloud_style.geography('bc',spec.viewport))
 
     def test_night_preserves_supplied_pixels(self):
         # Full grid is night at this time; no daytime grade leaks into IR.

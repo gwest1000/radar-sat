@@ -104,6 +104,8 @@ REGIONAL_STATIC_WIDTH = 2880
 REGIONAL_STATIC_REGIONS = ("south-coast",)
 REGIONAL_BOUNDARY_SCALE = 1.25
 REGIONAL_LINE_WIDTH_SCALE = 2.0
+SOUTH_COAST_TRANSMISSION_SCALE = 1.7
+SOUTH_COAST_WATERSHED_SCALE = 1.3
 DEFAULT_SOURCE_LAYERS = (
     "convective",
     "snowfog",
@@ -529,6 +531,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
     watershed_signature = {
         "renderVersion": STATIC_WATERSHED_RENDER_VERSION,
         "regionalWidth": REGIONAL_WATERSHED_WIDTH,
+        "southCoastLineScale": SOUTH_COAST_WATERSHED_SCALE,
         "viewports": VIEWPORTS,
     }
     if domain.id == "bc":
@@ -551,6 +554,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
                     destination,
                     viewport=VIEWPORTS[region_id],
                     output_width=REGIONAL_WATERSHED_WIDTH,
+                    line_width_scale=SOUTH_COAST_WATERSHED_SCALE if region_id == "south-coast" else 1.0,
                 )
             static_versions["watersheds"] = watershed_signature
     transmission_lines = root / "static" / domain.id / "transmission-lines.png"
@@ -571,6 +575,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
             "width": REGIONAL_STATIC_WIDTH,
             "boundaryScale": REGIONAL_BOUNDARY_SCALE,
             "lineWidthScale": REGIONAL_LINE_WIDTH_SCALE,
+            "transmissionLineWidthScale": SOUTH_COAST_TRANSMISSION_SCALE,
             "viewports": {
                 region_id: VIEWPORTS[region_id]
                 for region_id in REGIONAL_STATIC_REGIONS
@@ -629,7 +634,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
                     regional_domain,
                     regional_transmission,
                     output_width=REGIONAL_STATIC_WIDTH,
-                    line_width_scale=REGIONAL_LINE_WIDTH_SCALE,
+                    line_width_scale=SOUTH_COAST_TRANSMISSION_SCALE,
                 )
             static_versions["regionalDetail"] = regional_signature
     version_path.parent.mkdir(parents=True, exist_ok=True)

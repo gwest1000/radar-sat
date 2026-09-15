@@ -110,6 +110,8 @@ SOURCE_MEDIA_SIZES: Mapping[tuple[str, str], tuple[int, int]] = {
     ("bc", "convective"): (1920, 1472),
     ("bc", "snowfog"): (1920, 1472),
     ("north-america", "westwx-visir"): (1280, 960),
+    ("north-america", "raw-visir"): (1280, 960),
+    ("north-america", "raw-ir"): (1280, 960),
     ("north-america", "westwx-ir"): (1280, 960),
     ("north-pacific", "raw-visir"): (1600, 900),
     ("north-pacific", "raw-ir"): (1600, 900),

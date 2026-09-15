@@ -2,9 +2,9 @@
 import fs from 'node:fs';
 import {prepareGuided,renderGuided} from './guided.mjs';
 import {illuminationGrid,clamp,smoothstep} from './solar.mjs';
-const [width,height,time]=process.argv.slice(2), w=Number(width),h=Number(height);
+const [width,height,time,geoJson]=process.argv.slice(2), w=Number(width),h=Number(height);
 if(!Number.isInteger(w)||!Number.isInteger(h)||w<2||h<2)throw Error('Invalid dimensions');
-const geo=JSON.parse(fs.readFileSync(new URL('./geo.json',import.meta.url)));
+const geo=JSON.parse(geoJson ?? fs.readFileSync(new URL('./geo.json',import.meta.url)));
 const recipe=JSON.parse(fs.readFileSync(new URL('./recipe.json',import.meta.url)));
 const raw=fs.readFileSync(0),n=w*h*4;
 if(raw.length!==2*n)throw Error('Incomplete source/baseline payload');

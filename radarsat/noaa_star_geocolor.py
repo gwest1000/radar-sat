@@ -134,8 +134,10 @@ class RenderTarget:
 def render_targets(sector: StarSector) -> tuple[RenderTarget, ...]:
     if sector.id == FULL_DISK.id:
         pacific = DOMAINS["north-pacific"]
+        america = DOMAINS["north-america"]
         return (
             RenderTarget("bc", sector.layer_id, OUTPUT_WIDTH, OUTPUT_HEIGHT),
+            RenderTarget(america.id, "raw-visir", america.width, america.height),
             RenderTarget(
                 pacific.id,
                 "raw-visir",
@@ -327,31 +329,34 @@ def discover_scans(
     )
 
 
-def scan_ready(root: Path, scan: StarScan) -> bool:
-    for target in render_targets(scan.sector):
-        domain = DOMAINS[target.domain_id]
-        layer = LAYERS[target.layer_id]
-        image = frame_path(root, domain, layer, scan.valid_time)
-        metadata = metadata_path(root, domain, layer, scan.valid_time)
-        if not image.is_file() or not metadata.is_file():
-            return False
-        try:
-            payload = json.loads(metadata.read_text())
-        except (OSError, json.JSONDecodeError):
-            return False
-        expected_version = (
-            RENDER_VERSION
-            if target.layer_id == scan.sector.layer_id
-            else RAW_VISIR_RENDER_VERSION
-        )
-        if (
-            payload.get("renderVersion") != expected_version
-            or payload.get("starRenderVersion") != RENDER_VERSION
-            or payload.get("sourceFile") != scan.filename
-            or payload.get("source") != SOURCE
-        ):
-            return False
+def _target_ready(root: Path, scan: StarScan, target: RenderTarget) -> bool:
+    domain = DOMAINS[target.domain_id]
+    layer = LAYERS[target.layer_id]
+    image = frame_path(root, domain, layer, scan.valid_time)
+    metadata = metadata_path(root, domain, layer, scan.valid_time)
+    if not image.is_file() or not metadata.is_file():
+        return False
+    try:
+        payload = json.loads(metadata.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    expected_version = (
+        RENDER_VERSION
+        if target.layer_id == scan.sector.layer_id
+        else RAW_VISIR_RENDER_VERSION
+    )
+    if (
+        payload.get("renderVersion") != expected_version
+        or payload.get("starRenderVersion") != RENDER_VERSION
+        or payload.get("sourceFile") != scan.filename
+        or payload.get("source") != SOURCE
+    ):
+        return False
     return True
+
+
+def scan_ready(root: Path, scan: StarScan) -> bool:
+    return all(_target_ready(root, scan, target) for target in render_targets(scan.sector))
 
 
 def plan_backfill(
@@ -721,6 +726,8 @@ def render_scan(
                 )
             ] = fallback_time
         for target in render_targets(scan.sector):
+            if not overwrite and _target_ready(root, scan, target):
+                continue
             domain = DOMAINS[target.domain_id]
             layer = LAYERS[target.layer_id]
             rendered, coverage = projector(

@@ -142,61 +142,6 @@ class OpsScriptTests(unittest.TestCase):
         })
         return environment, calls
 
-    def test_video_scheduler_runs_hybrid_core_after_exact_work_for_pilot_only(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            environment, calls = self._video_scheduler_fixture(root)
-            environment["RADARSAT_HYBRID_CORE_ENABLED"] = "1"
-
-            result = subprocess.run(
-                ["/bin/zsh", str(RUN_VIDEO_SCHEDULER)],
-                cwd=PROJECT,
-                env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-
-            self.assertEqual(result.returncode, 0, result.stderr)
-            lines = calls.read_text().splitlines()
-            exact_calls = [
-                (index, line)
-                for index, line in enumerate(lines)
-                if "--range-hours " in line
-                and "--preset " not in line
-            ]
-            hybrid_calls = [
-                (index, line)
-                for index, line in enumerate(lines)
-                if "--preset weather-core-v1" in line
-            ]
-            self.assertTrue(exact_calls)
-            self.assertEqual(len(hybrid_calls), 1)
-            self.assertGreater(hybrid_calls[0][0], max(index for index, _ in exact_calls))
-            self.assertIn("--product bc-large-overlay", hybrid_calls[0][1])
-            self.assertIn("--range-hours 3", hybrid_calls[0][1])
-            self.assertTrue(all("--preset " not in line for _, line in exact_calls))
-
-            second = subprocess.run(
-                ["/bin/zsh", str(RUN_VIDEO_SCHEDULER)],
-                cwd=PROJECT,
-                env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(second.returncode, 0, second.stderr)
-            all_hybrid_calls = [
-                line
-                for line in calls.read_text().splitlines()
-                if "--preset weather-" in line
-            ]
-            self.assertEqual(len(all_hybrid_calls), 2)
-            self.assertIn("--preset weather-core-v1", all_hybrid_calls[0])
-            self.assertIn("--preset weather-smoke-core-v1", all_hybrid_calls[1])
-
     def test_full_publisher_coalesces_to_the_strongest_requested_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -367,7 +312,7 @@ class OpsScriptTests(unittest.TestCase):
             expected = [
                 ("bc-large-overlay", "eccc-geocolor"),
                 ("pacific-wna-overlay", "raw-visir"),
-                ("north-america-overlay", "westwx-visir"),
+                ("north-america-overlay", "raw-visir"),
                 ("north-pacific-overlay", "raw-visir"),
             ]
             self.assertEqual(len(archive_calls), len(expected))

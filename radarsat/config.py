@@ -506,6 +506,17 @@ BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
 }
 
 
+# A 15% magnification keeps each regional center and aspect ratio unchanged.
+for _region in ("northeast", "southeast", "southwest"):
+    _crop = VIEWPORTS[_region]
+    _width, _height = _crop["width"] / 1.15, _crop["height"] / 1.15
+    VIEWPORTS[_region] = {
+        "left": _crop["left"] + (_crop["width"] - _width) / 2,
+        "top": _crop["top"] + (_crop["height"] - _height) / 2,
+        "width": _width, "height": _height,
+    }
+
+
 def _overlay_product(
     product_id: str,
     title: str,
@@ -549,8 +560,8 @@ def _overlay_product(
             {"id": "boundaries", "opacity": 1.0},
             {"id": "lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "lightning"},
             {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
-            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": product_id != "bc-south-coast-overlay", "controlId": "model-contours"},
-            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": product_id != "bc-south-coast-overlay", "controlId": "model-contours"},
+            {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": product_id in {"bc-large-overlay", "bc-small-overlay"}, "controlId": "model-contours"},
+            {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": product_id in {"bc-large-overlay", "bc-small-overlay"}, "controlId": "model-contours"},
         ],
         "legends": ["radar-rain", "ptype", "lightning-age", "smoke-confidence", "hotspots", "watersheds", "transmission-lines"],
         "notes": [
@@ -589,8 +600,8 @@ def _broad_product(
     viewport: dict[str, float] | None = None,
 ) -> dict[str, object]:
     rapid_north_america = domain == "north-america"
-    satellite_prefix = "westwx" if rapid_north_america else "raw"
-    anchor_layer = f"{satellite_prefix}-ir"
+    satellite_prefix = "raw"
+    anchor_layer = "westwx-ir" if rapid_north_america else "raw-ir"
     product: dict[str, object] = {
         "id": product_id,
         "title": title,
@@ -607,16 +618,15 @@ def _broad_product(
             {"id": "base-dark", "opacity": 1.0},
             {"id": f"{satellite_prefix}-visir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite", "controlId": "noaa-visir"},
             {"id": anchor_layer, "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlId": "noaa-ir"},
-            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": product_id == "pacific-wna-overlay"},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
             {"id": "ptype", "opacity": 0.90, "optional": True, "defaultEnabled": False, "choiceGroup": "precipitation"},
-            {"id": "transmission-lines", "opacity": 1.0},
             {"id": "boundaries", "opacity": 1.0},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "lightning"},
             {"id": "lightning-trail", "opacity": 1.0, "enabledWith": "glm-lightning-trail"},
-            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": True},
+            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": product_id == "pacific-wna-overlay"},
             {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "model-contours"},
             {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "model-contours"},
         ],
@@ -627,13 +637,12 @@ def _broad_product(
             "glm-lightning-age",
             "smoke-confidence",
             "hotspots",
-            "transmission-lines",
         ],
         "notes": notes
         + [
             "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 µm infrared at night; no false-colour IR is mixed across the terminator.",
             *(
-                ["North America satellite backgrounds use genuine GOES-18 scan times at a nominal ten-minute cadence; the far eastern edge is outside the best GOES-West viewing geometry."]
+                ["North America NOAA VIS/IR uses NOAA STAR GOES-18 GeoColor at a nominal ten-minute cadence. The far eastern edge has weaker GOES-West viewing geometry."]
                 if rapid_north_america
                 else ["Pacific NOAA VIS/IR uses genuine GOES-18 full-disk scan times at a nominal ten-minute cadence; the half-hour Himawari-9/GOES-18 blend remains the infrared and availability fallback."]
             ),
@@ -664,7 +673,7 @@ PRODUCTS: list[dict[str, object]] = [
     _broad_product(
         "pacific-wna-overlay",
         "Eastern Pacific / Western North America",
-        "Pacific/WNA",
+        "E Pac/W NA",
         "north-pacific",
         "A focused Eastern Pacific and Western North America satellite view with real West Coast radar coverage.",
         [
@@ -678,9 +687,9 @@ PRODUCTS: list[dict[str, object]] = [
         "North America Satellite / Radar",
         "North America",
         "north-america",
-        "Ten-minute GOES-18 calibrated satellite imagery with the ECCC continental radar composite.",
+        "NOAA STAR GOES-18 GeoColor imagery with the ECCC continental radar composite.",
         [
-            "GOES-18 supplies genuine ten-minute scan times on the common 2 km display grid; the far eastern edge has weaker viewing geometry than the legacy GOES-18/19 blend.",
+            "NOAA VIS/IR uses the same NOAA STAR GeoColor source as the Pacific views, projected directly to the North America grid. NOAA IR retains the calibrated GOES-18 infrared source.",
             "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder.",
         ],
         BROAD_VIEWPORTS["north-america"],
@@ -764,59 +773,21 @@ VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
     for product_id in VIDEO_EXACT_RANGES
 }
 
-# A reusable opaque prefix is intentionally much narrower than the exact
-# composite matrix while the browser and storage costs are measured.  The
-# prefix ends at the static linework; every eligible layer is therefore above
-# the H.264 plane and can be added without changing the recipe's visual order.
-VIDEO_HYBRID_CORE_PRODUCTS = frozenset(
-    {
-        "bc-large-overlay",
-        "bc-northeast-overlay",
-        "north-america-overlay",
-    }
-)
-VIDEO_SMOKE_CORE_PRODUCTS = VIDEO_HYBRID_CORE_PRODUCTS
-for _product_id in VIDEO_HYBRID_CORE_PRODUCTS:
-    _lightning_id = (
-        "lightning-trail"
-        if _product_id.startswith("bc-")
-        else "glm-lightning-trail"
-    )
-    VIDEO_COMPOSITE_PRESETS[_product_id] = (
-        *VIDEO_COMPOSITE_PRESETS[_product_id],
-        {
-            "id": "weather-smoke-core-v1",
-            "compositeKind": "hybrid-prefix",
-            "optionalLayers": ("smoke", "radar-rain"),
-            "overlayLayers": (
-                _lightning_id,
-                "hotspots",
-                "model-mslp",
-                "model-hgt500",
-            ),
-        },
-        {
-            "id": "weather-core-v1",
-            "compositeKind": "hybrid-prefix",
-            "optionalLayers": ("radar-rain",),
-            "overlayLayers": (
-                _lightning_id,
-                "hotspots",
-                "model-mslp",
-                "model-hgt500",
-            ),
-        },
-    )
-
-# South Coast uses one regular ten-minute prebuilt loop. Optional model
-# contours remain available through the browser-composited fallback without
-# doubling the operational video workload.
-VIDEO_COMPOSITE_PRESETS["bc-south-coast-overlay"] = (
-    {
-        "id": "operational-default-v1",
-        "optionalLayers": _default_video_optional_layers("bc-south-coast-overlay"),
-    },
-)
+# One exact weather recipe and, where requested, an exact fire/smoke recipe.
+# Keep the existing default ID so already published default loops can transition
+# as complete generations. Current layer/viewport validation rejects old recipes.
+VIDEO_HYBRID_CORE_PRODUCTS = frozenset()
+VIDEO_SMOKE_CORE_PRODUCTS = frozenset()
+for _product_id in VIDEO_EXACT_RANGES:
+    if _product_id in {"north-america-overlay", "north-pacific-overlay"}:
+        continue
+    VIDEO_COMPOSITE_PRESETS[_product_id] += ({
+        "id": "weather-full-v1",
+        "optionalLayers": tuple(
+            layer for layer in _default_video_optional_layers(_product_id)
+            if layer not in {"smoke", "hotspots"}
+        ),
+    },)
 
 
 def _video_composite_preset(

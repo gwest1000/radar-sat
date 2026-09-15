@@ -121,7 +121,7 @@ run_video_phase() {
 # Live and archive are deliberately separate launchd jobs and locks. Archive
 # maintenance can therefore never delay a newly ingested operational frame.
 if ! run_video_phase "${VIDEO_TRACK}" \
-  "eccc-geocolor" "westwx-visir" "raw-visir"; then
+  "eccc-geocolor" "raw-visir" "raw-visir"; then
   print -u2 "Default ${VIDEO_TRACK} H.264 refresh failed; retaining last-good profiles."
   exit 1
 fi

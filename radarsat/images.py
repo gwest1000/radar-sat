@@ -350,6 +350,7 @@ def render_watershed_overlay(
     *,
     viewport: dict[str, float] | None = None,
     output_width: int | None = None,
+    line_width_scale: float = 1.0,
 ) -> None:
     """Render the local BC Hydro watershed polygons onto the aligned map grid."""
     from cartopy.io import shapereader
@@ -448,8 +449,8 @@ def render_watershed_overlay(
 
     image = Image.new("RGBA", render_size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
-    core_width = max(1, round(render_size[0] / 1440))
-    halo_width = core_width + max(2, round(render_size[0] / 1440))
+    core_width = max(1, round(render_size[0] / 1440 * line_width_scale))
+    halo_width = core_width + max(2, round(render_size[0] / 1440 * line_width_scale))
     for line in pixel_lines:
         draw.line(line, fill=(3, 16, 23, 215), width=halo_width, joint="curve")
     for line in pixel_lines:

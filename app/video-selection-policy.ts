@@ -112,14 +112,14 @@ export function catalogGenerationIsOlder(incoming: string, accepted: string): bo
   return Boolean(accepted) && Date.parse(incoming) < Date.parse(accepted);
 }
 
-// The BC XL MSC GeoColour loops prioritizes a complete, consistently graded loop
+// The BC MSC GeoColour loops prioritize a complete, consistently graded loop
 // over unprocessed newer rasters. Observation timestamps remain unchanged.
 export function uniformCloudStyleProfile(
   productId: string | undefined,
   layerId: string,
   rangeHours: number,
 ): boolean {
-  return productId === "bc-large-overlay" && layerId === "eccc-geocolor"
+  return Boolean(productId?.startsWith("bc-")) && layerId === "eccc-geocolor"
     && rangeHours > 0;
 }
 
