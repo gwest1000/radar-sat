@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-15T19:14:09.677029Z",
+  "generatedAt": "2026-09-15T19:39:37.325667Z",
   "domains": {
     "bc": {
       "id": "bc",
@@ -19,15 +19,15 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:10:00Z",
-              "path": "frames/bc/active-fire-points/2026/09/15/20260915T1910Z.json",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/active-fire-points/2026/09/15/20260915T1920Z.json",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:cwfif_national_activefires + https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0/query + https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query",
-              "fetchedAt": "2026-09-15T19:12:38Z",
+              "fetchedAt": "2026-09-15T19:29:58Z",
               "sourceTimes": {
-                "CWFIF active fires": "2026-09-15T19:12:33Z",
-                "BCWS active fires": "2026-09-15T19:12:33Z",
-                "NIFC WFIGS active fires": "2026-09-15T19:12:33Z"
+                "CWFIF active fires": "2026-09-15T19:29:54Z",
+                "BCWS active fires": "2026-09-15T19:29:54Z",
+                "NIFC WFIGS active fires": "2026-09-15T19:29:54Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -40,10 +40,10 @@
                 "statusCode"
               ],
               "coordinateSpace": "normalized-top-left",
-              "pointCount": 266,
-              "windowStart": "2026-09-15T19:12:33Z",
-              "windowEnd": "2026-09-15T19:12:33Z",
-              "ageReferenceTime": "2026-09-15T19:12:33Z",
+              "pointCount": 267,
+              "windowStart": "2026-09-15T19:29:54Z",
+              "windowEnd": "2026-09-15T19:29:54Z",
+              "ageReferenceTime": "2026-09-15T19:29:54Z",
               "ageMode": "source-status-time",
               "agePrecisionSeconds": 60,
               "renderVersion": 4,
@@ -79,17 +79,17 @@
           "maxAgeMinutes": 40,
           "frames": [
             {
-              "validTime": "2026-09-15T18:40:00Z",
-              "path": "frames/bc/convective/2026/09/15/20260915T1840Z.webp",
+              "validTime": "2026-09-15T19:00:00Z",
+              "path": "frames/bc/convective/2026/09/15/20260915T1900Z.webp",
               "source": "ECCC Datamart",
               "sourceLayer": "satellite/goes/west/VisibleIRSandwich-NightMicrophysicsIR",
-              "fetchedAt": "2026-09-15T19:04:31Z",
+              "fetchedAt": "2026-09-15T19:30:52Z",
               "sourceTimes": {
-                "native": "2026-09-15T18:40:20Z"
+                "native": "2026-09-15T19:00:20Z"
               },
               "sourceFormat": "GeoTIFF",
               "sourceFiles": [
-                "20260915T1840Z_MSC_GOES-West_VisibleIRSandwich-NightMicrophysicsIR_1km.tif"
+                "20260915T1900Z_MSC_GOES-West_VisibleIRSandwich-NightMicrophysicsIR_1km.tif"
               ]
             }
           ],
@@ -101,17 +101,17 @@
           "maxAgeMinutes": 35,
           "frames": [
             {
-              "validTime": "2026-09-15T18:40:00Z",
-              "path": "frames/bc/eccc-geocolor/2026/09/15/20260915T1840Z.webp",
+              "validTime": "2026-09-15T19:10:00Z",
+              "path": "frames/bc/eccc-geocolor/2026/09/15/20260915T1910Z.webp",
               "source": "ECCC Datamart",
               "sourceLayer": "satellite/goes/west/GeoColor",
-              "fetchedAt": "2026-09-15T19:01:14Z",
+              "fetchedAt": "2026-09-15T19:36:30Z",
               "sourceTimes": {
-                "native": "2026-09-15T18:40:20Z"
+                "native": "2026-09-15T19:10:20Z"
               },
               "sourceFormat": "GeoTIFF",
               "sourceFiles": [
-                "20260915T1840Z_MSC_GOES-West_GeoColor_1km.tif"
+                "20260915T1910Z_MSC_GOES-West_GeoColor_1km.tif"
               ],
               "renderWidth": 3000,
               "renderHeight": 2300
@@ -125,24 +125,24 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/bc/glm-lightning/2026/09/15/20260915T1850Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/glm-lightning/2026/09/15/20260915T1920Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA",
-              "fetchedAt": "2026-09-15T19:05:34Z",
+              "fetchedAt": "2026-09-15T19:32:24Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T18:50:00Z"
+                "GOES-18 GLM": "2026-09-15T19:20:00Z"
               },
-              "observedFlashCount": 1499,
-              "qualityControlledFlashCount": 1481,
+              "observedFlashCount": 2188,
+              "qualityControlledFlashCount": 2180,
               "mappedFlashCount": 0,
               "markerCount": 0,
               "maximumLatitude": 52.0,
               "binSizeMetres": 9375,
-              "windowEnd": "2026-09-15T19:00:00Z",
+              "windowEnd": "2026-09-15T19:30:00Z",
               "sourceFileCount": 30,
-              "firstSourceFile": "OR_GLM-L2-LCFA_G18_s20262581850000_e20262581850200_c20262581850213.nc",
-              "lastSourceFile": "OR_GLM-L2-LCFA_G18_s20262581859400_e20262581900000_c20262581900017.nc",
+              "firstSourceFile": "OR_GLM-L2-LCFA_G18_s20262581920000_e20262581920200_c20262581920215.nc",
+              "lastSourceFile": "OR_GLM-L2-LCFA_G18_s20262581929400_e20262581930000_c20262581930017.nc",
               "renderVersion": 2
             }
           ],
@@ -154,22 +154,22 @@
           "maxAgeMinutes": 3,
           "frames": [
             {
-              "validTime": "2026-09-15T19:13:00Z",
-              "path": "frames/bc/glm-lightning-live/2026/09/15/20260915T1913Z.png",
+              "validTime": "2026-09-15T19:38:00Z",
+              "path": "frames/bc/glm-lightning-live/2026/09/15/20260915T1938Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA rolling one-minute batch",
-              "fetchedAt": "2026-09-15T19:13:32Z",
+              "fetchedAt": "2026-09-15T19:38:39Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T19:13:20Z"
+                "GOES-18 GLM": "2026-09-15T19:38:20Z"
               },
-              "observedFlashCount": 201,
-              "qualityControlledFlashCount": 201,
+              "observedFlashCount": 258,
+              "qualityControlledFlashCount": 258,
               "mappedFlashCount": 0,
               "markerCount": 0,
               "maximumLatitude": 52.0,
               "binSizeMetres": 9375,
-              "windowStart": "2026-09-15T19:12:20Z",
-              "windowEnd": "2026-09-15T19:13:20Z",
+              "windowStart": "2026-09-15T19:37:20Z",
+              "windowEnd": "2026-09-15T19:38:20Z",
               "sourceFileCount": 3,
               "renderVersion": 1
             }
@@ -182,22 +182,22 @@
           "maxAgeMinutes": 3,
           "frames": [
             {
-              "validTime": "2026-09-15T19:13:00Z",
-              "path": "frames/bc/glm-lightning-live-region-northeast/2026/09/15/20260915T1913Z.png",
+              "validTime": "2026-09-15T19:38:00Z",
+              "path": "frames/bc/glm-lightning-live-region-northeast/2026/09/15/20260915T1938Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA rolling one-minute batch",
-              "fetchedAt": "2026-09-15T19:13:33Z",
+              "fetchedAt": "2026-09-15T19:38:39Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T19:13:20Z"
+                "GOES-18 GLM": "2026-09-15T19:38:20Z"
               },
-              "observedFlashCount": 201,
-              "qualityControlledFlashCount": 201,
+              "observedFlashCount": 258,
+              "qualityControlledFlashCount": 258,
               "mappedFlashCount": 0,
               "markerCount": 0,
               "maximumLatitude": 52.0,
               "binSizeMetres": 9375,
-              "windowStart": "2026-09-15T19:12:20Z",
-              "windowEnd": "2026-09-15T19:13:20Z",
+              "windowStart": "2026-09-15T19:37:20Z",
+              "windowEnd": "2026-09-15T19:38:20Z",
               "sourceFileCount": 3,
               "renderVersion": 1,
               "regionalViewport": {
@@ -217,22 +217,22 @@
           "maxAgeMinutes": 3,
           "frames": [
             {
-              "validTime": "2026-09-15T19:13:00Z",
-              "path": "frames/bc/glm-lightning-live-region-small/2026/09/15/20260915T1913Z.png",
+              "validTime": "2026-09-15T19:38:00Z",
+              "path": "frames/bc/glm-lightning-live-region-small/2026/09/15/20260915T1938Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA rolling one-minute batch",
-              "fetchedAt": "2026-09-15T19:13:32Z",
+              "fetchedAt": "2026-09-15T19:38:39Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T19:13:20Z"
+                "GOES-18 GLM": "2026-09-15T19:38:20Z"
               },
-              "observedFlashCount": 201,
-              "qualityControlledFlashCount": 201,
+              "observedFlashCount": 258,
+              "qualityControlledFlashCount": 258,
               "mappedFlashCount": 0,
               "markerCount": 0,
               "maximumLatitude": 52.0,
               "binSizeMetres": 9375,
-              "windowStart": "2026-09-15T19:12:20Z",
-              "windowEnd": "2026-09-15T19:13:20Z",
+              "windowStart": "2026-09-15T19:37:20Z",
+              "windowEnd": "2026-09-15T19:38:20Z",
               "sourceFileCount": 3,
               "renderVersion": 1,
               "regionalViewport": {
@@ -252,22 +252,22 @@
           "maxAgeMinutes": 3,
           "frames": [
             {
-              "validTime": "2026-09-15T19:13:00Z",
-              "path": "frames/bc/glm-lightning-live-region-south-coast/2026/09/15/20260915T1913Z.png",
+              "validTime": "2026-09-15T19:38:00Z",
+              "path": "frames/bc/glm-lightning-live-region-south-coast/2026/09/15/20260915T1938Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA rolling one-minute batch",
-              "fetchedAt": "2026-09-15T19:13:33Z",
+              "fetchedAt": "2026-09-15T19:38:39Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T19:13:20Z"
+                "GOES-18 GLM": "2026-09-15T19:38:20Z"
               },
-              "observedFlashCount": 201,
-              "qualityControlledFlashCount": 201,
+              "observedFlashCount": 258,
+              "qualityControlledFlashCount": 258,
               "mappedFlashCount": 0,
               "markerCount": 0,
               "maximumLatitude": 52.0,
               "binSizeMetres": 9375,
-              "windowStart": "2026-09-15T19:12:20Z",
-              "windowEnd": "2026-09-15T19:13:20Z",
+              "windowStart": "2026-09-15T19:37:20Z",
+              "windowEnd": "2026-09-15T19:38:20Z",
               "sourceFileCount": 3,
               "renderVersion": 1,
               "regionalViewport": {
@@ -287,22 +287,22 @@
           "maxAgeMinutes": 3,
           "frames": [
             {
-              "validTime": "2026-09-15T19:13:00Z",
-              "path": "frames/bc/glm-lightning-live-region-southeast/2026/09/15/20260915T1913Z.png",
+              "validTime": "2026-09-15T19:38:00Z",
+              "path": "frames/bc/glm-lightning-live-region-southeast/2026/09/15/20260915T1938Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA rolling one-minute batch",
-              "fetchedAt": "2026-09-15T19:13:33Z",
+              "fetchedAt": "2026-09-15T19:38:39Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T19:13:20Z"
+                "GOES-18 GLM": "2026-09-15T19:38:20Z"
               },
-              "observedFlashCount": 201,
-              "qualityControlledFlashCount": 201,
+              "observedFlashCount": 258,
+              "qualityControlledFlashCount": 258,
               "mappedFlashCount": 0,
               "markerCount": 0,
               "maximumLatitude": 52.0,
               "binSizeMetres": 9375,
-              "windowStart": "2026-09-15T19:12:20Z",
-              "windowEnd": "2026-09-15T19:13:20Z",
+              "windowStart": "2026-09-15T19:37:20Z",
+              "windowEnd": "2026-09-15T19:38:20Z",
               "sourceFileCount": 3,
               "renderVersion": 1,
               "regionalViewport": {
@@ -322,22 +322,22 @@
           "maxAgeMinutes": 3,
           "frames": [
             {
-              "validTime": "2026-09-15T19:13:00Z",
-              "path": "frames/bc/glm-lightning-live-region-southwest/2026/09/15/20260915T1913Z.png",
+              "validTime": "2026-09-15T19:38:00Z",
+              "path": "frames/bc/glm-lightning-live-region-southwest/2026/09/15/20260915T1938Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA rolling one-minute batch",
-              "fetchedAt": "2026-09-15T19:13:32Z",
+              "fetchedAt": "2026-09-15T19:38:39Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T19:13:20Z"
+                "GOES-18 GLM": "2026-09-15T19:38:20Z"
               },
-              "observedFlashCount": 201,
-              "qualityControlledFlashCount": 201,
+              "observedFlashCount": 258,
+              "qualityControlledFlashCount": 258,
               "mappedFlashCount": 0,
               "markerCount": 0,
               "maximumLatitude": 52.0,
               "binSizeMetres": 9375,
-              "windowStart": "2026-09-15T19:12:20Z",
-              "windowEnd": "2026-09-15T19:13:20Z",
+              "windowStart": "2026-09-15T19:37:20Z",
+              "windowEnd": "2026-09-15T19:38:20Z",
               "sourceFileCount": 3,
               "renderVersion": 1,
               "regionalViewport": {
@@ -357,13 +357,13 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/glm-lightning-points/2026/09/15/20260915T1900Z.json",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/bc/glm-lightning-points/2026/09/15/20260915T1930Z.json",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA",
-              "fetchedAt": "2026-09-15T19:05:34Z",
+              "fetchedAt": "2026-09-15T19:32:25Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T18:50:00Z"
+                "GOES-18 GLM": "2026-09-15T19:20:00Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -374,14 +374,14 @@
               ],
               "coordinateSpace": "normalized-top-left",
               "pointCount": 0,
-              "windowStart": "2026-09-15T18:50:00Z",
-              "windowEnd": "2026-09-15T19:00:00Z",
-              "ageReferenceTime": "2026-09-15T19:00:00Z",
+              "windowStart": "2026-09-15T19:20:00Z",
+              "windowEnd": "2026-09-15T19:30:00Z",
+              "ageReferenceTime": "2026-09-15T19:30:00Z",
               "ageMode": "source-file-midpoint",
               "agePrecisionSeconds": 20,
               "renderVersion": 2,
-              "observedFlashCount": 1499,
-              "qualityControlledFlashCount": 1481,
+              "observedFlashCount": 2188,
+              "qualityControlledFlashCount": 2180,
               "mappedFlashCount": 0,
               "maximumLatitude": 52.0,
               "binSizeMetres": 9375,
@@ -434,26 +434,26 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/hotspots/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/hotspots/2026/09/15/20260915T1920Z.png",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:hotspots_24h + agency-reported active-fire point frames",
-              "fetchedAt": "2026-09-15T19:03:59Z",
+              "fetchedAt": "2026-09-15T19:30:23Z",
               "sourceTimes": {
-                "active fires": "2026-09-15T19:00:00Z"
+                "active fires": "2026-09-15T19:20:00Z"
               },
               "activeFireDisplayCount": 257,
               "hotspotDisplayCount": 0,
               "renderVersion": 4,
               "fireOverlayRenderVersion": 4,
-              "activeFireValidTime": "2026-09-15T19:00:00Z",
+              "activeFireValidTime": "2026-09-15T19:20:00Z",
               "hotspotValidTime": null,
               "thermalHotspotsAvailable": false,
               "agencyFiresAvailable": true,
               "activeFirePointCount": 267,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": [],
               "regionalViewport": null,
               "outputWidth": 3840,
@@ -472,26 +472,26 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/hotspots-region-northeast/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/hotspots-region-northeast/2026/09/15/20260915T1920Z.png",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:hotspots_24h + agency-reported active-fire point frames",
-              "fetchedAt": "2026-09-15T19:09:34Z",
+              "fetchedAt": "2026-09-15T19:30:27Z",
               "sourceTimes": {
-                "active fires": "2026-09-15T19:00:00Z"
+                "active fires": "2026-09-15T19:20:00Z"
               },
               "activeFireDisplayCount": 23,
               "hotspotDisplayCount": 0,
               "renderVersion": 4,
               "fireOverlayRegionalRenderVersion": 7,
-              "activeFireValidTime": "2026-09-15T19:00:00Z",
+              "activeFireValidTime": "2026-09-15T19:20:00Z",
               "hotspotValidTime": null,
               "thermalHotspotsAvailable": false,
               "agencyFiresAvailable": true,
               "activeFirePointCount": 267,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": [],
               "regionalViewport": {
                 "left": 0.4273391304347826,
@@ -515,26 +515,26 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/hotspots-region-small/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/hotspots-region-small/2026/09/15/20260915T1920Z.png",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:hotspots_24h + agency-reported active-fire point frames",
-              "fetchedAt": "2026-09-15T19:04:01Z",
+              "fetchedAt": "2026-09-15T19:30:25Z",
               "sourceTimes": {
-                "active fires": "2026-09-15T19:00:00Z"
+                "active fires": "2026-09-15T19:20:00Z"
               },
               "activeFireDisplayCount": 129,
               "hotspotDisplayCount": 0,
               "renderVersion": 4,
               "fireOverlayRegionalRenderVersion": 7,
-              "activeFireValidTime": "2026-09-15T19:00:00Z",
+              "activeFireValidTime": "2026-09-15T19:20:00Z",
               "hotspotValidTime": null,
               "thermalHotspotsAvailable": false,
               "agencyFiresAvailable": true,
               "activeFirePointCount": 267,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": [],
               "regionalViewport": {
                 "left": 0.16404,
@@ -558,26 +558,26 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/hotspots-region-south-coast/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/hotspots-region-south-coast/2026/09/15/20260915T1920Z.png",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:hotspots_24h + agency-reported active-fire point frames",
-              "fetchedAt": "2026-09-15T19:04:04Z",
+              "fetchedAt": "2026-09-15T19:30:28Z",
               "sourceTimes": {
-                "active fires": "2026-09-15T19:00:00Z"
+                "active fires": "2026-09-15T19:20:00Z"
               },
               "activeFireDisplayCount": 37,
               "hotspotDisplayCount": 0,
               "renderVersion": 4,
               "fireOverlayRegionalRenderVersion": 7,
-              "activeFireValidTime": "2026-09-15T19:00:00Z",
+              "activeFireValidTime": "2026-09-15T19:20:00Z",
               "hotspotValidTime": null,
               "thermalHotspotsAvailable": false,
               "agencyFiresAvailable": true,
               "activeFirePointCount": 267,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": [],
               "regionalViewport": {
                 "left": 0.4923,
@@ -601,26 +601,26 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/hotspots-region-southeast/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/hotspots-region-southeast/2026/09/15/20260915T1920Z.png",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:hotspots_24h + agency-reported active-fire point frames",
-              "fetchedAt": "2026-09-15T19:09:34Z",
+              "fetchedAt": "2026-09-15T19:30:27Z",
               "sourceTimes": {
-                "active fires": "2026-09-15T19:00:00Z"
+                "active fires": "2026-09-15T19:20:00Z"
               },
               "activeFireDisplayCount": 111,
               "hotspotDisplayCount": 0,
               "renderVersion": 4,
               "fireOverlayRegionalRenderVersion": 7,
-              "activeFireValidTime": "2026-09-15T19:00:00Z",
+              "activeFireValidTime": "2026-09-15T19:20:00Z",
               "hotspotValidTime": null,
               "thermalHotspotsAvailable": false,
               "agencyFiresAvailable": true,
               "activeFirePointCount": 267,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": [],
               "regionalViewport": {
                 "left": 0.553213043478261,
@@ -644,26 +644,26 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/hotspots-region-southwest/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/hotspots-region-southwest/2026/09/15/20260915T1920Z.png",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:hotspots_24h + agency-reported active-fire point frames",
-              "fetchedAt": "2026-09-15T19:09:34Z",
+              "fetchedAt": "2026-09-15T19:30:26Z",
               "sourceTimes": {
-                "active fires": "2026-09-15T19:00:00Z"
+                "active fires": "2026-09-15T19:20:00Z"
               },
-              "activeFireDisplayCount": 100,
+              "activeFireDisplayCount": 99,
               "hotspotDisplayCount": 0,
               "renderVersion": 4,
               "fireOverlayRegionalRenderVersion": 7,
-              "activeFireValidTime": "2026-09-15T19:00:00Z",
+              "activeFireValidTime": "2026-09-15T19:20:00Z",
               "hotspotValidTime": null,
               "thermalHotspotsAvailable": false,
               "agencyFiresAvailable": true,
               "activeFirePointCount": 267,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": [],
               "regionalViewport": {
                 "left": 0.3645,
@@ -1175,17 +1175,17 @@
           "maxAgeMinutes": 35,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/lightning/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/lightning/2026/09/15/20260915T1920Z.png",
               "source": "ECCC Datamart",
               "sourceLayer": "lightning/Lightning_2.5km_Density",
-              "fetchedAt": "2026-09-15T19:11:18Z",
+              "fetchedAt": "2026-09-15T19:30:34Z",
               "sourceTimes": {
-                "native": "2026-09-15T19:00:00Z"
+                "native": "2026-09-15T19:20:00Z"
               },
               "sourceFormat": "GeoTIFF",
               "sourceFiles": [
-                "20260915T1900Z_MSC_Lightning_2.5km.tif"
+                "20260915T1920Z_MSC_Lightning_2.5km.tif"
               ]
             }
           ],
@@ -1402,13 +1402,13 @@
           "maxAgeMinutes": 35,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/lightning-points/2026/09/15/20260915T1900Z.json",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/lightning-points/2026/09/15/20260915T1920Z.json",
               "source": "ECCC Datamart",
               "sourceLayer": "lightning/Lightning_2.5km_Density",
-              "fetchedAt": "2026-09-15T19:11:18Z",
+              "fetchedAt": "2026-09-15T19:30:34Z",
               "sourceTimes": {
-                "ECCC lightning density": "2026-09-15T19:00:00Z"
+                "ECCC lightning density": "2026-09-15T19:20:00Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -1419,9 +1419,9 @@
               ],
               "coordinateSpace": "normalized-top-left",
               "pointCount": 0,
-              "windowStart": "2026-09-15T18:50:00Z",
-              "windowEnd": "2026-09-15T19:00:00Z",
-              "ageReferenceTime": "2026-09-15T19:00:00Z",
+              "windowStart": "2026-09-15T19:10:00Z",
+              "windowEnd": "2026-09-15T19:20:00Z",
+              "ageReferenceTime": "2026-09-15T19:20:00Z",
               "ageMode": "window-midpoint-estimate",
               "agePrecisionSeconds": 600,
               "renderVersion": 1,
@@ -1452,19 +1452,18 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/lightning-trail/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/bc/lightning-trail/2026/09/15/20260915T1930Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-09-15T19:11:19Z",
+              "fetchedAt": "2026-09-15T19:32:46Z",
               "sourceTimes": {
-                "age0": "2026-09-15T19:00:00Z",
-                "age10": "2026-09-15T18:50:00Z",
-                "age20": "2026-09-15T18:40:00Z"
+                "age10": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 10,
               "arrivalOnly": false,
-              "newStrikeHalo": true,
+              "newStrikeHalo": false,
               "regionalViewport": null,
               "outputWidth": 2560,
               "symbolReferenceWidth": 1920,
@@ -1479,19 +1478,18 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/lightning-trail-region-northeast/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/bc/lightning-trail-region-northeast/2026/09/15/20260915T1930Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-09-15T19:11:19Z",
+              "fetchedAt": "2026-09-15T19:32:46Z",
               "sourceTimes": {
-                "age0": "2026-09-15T19:00:00Z",
-                "age10": "2026-09-15T18:50:00Z",
-                "age20": "2026-09-15T18:40:00Z"
+                "age10": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 8,
               "arrivalOnly": false,
-              "newStrikeHalo": true,
+              "newStrikeHalo": false,
               "regionalViewport": {
                 "left": 0.4273391304347826,
                 "top": 0.18133913043478259,
@@ -1511,19 +1509,18 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/lightning-trail-region-small/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/bc/lightning-trail-region-small/2026/09/15/20260915T1930Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-09-15T19:11:19Z",
+              "fetchedAt": "2026-09-15T19:32:46Z",
               "sourceTimes": {
-                "age0": "2026-09-15T19:00:00Z",
-                "age10": "2026-09-15T18:50:00Z",
-                "age20": "2026-09-15T18:40:00Z"
+                "age10": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 8,
               "arrivalOnly": false,
-              "newStrikeHalo": true,
+              "newStrikeHalo": false,
               "regionalViewport": {
                 "left": 0.16404,
                 "top": 0.22489,
@@ -1543,19 +1540,18 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/lightning-trail-region-south-coast/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/bc/lightning-trail-region-south-coast/2026/09/15/20260915T1930Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-09-15T19:11:19Z",
+              "fetchedAt": "2026-09-15T19:32:47Z",
               "sourceTimes": {
-                "age0": "2026-09-15T19:00:00Z",
-                "age10": "2026-09-15T18:50:00Z",
-                "age20": "2026-09-15T18:40:00Z"
+                "age10": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 8,
               "arrivalOnly": false,
-              "newStrikeHalo": true,
+              "newStrikeHalo": false,
               "regionalViewport": {
                 "left": 0.4923,
                 "top": 0.6929,
@@ -1575,19 +1571,18 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/lightning-trail-region-southeast/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/bc/lightning-trail-region-southeast/2026/09/15/20260915T1930Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-09-15T19:11:19Z",
+              "fetchedAt": "2026-09-15T19:32:46Z",
               "sourceTimes": {
-                "age0": "2026-09-15T19:00:00Z",
-                "age10": "2026-09-15T18:50:00Z",
-                "age20": "2026-09-15T18:40:00Z"
+                "age10": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 8,
               "arrivalOnly": false,
-              "newStrikeHalo": true,
+              "newStrikeHalo": false,
               "regionalViewport": {
                 "left": 0.553213043478261,
                 "top": 0.50805,
@@ -1607,19 +1602,18 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/bc/lightning-trail-region-southwest/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/bc/lightning-trail-region-southwest/2026/09/15/20260915T1930Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-09-15T19:11:19Z",
+              "fetchedAt": "2026-09-15T19:32:46Z",
               "sourceTimes": {
-                "age0": "2026-09-15T19:00:00Z",
-                "age10": "2026-09-15T18:50:00Z",
-                "age20": "2026-09-15T18:40:00Z"
+                "age10": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 8,
               "arrivalOnly": false,
-              "newStrikeHalo": true,
+              "newStrikeHalo": false,
               "regionalViewport": {
                 "left": 0.3645,
                 "top": 0.5524217391304348,
@@ -1639,11 +1633,11 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T18:54:00Z",
-              "path": "frames/bc/ptype/2026/09/15/20260915T1854Z.png",
+              "validTime": "2026-09-15T19:18:00Z",
+              "path": "frames/bc/ptype/2026/09/15/20260915T1918Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "Radar_1km_SfcPrecipType",
-              "fetchedAt": "2026-09-15T19:04:44Z",
+              "fetchedAt": "2026-09-15T19:31:09Z",
               "renderVersion": 1,
               "outputWidth": 3000,
               "outputHeight": 2300
@@ -1657,11 +1651,11 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T18:54:00Z",
-              "path": "frames/bc/ptype-coverage/2026/09/15/20260915T1854Z.png",
+              "validTime": "2026-09-15T19:18:00Z",
+              "path": "frames/bc/ptype-coverage/2026/09/15/20260915T1918Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
-              "fetchedAt": "2026-09-15T19:04:45Z",
+              "fetchedAt": "2026-09-15T19:31:14Z",
               "renderVersion": 3,
               "outputWidth": 3000,
               "outputHeight": 2300
@@ -1675,11 +1669,11 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:06:00Z",
-              "path": "frames/bc/radar-coverage/2026/09/15/20260915T1906Z.png",
+              "validTime": "2026-09-15T19:36:00Z",
+              "path": "frames/bc/radar-coverage/2026/09/15/20260915T1936Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
-              "fetchedAt": "2026-09-15T19:09:53Z",
+              "fetchedAt": "2026-09-15T19:39:00Z",
               "renderVersion": 3,
               "outputWidth": 3000,
               "outputHeight": 2300
@@ -1693,11 +1687,11 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:06:00Z",
-              "path": "frames/bc/radar-rain/2026/09/15/20260915T1906Z.png",
+              "validTime": "2026-09-15T19:36:00Z",
+              "path": "frames/bc/radar-rain/2026/09/15/20260915T1936Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "RADAR_1KM_RRAI",
-              "fetchedAt": "2026-09-15T19:09:52Z",
+              "fetchedAt": "2026-09-15T19:39:00Z",
               "renderVersion": 1,
               "outputWidth": 3000,
               "outputHeight": 2300
@@ -1711,17 +1705,20 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:06:00Z",
-              "path": "frames/bc/radar-rain-region-south-coast/2026/09/15/20260915T1906Z.png",
+              "validTime": "2026-09-15T19:36:00Z",
+              "path": "frames/bc/radar-rain-region-south-coast/2026/09/15/20260915T1936Z.png",
               "source": "ECCC GeoMet + NOAA NEXRAD Level III",
               "sourceLayer": "RADAR_1KM_RRAI + KATX/KLGX DPR",
-              "fetchedAt": "2026-09-15T19:09:53Z",
+              "fetchedAt": "2026-09-15T19:39:05Z",
               "sourceTimes": {
-                "ECCC GeoMet RADAR_1KM_RRAI": "2026-09-15T19:06:00Z"
+                "ECCC GeoMet RADAR_1KM_RRAI": "2026-09-15T19:36:00Z",
+                "NOAA NEXRAD KATX DPR": "2026-09-15T19:28:37Z"
               },
               "renderVersion": 1,
-              "basePath": "frames/bc/radar-rain/2026/09/15/20260915T1906Z.png",
-              "nexradObjects": [],
+              "basePath": "frames/bc/radar-rain/2026/09/15/20260915T1936Z.png",
+              "nexradObjects": [
+                "ATX_DPR_2026_09_15_19_28_37"
+              ],
               "regionalViewport": {
                 "left": 0.4923,
                 "top": 0.6929,
@@ -1730,7 +1727,9 @@
               },
               "outputWidth": 1920,
               "outputHeight": 1244,
-              "nexradSites": []
+              "nexradSites": [
+                "ATX"
+              ]
             }
           ],
           "role": "overlay",
@@ -1741,18 +1740,18 @@
           "maxAgeMinutes": 90,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:20Z",
-              "path": "frames/bc/raw-ir/2026/09/15/20260915T1850Z.webp",
+              "validTime": "2026-09-15T19:20:20Z",
+              "path": "frames/bc/raw-ir/2026/09/15/20260915T1920Z.webp",
               "source": "NOAA GOES-18",
               "sourceLayer": "ABI-L2-MCMIPF C13",
-              "fetchedAt": "2026-09-15T19:04:41Z",
+              "fetchedAt": "2026-09-15T19:35:10Z",
               "sourceTimes": {
-                "GOES-18 ABI scan start": "2026-09-15T18:50:20Z"
+                "GOES-18 ABI scan start": "2026-09-15T19:20:20Z"
               },
               "renderVersion": 3,
-              "sourceFile": "OR_ABI-L2-MCMIPF-M6_G18_s20262581850206_e20262581859525_c20262581900000.nc",
-              "sourceBytes": 362528129,
-              "scanStart": "2026-09-15T18:50:20Z",
+              "sourceFile": "OR_ABI-L2-MCMIPF-M6_G18_s20262581920206_e20262581929515_c20262581929598.nc",
+              "sourceBytes": 366287684,
+              "scanStart": "2026-09-15T19:20:20Z",
               "nominalCadenceMinutes": 10,
               "westwxOnly": true,
               "rapidDomain": "bc"
@@ -1766,18 +1765,18 @@
           "maxAgeMinutes": 90,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:20Z",
-              "path": "frames/bc/raw-visir/2026/09/15/20260915T1850Z.webp",
+              "validTime": "2026-09-15T19:20:20Z",
+              "path": "frames/bc/raw-visir/2026/09/15/20260915T1920Z.webp",
               "source": "NOAA GOES-18",
               "sourceLayer": "ABI-L2-MCMIPF true-colour/IR blend",
-              "fetchedAt": "2026-09-15T19:04:41Z",
+              "fetchedAt": "2026-09-15T19:35:10Z",
               "sourceTimes": {
-                "GOES-18 ABI scan start": "2026-09-15T18:50:20Z"
+                "GOES-18 ABI scan start": "2026-09-15T19:20:20Z"
               },
               "renderVersion": 3,
-              "sourceFile": "OR_ABI-L2-MCMIPF-M6_G18_s20262581850206_e20262581859525_c20262581900000.nc",
-              "sourceBytes": 362528129,
-              "scanStart": "2026-09-15T18:50:20Z",
+              "sourceFile": "OR_ABI-L2-MCMIPF-M6_G18_s20262581920206_e20262581929515_c20262581929598.nc",
+              "sourceBytes": 366287684,
+              "scanStart": "2026-09-15T19:20:20Z",
               "nominalCadenceMinutes": 10,
               "westwxOnly": true,
               "rapidDomain": "bc",
@@ -1798,14 +1797,14 @@
           "maxAgeMinutes": 15,
           "frames": [
             {
-              "validTime": "2026-09-15T19:05:00Z",
-              "path": "frames/bc/raw-visir-5min/2026/09/15/20260915T1905Z.webp",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/bc/raw-visir-5min/2026/09/15/20260915T1930Z.webp",
               "source": "NOAA/NESDIS/STAR",
               "sourceLayer": "CIRA GeoColor on the GOES-18 ABI 0.5 km PACUS grid over ten-minute full-disk fallback",
-              "fetchedAt": "2026-09-15T19:14:00Z",
+              "fetchedAt": "2026-09-15T19:37:18Z",
               "sourceTimes": {
-                "NOAA STAR GOES-18 PACUS GeoColor": "2026-09-15T19:06:00Z",
-                "Raw NOAA GOES-18 full-disk fallback": "2026-09-15T18:50:20Z"
+                "NOAA STAR GOES-18 PACUS GeoColor": "2026-09-15T19:31:00Z",
+                "Raw NOAA GOES-18 full-disk fallback": "2026-09-15T19:20:20Z"
               },
               "renderVersion": 4,
               "starRenderVersion": 4,
@@ -1815,10 +1814,10 @@
               "renderHeight": 2944,
               "nominalCadenceMinutes": 5,
               "retentionHours": 24,
-              "sourceFile": "20262581906_GOES18-ABI-CONUS-GEOCOLOR-10000x6000.jpg",
-              "sourceBytes": 31489685,
+              "sourceFile": "20262581931_GOES18-ABI-CONUS-GEOCOLOR-10000x6000.jpg",
+              "sourceBytes": 31326325,
               "pacusNorthBoundDegrees": 53.5,
-              "fallbackSourceTime": "2026-09-15T18:50:20Z",
+              "fallbackSourceTime": "2026-09-15T19:20:20Z",
               "fallbackSource": "NOAA GOES-18"
             }
           ],
@@ -1830,13 +1829,13 @@
           "maxAgeMinutes": 25,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/bc/raw-visir-native/2026/09/15/20260915T1850Z.webp",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/bc/raw-visir-native/2026/09/15/20260915T1920Z.webp",
               "source": "NOAA/NESDIS/STAR",
               "sourceLayer": "CIRA GeoColor on the GOES-18 ABI 0.5 km full-disk grid",
-              "fetchedAt": "2026-09-15T19:08:14Z",
+              "fetchedAt": "2026-09-15T19:38:42Z",
               "sourceTimes": {
-                "NOAA STAR GOES-18 full-disk GeoColor": "2026-09-15T18:50:00Z"
+                "NOAA STAR GOES-18 full-disk GeoColor": "2026-09-15T19:20:00Z"
               },
               "renderVersion": 4,
               "starRenderVersion": 4,
@@ -1846,8 +1845,8 @@
               "renderHeight": 2944,
               "nominalCadenceMinutes": 10,
               "retentionHours": 24,
-              "sourceFile": "20262581850_GOES18-ABI-FD-GEOCOLOR-21696x21696.jpg",
-              "sourceBytes": 54591603
+              "sourceFile": "20262581920_GOES18-ABI-FD-GEOCOLOR-21696x21696.jpg",
+              "sourceBytes": 55057521
             }
           ],
           "role": "background",
@@ -1858,21 +1857,21 @@
           "maxAgeMinutes": 40,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/bc/smoke/2026/09/15/20260915T1850Z.png",
+              "validTime": "2026-09-15T19:10:00Z",
+              "path": "frames/bc/smoke/2026/09/15/20260915T1910Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "ABI-L2-ADPF",
-              "fetchedAt": "2026-09-15T19:05:23Z",
+              "fetchedAt": "2026-09-15T19:32:04Z",
               "sourceTimes": {
-                "GOES-18 ADP": "2026-09-15T18:50:20Z"
+                "GOES-18 ADP": "2026-09-15T19:10:20Z"
               },
               "availability": "daylight",
-              "validPixelCount": 48377,
-              "mediumConfidencePixels": 5,
-              "highConfidencePixels": 15,
-              "lowConfidencePixels": 9127,
-              "scanEnd": "2026-09-15T18:59:51Z",
-              "sourceFile": "OR_ABI-L2-ADPF-M6_G18_s20262581850206_e20262581859514_c20262581902558.nc",
+              "validPixelCount": 48780,
+              "mediumConfidencePixels": 88,
+              "highConfidencePixels": 38,
+              "lowConfidencePixels": 10668,
+              "scanEnd": "2026-09-15T19:19:51Z",
+              "sourceFile": "OR_ABI-L2-ADPF-M6_G18_s20262581910206_e20262581919514_c20262581922497.nc",
               "renderVersion": 3
             }
           ],
@@ -1884,17 +1883,17 @@
           "maxAgeMinutes": 40,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/bc/snowfog/2026/09/15/20260915T1850Z.webp",
+              "validTime": "2026-09-15T19:10:00Z",
+              "path": "frames/bc/snowfog/2026/09/15/20260915T1910Z.webp",
               "source": "ECCC Datamart",
               "sourceLayer": "satellite/goes/west/SnowFog-NightMicrophysics",
-              "fetchedAt": "2026-09-15T19:04:39Z",
+              "fetchedAt": "2026-09-15T19:30:59Z",
               "sourceTimes": {
-                "native": "2026-09-15T18:50:20Z"
+                "native": "2026-09-15T19:10:20Z"
               },
               "sourceFormat": "GeoTIFF",
               "sourceFiles": [
-                "20260915T1850Z_MSC_GOES-West_SnowFog-NightMicrophysics_1km.tif"
+                "20260915T1910Z_MSC_GOES-West_SnowFog-NightMicrophysics_1km.tif"
               ]
             }
           ],
@@ -1966,15 +1965,15 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-america/active-fire-points/2026/09/15/20260915T1900Z.json",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/north-america/active-fire-points/2026/09/15/20260915T1930Z.json",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:cwfif_national_activefires + https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0/query + https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query",
-              "fetchedAt": "2026-09-15T19:04:09Z",
+              "fetchedAt": "2026-09-15T19:30:32Z",
               "sourceTimes": {
-                "CWFIF active fires": "2026-09-15T19:04:04Z",
-                "BCWS active fires": "2026-09-15T19:04:04Z",
-                "NIFC WFIGS active fires": "2026-09-15T19:04:04Z"
+                "CWFIF active fires": "2026-09-15T19:30:28Z",
+                "BCWS active fires": "2026-09-15T19:30:28Z",
+                "NIFC WFIGS active fires": "2026-09-15T19:30:28Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -1987,16 +1986,16 @@
                 "statusCode"
               ],
               "coordinateSpace": "normalized-top-left",
-              "pointCount": 518,
-              "windowStart": "2026-09-15T19:04:04Z",
-              "windowEnd": "2026-09-15T19:04:04Z",
-              "ageReferenceTime": "2026-09-15T19:04:04Z",
+              "pointCount": 515,
+              "windowStart": "2026-09-15T19:30:28Z",
+              "windowEnd": "2026-09-15T19:30:28Z",
+              "ageReferenceTime": "2026-09-15T19:30:28Z",
               "ageMode": "source-status-time",
               "agePrecisionSeconds": 60,
               "renderVersion": 4,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": []
             }
           ],
@@ -2211,24 +2210,24 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/north-america/glm-lightning/2026/09/15/20260915T1850Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-america/glm-lightning/2026/09/15/20260915T1920Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA",
-              "fetchedAt": "2026-09-15T19:05:34Z",
+              "fetchedAt": "2026-09-15T19:32:25Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T18:50:00Z"
+                "GOES-18 GLM": "2026-09-15T19:20:00Z"
               },
-              "observedFlashCount": 1499,
-              "qualityControlledFlashCount": 1481,
-              "mappedFlashCount": 1341,
-              "markerCount": 416,
+              "observedFlashCount": 2188,
+              "qualityControlledFlashCount": 2180,
+              "mappedFlashCount": 2028,
+              "markerCount": 611,
               "maximumLatitude": 52.0,
               "binSizeMetres": 12891,
-              "windowEnd": "2026-09-15T19:00:00Z",
+              "windowEnd": "2026-09-15T19:30:00Z",
               "sourceFileCount": 30,
-              "firstSourceFile": "OR_GLM-L2-LCFA_G18_s20262581850000_e20262581850200_c20262581850213.nc",
-              "lastSourceFile": "OR_GLM-L2-LCFA_G18_s20262581859400_e20262581900000_c20262581900017.nc",
+              "firstSourceFile": "OR_GLM-L2-LCFA_G18_s20262581920000_e20262581920200_c20262581920215.nc",
+              "lastSourceFile": "OR_GLM-L2-LCFA_G18_s20262581929400_e20262581930000_c20262581930017.nc",
               "renderVersion": 2
             }
           ],
@@ -2240,17 +2239,18 @@
           "maxAgeMinutes": 70,
           "frames": [
             {
-              "validTime": "2026-09-15T18:00:00Z",
-              "path": "frames/north-america/glm-lightning-hour/2026/09/15/20260915T1800Z.png",
+              "validTime": "2026-09-15T19:00:00Z",
+              "path": "frames/north-america/glm-lightning-hour/2026/09/15/20260915T1900Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA hourly aggregate",
-              "fetchedAt": "2026-09-15T18:11:23Z",
+              "fetchedAt": "2026-09-15T19:19:26Z",
               "sourceTimes": {
-                "age0": "2026-09-15T18:00:00Z",
-                "age10": "2026-09-15T17:50:00Z",
-                "age20": "2026-09-15T17:40:00Z",
-                "age40": "2026-09-15T17:20:00Z",
-                "age50": "2026-09-15T17:10:00Z"
+                "age0": "2026-09-15T19:00:00Z",
+                "age10": "2026-09-15T18:50:00Z",
+                "age20": "2026-09-15T18:40:00Z",
+                "age30": "2026-09-15T18:30:00Z",
+                "age40": "2026-09-15T18:20:00Z",
+                "age50": "2026-09-15T18:10:00Z"
               },
               "renderVersion": 2,
               "aggregateWindowMinutes": 60,
@@ -2267,22 +2267,22 @@
           "maxAgeMinutes": 3,
           "frames": [
             {
-              "validTime": "2026-09-15T19:13:00Z",
-              "path": "frames/north-america/glm-lightning-live/2026/09/15/20260915T1913Z.png",
+              "validTime": "2026-09-15T19:38:00Z",
+              "path": "frames/north-america/glm-lightning-live/2026/09/15/20260915T1938Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA rolling one-minute batch",
-              "fetchedAt": "2026-09-15T19:13:34Z",
+              "fetchedAt": "2026-09-15T19:38:39Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T19:13:20Z"
+                "GOES-18 GLM": "2026-09-15T19:38:20Z"
               },
-              "observedFlashCount": 201,
-              "qualityControlledFlashCount": 201,
-              "mappedFlashCount": 193,
-              "markerCount": 151,
+              "observedFlashCount": 258,
+              "qualityControlledFlashCount": 258,
+              "mappedFlashCount": 244,
+              "markerCount": 182,
               "maximumLatitude": 52.0,
               "binSizeMetres": 12891,
-              "windowStart": "2026-09-15T19:12:20Z",
-              "windowEnd": "2026-09-15T19:13:20Z",
+              "windowStart": "2026-09-15T19:37:20Z",
+              "windowEnd": "2026-09-15T19:38:20Z",
               "sourceFileCount": 3,
               "renderVersion": 1
             }
@@ -2295,13 +2295,13 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-america/glm-lightning-points/2026/09/15/20260915T1900Z.json",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/north-america/glm-lightning-points/2026/09/15/20260915T1930Z.json",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA",
-              "fetchedAt": "2026-09-15T19:05:34Z",
+              "fetchedAt": "2026-09-15T19:32:25Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T18:50:00Z"
+                "GOES-18 GLM": "2026-09-15T19:20:00Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -2311,16 +2311,16 @@
                 "count"
               ],
               "coordinateSpace": "normalized-top-left",
-              "pointCount": 416,
-              "windowStart": "2026-09-15T18:50:00Z",
-              "windowEnd": "2026-09-15T19:00:00Z",
-              "ageReferenceTime": "2026-09-15T19:00:00Z",
+              "pointCount": 611,
+              "windowStart": "2026-09-15T19:20:00Z",
+              "windowEnd": "2026-09-15T19:30:00Z",
+              "ageReferenceTime": "2026-09-15T19:30:00Z",
               "ageMode": "source-file-midpoint",
               "agePrecisionSeconds": 20,
               "renderVersion": 2,
-              "observedFlashCount": 1499,
-              "qualityControlledFlashCount": 1481,
-              "mappedFlashCount": 1341,
+              "observedFlashCount": 2188,
+              "qualityControlledFlashCount": 2180,
+              "mappedFlashCount": 2028,
               "maximumLatitude": 52.0,
               "binSizeMetres": 12891,
               "sourceFileCount": 30
@@ -2349,15 +2349,14 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/north-america/glm-lightning-trail/2026/09/15/20260915T1850Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-america/glm-lightning-trail/2026/09/15/20260915T1920Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA 30-minute age trail",
-              "fetchedAt": "2026-09-15T19:05:47Z",
+              "fetchedAt": "2026-09-15T19:32:40Z",
               "sourceTimes": {
-                "age0": "2026-09-15T18:50:00Z",
-                "age10": "2026-09-15T18:40:00Z",
-                "age20": "2026-09-15T18:30:00Z"
+                "age0": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:00:00Z"
               },
               "renderVersion": 9,
               "outputWidth": 2560,
@@ -2396,26 +2395,26 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-america/hotspots/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/north-america/hotspots/2026/09/15/20260915T1930Z.png",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:hotspots_24h + agency-reported active-fire point frames",
-              "fetchedAt": "2026-09-15T19:04:15Z",
+              "fetchedAt": "2026-09-15T19:30:37Z",
               "sourceTimes": {
-                "active fires": "2026-09-15T19:00:00Z"
+                "active fires": "2026-09-15T19:30:00Z"
               },
               "activeFireDisplayCount": 56,
               "hotspotDisplayCount": 0,
               "renderVersion": 4,
               "fireOverlayRenderVersion": 4,
-              "activeFireValidTime": "2026-09-15T19:00:00Z",
+              "activeFireValidTime": "2026-09-15T19:30:00Z",
               "hotspotValidTime": null,
               "thermalHotspotsAvailable": false,
               "agencyFiresAvailable": true,
-              "activeFirePointCount": 518,
+              "activeFirePointCount": 515,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": [],
               "regionalViewport": null,
               "outputWidth": 2560,
@@ -2434,17 +2433,17 @@
           "maxAgeMinutes": 35,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-america/lightning/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-america/lightning/2026/09/15/20260915T1920Z.png",
               "source": "ECCC Datamart",
               "sourceLayer": "lightning/Lightning_2.5km_Density",
-              "fetchedAt": "2026-09-15T19:11:18Z",
+              "fetchedAt": "2026-09-15T19:30:34Z",
               "sourceTimes": {
-                "native": "2026-09-15T19:00:00Z"
+                "native": "2026-09-15T19:20:00Z"
               },
               "sourceFormat": "GeoTIFF",
               "sourceFiles": [
-                "20260915T1900Z_MSC_Lightning_2.5km.tif"
+                "20260915T1920Z_MSC_Lightning_2.5km.tif"
               ]
             }
           ],
@@ -2486,13 +2485,13 @@
           "maxAgeMinutes": 35,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-america/lightning-points/2026/09/15/20260915T1900Z.json",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-america/lightning-points/2026/09/15/20260915T1920Z.json",
               "source": "ECCC Datamart",
               "sourceLayer": "lightning/Lightning_2.5km_Density",
-              "fetchedAt": "2026-09-15T19:11:18Z",
+              "fetchedAt": "2026-09-15T19:30:34Z",
               "sourceTimes": {
-                "ECCC lightning density": "2026-09-15T19:00:00Z"
+                "ECCC lightning density": "2026-09-15T19:20:00Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -2503,9 +2502,9 @@
               ],
               "coordinateSpace": "normalized-top-left",
               "pointCount": 0,
-              "windowStart": "2026-09-15T18:50:00Z",
-              "windowEnd": "2026-09-15T19:00:00Z",
-              "ageReferenceTime": "2026-09-15T19:00:00Z",
+              "windowStart": "2026-09-15T19:10:00Z",
+              "windowEnd": "2026-09-15T19:20:00Z",
+              "ageReferenceTime": "2026-09-15T19:20:00Z",
               "ageMode": "window-midpoint-estimate",
               "agePrecisionSeconds": 600,
               "renderVersion": 1,
@@ -2536,19 +2535,18 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-america/lightning-trail/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/north-america/lightning-trail/2026/09/15/20260915T1930Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-09-15T19:11:19Z",
+              "fetchedAt": "2026-09-15T19:32:46Z",
               "sourceTimes": {
-                "age0": "2026-09-15T19:00:00Z",
-                "age10": "2026-09-15T18:50:00Z",
-                "age20": "2026-09-15T18:40:00Z"
+                "age10": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 10,
               "arrivalOnly": false,
-              "newStrikeHalo": true,
+              "newStrikeHalo": false,
               "regionalViewport": null,
               "outputWidth": 2560,
               "symbolReferenceWidth": 1920,
@@ -2563,11 +2561,11 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T18:54:00Z",
-              "path": "frames/north-america/ptype/2026/09/15/20260915T1854Z.png",
+              "validTime": "2026-09-15T19:18:00Z",
+              "path": "frames/north-america/ptype/2026/09/15/20260915T1918Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "Radar_1km_SfcPrecipType",
-              "fetchedAt": "2026-09-15T19:04:51Z",
+              "fetchedAt": "2026-09-15T19:31:22Z",
               "renderVersion": 1,
               "outputWidth": 2560,
               "outputHeight": 1920
@@ -2581,11 +2579,11 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T18:54:00Z",
-              "path": "frames/north-america/ptype-coverage/2026/09/15/20260915T1854Z.png",
+              "validTime": "2026-09-15T19:18:00Z",
+              "path": "frames/north-america/ptype-coverage/2026/09/15/20260915T1918Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
-              "fetchedAt": "2026-09-15T19:04:52Z",
+              "fetchedAt": "2026-09-15T19:31:25Z",
               "renderVersion": 3,
               "outputWidth": 2560,
               "outputHeight": 1920
@@ -2599,11 +2597,11 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:06:00Z",
-              "path": "frames/north-america/radar-coverage/2026/09/15/20260915T1906Z.png",
+              "validTime": "2026-09-15T19:36:00Z",
+              "path": "frames/north-america/radar-coverage/2026/09/15/20260915T1936Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
-              "fetchedAt": "2026-09-15T19:09:53Z",
+              "fetchedAt": "2026-09-15T19:39:01Z",
               "renderVersion": 3,
               "outputWidth": 2560,
               "outputHeight": 1920
@@ -2617,11 +2615,11 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:06:00Z",
-              "path": "frames/north-america/radar-rain/2026/09/15/20260915T1906Z.png",
+              "validTime": "2026-09-15T19:36:00Z",
+              "path": "frames/north-america/radar-rain/2026/09/15/20260915T1936Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "RADAR_1KM_RRAI",
-              "fetchedAt": "2026-09-15T19:09:53Z",
+              "fetchedAt": "2026-09-15T19:39:00Z",
               "renderVersion": 1,
               "outputWidth": 2560,
               "outputHeight": 1920
@@ -2635,13 +2633,13 @@
           "maxAgeMinutes": 90,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/north-america/raw-visir/2026/09/15/20260915T1850Z.webp",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-america/raw-visir/2026/09/15/20260915T1920Z.webp",
               "source": "NOAA/NESDIS/STAR",
               "sourceLayer": "CIRA GeoColor on the GOES-18 ABI 0.5 km full-disk grid",
-              "fetchedAt": "2026-09-15T19:08:29Z",
+              "fetchedAt": "2026-09-15T19:39:05Z",
               "sourceTimes": {
-                "NOAA STAR GOES-18 full-disk GeoColor": "2026-09-15T18:50:00Z"
+                "NOAA STAR GOES-18 full-disk GeoColor": "2026-09-15T19:20:00Z"
               },
               "renderVersion": 4,
               "starRenderVersion": 4,
@@ -2651,8 +2649,8 @@
               "renderHeight": 960,
               "nominalCadenceMinutes": 10,
               "retentionHours": 24,
-              "sourceFile": "20262581850_GOES18-ABI-FD-GEOCOLOR-21696x21696.jpg",
-              "sourceBytes": 54591603
+              "sourceFile": "20262581920_GOES18-ABI-FD-GEOCOLOR-21696x21696.jpg",
+              "sourceBytes": 55057521
             }
           ],
           "role": "background",
@@ -2663,21 +2661,21 @@
           "maxAgeMinutes": 40,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/north-america/smoke/2026/09/15/20260915T1850Z.png",
+              "validTime": "2026-09-15T19:10:00Z",
+              "path": "frames/north-america/smoke/2026/09/15/20260915T1910Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "ABI-L2-ADPF",
-              "fetchedAt": "2026-09-15T19:05:25Z",
+              "fetchedAt": "2026-09-15T19:32:09Z",
               "sourceTimes": {
-                "GOES-18 ADP": "2026-09-15T18:50:20Z"
+                "GOES-18 ADP": "2026-09-15T19:10:20Z"
               },
               "availability": "daylight",
-              "validPixelCount": 29001,
-              "mediumConfidencePixels": 9,
-              "highConfidencePixels": 4,
-              "lowConfidencePixels": 11609,
-              "scanEnd": "2026-09-15T18:59:51Z",
-              "sourceFile": "OR_ABI-L2-ADPF-M6_G18_s20262581850206_e20262581859514_c20262581902558.nc",
+              "validPixelCount": 28448,
+              "mediumConfidencePixels": 6,
+              "highConfidencePixels": 3,
+              "lowConfidencePixels": 11490,
+              "scanEnd": "2026-09-15T19:19:51Z",
+              "sourceFile": "OR_ABI-L2-ADPF-M6_G18_s20262581910206_e20262581919514_c20262581922497.nc",
               "renderVersion": 3
             }
           ],
@@ -2689,18 +2687,18 @@
           "maxAgeMinutes": 25,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:20Z",
-              "path": "frames/north-america/westwx-ir/2026/09/15/20260915T1850Z.webp",
+              "validTime": "2026-09-15T19:20:20Z",
+              "path": "frames/north-america/westwx-ir/2026/09/15/20260915T1920Z.webp",
               "source": "NOAA GOES-18",
               "sourceLayer": "ABI-L2-MCMIPF C13",
-              "fetchedAt": "2026-09-15T19:04:34Z",
+              "fetchedAt": "2026-09-15T19:35:00Z",
               "sourceTimes": {
-                "GOES-18 ABI scan start": "2026-09-15T18:50:20Z"
+                "GOES-18 ABI scan start": "2026-09-15T19:20:20Z"
               },
               "renderVersion": 3,
-              "sourceFile": "OR_ABI-L2-MCMIPF-M6_G18_s20262581850206_e20262581859525_c20262581900000.nc",
-              "sourceBytes": 362528129,
-              "scanStart": "2026-09-15T18:50:20Z",
+              "sourceFile": "OR_ABI-L2-MCMIPF-M6_G18_s20262581920206_e20262581929515_c20262581929598.nc",
+              "sourceBytes": 366287684,
+              "scanStart": "2026-09-15T19:20:20Z",
               "nominalCadenceMinutes": 10,
               "westwxOnly": true,
               "rapidDomain": "north-america"
@@ -2714,18 +2712,18 @@
           "maxAgeMinutes": 25,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:20Z",
-              "path": "frames/north-america/westwx-visir/2026/09/15/20260915T1850Z.webp",
+              "validTime": "2026-09-15T19:20:20Z",
+              "path": "frames/north-america/westwx-visir/2026/09/15/20260915T1920Z.webp",
               "source": "NOAA GOES-18",
               "sourceLayer": "ABI-L2-MCMIPF true-colour/IR blend",
-              "fetchedAt": "2026-09-15T19:04:34Z",
+              "fetchedAt": "2026-09-15T19:34:59Z",
               "sourceTimes": {
-                "GOES-18 ABI scan start": "2026-09-15T18:50:20Z"
+                "GOES-18 ABI scan start": "2026-09-15T19:20:20Z"
               },
               "renderVersion": 3,
-              "sourceFile": "OR_ABI-L2-MCMIPF-M6_G18_s20262581850206_e20262581859525_c20262581900000.nc",
-              "sourceBytes": 362528129,
-              "scanStart": "2026-09-15T18:50:20Z",
+              "sourceFile": "OR_ABI-L2-MCMIPF-M6_G18_s20262581920206_e20262581929515_c20262581929598.nc",
+              "sourceBytes": 366287684,
+              "scanStart": "2026-09-15T19:20:20Z",
               "nominalCadenceMinutes": 10,
               "westwxOnly": true,
               "rapidDomain": "north-america",
@@ -2774,15 +2772,15 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-pacific/active-fire-points/2026/09/15/20260915T1900Z.json",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/north-pacific/active-fire-points/2026/09/15/20260915T1930Z.json",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:cwfif_national_activefires + https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0/query + https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query",
-              "fetchedAt": "2026-09-15T19:04:20Z",
+              "fetchedAt": "2026-09-15T19:30:41Z",
               "sourceTimes": {
-                "CWFIF active fires": "2026-09-15T19:04:15Z",
-                "BCWS active fires": "2026-09-15T19:04:15Z",
-                "NIFC WFIGS active fires": "2026-09-15T19:04:15Z"
+                "CWFIF active fires": "2026-09-15T19:30:37Z",
+                "BCWS active fires": "2026-09-15T19:30:37Z",
+                "NIFC WFIGS active fires": "2026-09-15T19:30:37Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -2795,16 +2793,16 @@
                 "statusCode"
               ],
               "coordinateSpace": "normalized-top-left",
-              "pointCount": 512,
-              "windowStart": "2026-09-15T19:04:15Z",
-              "windowEnd": "2026-09-15T19:04:15Z",
-              "ageReferenceTime": "2026-09-15T19:04:15Z",
+              "pointCount": 508,
+              "windowStart": "2026-09-15T19:30:37Z",
+              "windowEnd": "2026-09-15T19:30:37Z",
+              "ageReferenceTime": "2026-09-15T19:30:37Z",
               "ageMode": "source-status-time",
               "agePrecisionSeconds": 60,
               "renderVersion": 4,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": []
             }
           ],
@@ -3026,24 +3024,24 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/north-pacific/glm-lightning/2026/09/15/20260915T1850Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-pacific/glm-lightning/2026/09/15/20260915T1920Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA",
-              "fetchedAt": "2026-09-15T19:05:34Z",
+              "fetchedAt": "2026-09-15T19:32:25Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T18:50:00Z"
+                "GOES-18 GLM": "2026-09-15T19:20:00Z"
               },
-              "observedFlashCount": 1499,
-              "qualityControlledFlashCount": 1481,
-              "mappedFlashCount": 1354,
-              "markerCount": 455,
+              "observedFlashCount": 2188,
+              "qualityControlledFlashCount": 2180,
+              "mappedFlashCount": 2031,
+              "markerCount": 661,
               "maximumLatitude": 52.0,
               "binSizeMetres": 11832,
-              "windowEnd": "2026-09-15T19:00:00Z",
+              "windowEnd": "2026-09-15T19:30:00Z",
               "sourceFileCount": 30,
-              "firstSourceFile": "OR_GLM-L2-LCFA_G18_s20262581850000_e20262581850200_c20262581850213.nc",
-              "lastSourceFile": "OR_GLM-L2-LCFA_G18_s20262581859400_e20262581900000_c20262581900017.nc",
+              "firstSourceFile": "OR_GLM-L2-LCFA_G18_s20262581920000_e20262581920200_c20262581920215.nc",
+              "lastSourceFile": "OR_GLM-L2-LCFA_G18_s20262581929400_e20262581930000_c20262581930017.nc",
               "renderVersion": 2
             }
           ],
@@ -3055,17 +3053,18 @@
           "maxAgeMinutes": 70,
           "frames": [
             {
-              "validTime": "2026-09-15T18:00:00Z",
-              "path": "frames/north-pacific/glm-lightning-hour/2026/09/15/20260915T1800Z.png",
+              "validTime": "2026-09-15T19:00:00Z",
+              "path": "frames/north-pacific/glm-lightning-hour/2026/09/15/20260915T1900Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA hourly aggregate",
-              "fetchedAt": "2026-09-15T18:11:29Z",
+              "fetchedAt": "2026-09-15T19:19:35Z",
               "sourceTimes": {
-                "age0": "2026-09-15T18:00:00Z",
-                "age10": "2026-09-15T17:50:00Z",
-                "age20": "2026-09-15T17:40:00Z",
-                "age40": "2026-09-15T17:20:00Z",
-                "age50": "2026-09-15T17:10:00Z"
+                "age0": "2026-09-15T19:00:00Z",
+                "age10": "2026-09-15T18:50:00Z",
+                "age20": "2026-09-15T18:40:00Z",
+                "age30": "2026-09-15T18:30:00Z",
+                "age40": "2026-09-15T18:20:00Z",
+                "age50": "2026-09-15T18:10:00Z"
               },
               "renderVersion": 2,
               "aggregateWindowMinutes": 60,
@@ -3082,22 +3081,22 @@
           "maxAgeMinutes": 3,
           "frames": [
             {
-              "validTime": "2026-09-15T19:13:00Z",
-              "path": "frames/north-pacific/glm-lightning-live/2026/09/15/20260915T1913Z.png",
+              "validTime": "2026-09-15T19:38:00Z",
+              "path": "frames/north-pacific/glm-lightning-live/2026/09/15/20260915T1938Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA rolling one-minute batch",
-              "fetchedAt": "2026-09-15T19:13:34Z",
+              "fetchedAt": "2026-09-15T19:38:40Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T19:13:20Z"
+                "GOES-18 GLM": "2026-09-15T19:38:20Z"
               },
-              "observedFlashCount": 201,
-              "qualityControlledFlashCount": 201,
-              "mappedFlashCount": 194,
-              "markerCount": 151,
+              "observedFlashCount": 258,
+              "qualityControlledFlashCount": 258,
+              "mappedFlashCount": 244,
+              "markerCount": 194,
               "maximumLatitude": 52.0,
               "binSizeMetres": 11832,
-              "windowStart": "2026-09-15T19:12:20Z",
-              "windowEnd": "2026-09-15T19:13:20Z",
+              "windowStart": "2026-09-15T19:37:20Z",
+              "windowEnd": "2026-09-15T19:38:20Z",
               "sourceFileCount": 3,
               "renderVersion": 1
             }
@@ -3110,13 +3109,13 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-pacific/glm-lightning-points/2026/09/15/20260915T1900Z.json",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/north-pacific/glm-lightning-points/2026/09/15/20260915T1930Z.json",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA",
-              "fetchedAt": "2026-09-15T19:05:34Z",
+              "fetchedAt": "2026-09-15T19:32:26Z",
               "sourceTimes": {
-                "GOES-18 GLM": "2026-09-15T18:50:00Z"
+                "GOES-18 GLM": "2026-09-15T19:20:00Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -3126,16 +3125,16 @@
                 "count"
               ],
               "coordinateSpace": "normalized-top-left",
-              "pointCount": 455,
-              "windowStart": "2026-09-15T18:50:00Z",
-              "windowEnd": "2026-09-15T19:00:00Z",
-              "ageReferenceTime": "2026-09-15T19:00:00Z",
+              "pointCount": 661,
+              "windowStart": "2026-09-15T19:20:00Z",
+              "windowEnd": "2026-09-15T19:30:00Z",
+              "ageReferenceTime": "2026-09-15T19:30:00Z",
               "ageMode": "source-file-midpoint",
               "agePrecisionSeconds": 20,
               "renderVersion": 2,
-              "observedFlashCount": 1499,
-              "qualityControlledFlashCount": 1481,
-              "mappedFlashCount": 1354,
+              "observedFlashCount": 2188,
+              "qualityControlledFlashCount": 2180,
+              "mappedFlashCount": 2031,
               "maximumLatitude": 52.0,
               "binSizeMetres": 11832,
               "sourceFileCount": 30
@@ -3164,15 +3163,14 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/north-pacific/glm-lightning-trail/2026/09/15/20260915T1850Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-pacific/glm-lightning-trail/2026/09/15/20260915T1920Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "GLM-L2-LCFA 30-minute age trail",
-              "fetchedAt": "2026-09-15T19:05:52Z",
+              "fetchedAt": "2026-09-15T19:32:52Z",
               "sourceTimes": {
-                "age0": "2026-09-15T18:50:00Z",
-                "age10": "2026-09-15T18:40:00Z",
-                "age20": "2026-09-15T18:30:00Z"
+                "age0": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:00:00Z"
               },
               "renderVersion": 9,
               "outputWidth": 3200,
@@ -3211,26 +3209,26 @@
           "maxAgeMinutes": 360,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-pacific/hotspots/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/north-pacific/hotspots/2026/09/15/20260915T1930Z.png",
               "source": "NRCan CWFIS + BCWS + NIFC WFIGS",
               "sourceLayer": "public:hotspots_24h + agency-reported active-fire point frames",
-              "fetchedAt": "2026-09-15T19:04:23Z",
+              "fetchedAt": "2026-09-15T19:30:48Z",
               "sourceTimes": {
-                "active fires": "2026-09-15T19:00:00Z"
+                "active fires": "2026-09-15T19:30:00Z"
               },
               "activeFireDisplayCount": 56,
               "hotspotDisplayCount": 0,
               "renderVersion": 4,
               "fireOverlayRenderVersion": 4,
-              "activeFireValidTime": "2026-09-15T19:00:00Z",
+              "activeFireValidTime": "2026-09-15T19:30:00Z",
               "hotspotValidTime": null,
               "thermalHotspotsAvailable": false,
               "agencyFiresAvailable": true,
-              "activeFirePointCount": 512,
+              "activeFirePointCount": 508,
               "canadianFeatureCount": 481,
               "bcwsFeatureCount": 91,
-              "usFeatureCount": 339,
+              "usFeatureCount": 336,
               "sourceErrors": [],
               "regionalViewport": null,
               "outputWidth": 3200,
@@ -3249,17 +3247,17 @@
           "maxAgeMinutes": 35,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-pacific/lightning/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-pacific/lightning/2026/09/15/20260915T1920Z.png",
               "source": "ECCC Datamart",
               "sourceLayer": "lightning/Lightning_2.5km_Density",
-              "fetchedAt": "2026-09-15T19:11:18Z",
+              "fetchedAt": "2026-09-15T19:30:34Z",
               "sourceTimes": {
-                "native": "2026-09-15T19:00:00Z"
+                "native": "2026-09-15T19:20:00Z"
               },
               "sourceFormat": "GeoTIFF",
               "sourceFiles": [
-                "20260915T1900Z_MSC_Lightning_2.5km.tif"
+                "20260915T1920Z_MSC_Lightning_2.5km.tif"
               ]
             }
           ],
@@ -3301,13 +3299,13 @@
           "maxAgeMinutes": 35,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-pacific/lightning-points/2026/09/15/20260915T1900Z.json",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-pacific/lightning-points/2026/09/15/20260915T1920Z.json",
               "source": "ECCC Datamart",
               "sourceLayer": "lightning/Lightning_2.5km_Density",
-              "fetchedAt": "2026-09-15T19:11:18Z",
+              "fetchedAt": "2026-09-15T19:30:34Z",
               "sourceTimes": {
-                "ECCC lightning density": "2026-09-15T19:00:00Z"
+                "ECCC lightning density": "2026-09-15T19:20:00Z"
               },
               "pointFrameSchemaVersion": 1,
               "pointSchema": [
@@ -3318,9 +3316,9 @@
               ],
               "coordinateSpace": "normalized-top-left",
               "pointCount": 0,
-              "windowStart": "2026-09-15T18:50:00Z",
-              "windowEnd": "2026-09-15T19:00:00Z",
-              "ageReferenceTime": "2026-09-15T19:00:00Z",
+              "windowStart": "2026-09-15T19:10:00Z",
+              "windowEnd": "2026-09-15T19:20:00Z",
+              "ageReferenceTime": "2026-09-15T19:20:00Z",
               "ageMode": "window-midpoint-estimate",
               "agePrecisionSeconds": 600,
               "renderVersion": 1,
@@ -3351,19 +3349,18 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T19:00:00Z",
-              "path": "frames/north-pacific/lightning-trail/2026/09/15/20260915T1900Z.png",
+              "validTime": "2026-09-15T19:30:00Z",
+              "path": "frames/north-pacific/lightning-trail/2026/09/15/20260915T1930Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "derived",
-              "fetchedAt": "2026-09-15T19:11:19Z",
+              "fetchedAt": "2026-09-15T19:32:46Z",
               "sourceTimes": {
-                "age0": "2026-09-15T19:00:00Z",
-                "age10": "2026-09-15T18:50:00Z",
-                "age20": "2026-09-15T18:40:00Z"
+                "age10": "2026-09-15T19:20:00Z",
+                "age20": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 10,
               "arrivalOnly": false,
-              "newStrikeHalo": true,
+              "newStrikeHalo": false,
               "regionalViewport": null,
               "outputWidth": 3200,
               "symbolReferenceWidth": 2400,
@@ -3378,11 +3375,11 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T18:54:00Z",
-              "path": "frames/north-pacific/ptype/2026/09/15/20260915T1854Z.png",
+              "validTime": "2026-09-15T19:18:00Z",
+              "path": "frames/north-pacific/ptype/2026/09/15/20260915T1918Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "Radar_1km_SfcPrecipType",
-              "fetchedAt": "2026-09-15T19:04:57Z",
+              "fetchedAt": "2026-09-15T19:31:44Z",
               "renderVersion": 1,
               "outputWidth": 3200,
               "outputHeight": 1800
@@ -3396,11 +3393,11 @@
           "maxAgeMinutes": 30,
           "frames": [
             {
-              "validTime": "2026-09-15T18:54:00Z",
-              "path": "frames/north-pacific/ptype-coverage/2026/09/15/20260915T1854Z.png",
+              "validTime": "2026-09-15T19:18:00Z",
+              "path": "frames/north-pacific/ptype-coverage/2026/09/15/20260915T1918Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "Radar-Coverage_SfcPrecipType-Inverted",
-              "fetchedAt": "2026-09-15T19:05:02Z",
+              "fetchedAt": "2026-09-15T19:31:52Z",
               "renderVersion": 3,
               "outputWidth": 3200,
               "outputHeight": 1800
@@ -3414,11 +3411,11 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:06:00Z",
-              "path": "frames/north-pacific/radar-coverage/2026/09/15/20260915T1906Z.png",
+              "validTime": "2026-09-15T19:36:00Z",
+              "path": "frames/north-pacific/radar-coverage/2026/09/15/20260915T1936Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "RADAR_COVERAGE_RRAI.INV",
-              "fetchedAt": "2026-09-15T19:09:54Z",
+              "fetchedAt": "2026-09-15T19:39:02Z",
               "renderVersion": 3,
               "outputWidth": 3200,
               "outputHeight": 1800
@@ -3432,11 +3429,11 @@
           "maxAgeMinutes": 20,
           "frames": [
             {
-              "validTime": "2026-09-15T19:06:00Z",
-              "path": "frames/north-pacific/radar-rain/2026/09/15/20260915T1906Z.png",
+              "validTime": "2026-09-15T19:36:00Z",
+              "path": "frames/north-pacific/radar-rain/2026/09/15/20260915T1936Z.png",
               "source": "ECCC GeoMet",
               "sourceLayer": "RADAR_1KM_RRAI",
-              "fetchedAt": "2026-09-15T19:09:53Z",
+              "fetchedAt": "2026-09-15T19:39:01Z",
               "renderVersion": 1,
               "outputWidth": 3200,
               "outputHeight": 1800
@@ -3450,14 +3447,14 @@
           "maxAgeMinutes": 90,
           "frames": [
             {
-              "validTime": "2026-09-15T18:00:00Z",
-              "path": "frames/north-pacific/raw-ir/2026/09/15/20260915T1800Z.webp",
+              "validTime": "2026-09-15T18:30:00Z",
+              "path": "frames/north-pacific/raw-ir/2026/09/15/20260915T1830Z.webp",
               "source": "NOAA Himawari-9 + GOES-18",
               "sourceLayer": "AHI-L1b-FLDK + ABI-L2-MCMIPF",
-              "fetchedAt": "2026-09-15T18:44:48Z",
+              "fetchedAt": "2026-09-15T19:20:53Z",
               "sourceTimes": {
-                "GOES-18": "2026-09-15T18:10:20Z",
-                "Himawari-9": "2026-09-15T18:00:00Z"
+                "GOES-18": "2026-09-15T18:40:20Z",
+                "Himawari-9": "2026-09-15T18:30:00Z"
               },
               "renderVersion": 1
             }
@@ -3470,14 +3467,14 @@
           "maxAgeMinutes": 90,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/north-pacific/raw-visir/2026/09/15/20260915T1850Z.webp",
+              "validTime": "2026-09-15T19:20:00Z",
+              "path": "frames/north-pacific/raw-visir/2026/09/15/20260915T1920Z.webp",
               "source": "NOAA/NESDIS/STAR",
               "sourceLayer": "CIRA GeoColor on the GOES-18 ABI 0.5 km full-disk grid",
-              "fetchedAt": "2026-09-15T19:08:48Z",
+              "fetchedAt": "2026-09-15T19:39:28Z",
               "sourceTimes": {
-                "NOAA STAR GOES-18 full-disk GeoColor": "2026-09-15T18:50:00Z",
-                "Pacific western-disk fallback": "2026-09-15T18:40:00Z"
+                "NOAA STAR GOES-18 full-disk GeoColor": "2026-09-15T19:20:00Z",
+                "Pacific western-disk fallback": "2026-09-15T19:10:00Z"
               },
               "renderVersion": 4,
               "starRenderVersion": 4,
@@ -3487,10 +3484,10 @@
               "renderHeight": 900,
               "nominalCadenceMinutes": 10,
               "retentionHours": 24,
-              "sourceFile": "20262581850_GOES18-ABI-FD-GEOCOLOR-21696x21696.jpg",
-              "sourceBytes": 54591603,
+              "sourceFile": "20262581920_GOES18-ABI-FD-GEOCOLOR-21696x21696.jpg",
+              "sourceBytes": 55057521,
               "westFallbackSource": "NOAA/NESDIS/STAR",
-              "westFallbackValidTime": "2026-09-15T18:40:00Z"
+              "westFallbackValidTime": "2026-09-15T19:10:00Z"
             }
           ],
           "role": "background",
@@ -3501,21 +3498,21 @@
           "maxAgeMinutes": 40,
           "frames": [
             {
-              "validTime": "2026-09-15T18:50:00Z",
-              "path": "frames/north-pacific/smoke/2026/09/15/20260915T1850Z.png",
+              "validTime": "2026-09-15T19:10:00Z",
+              "path": "frames/north-pacific/smoke/2026/09/15/20260915T1910Z.png",
               "source": "NOAA GOES-18",
               "sourceLayer": "ABI-L2-ADPF",
-              "fetchedAt": "2026-09-15T19:05:27Z",
+              "fetchedAt": "2026-09-15T19:32:11Z",
               "sourceTimes": {
-                "GOES-18 ADP": "2026-09-15T18:50:20Z"
+                "GOES-18 ADP": "2026-09-15T19:10:20Z"
               },
               "availability": "daylight",
-              "validPixelCount": 17156,
-              "mediumConfidencePixels": 3,
-              "highConfidencePixels": 3,
-              "lowConfidencePixels": 13133,
-              "scanEnd": "2026-09-15T18:59:51Z",
-              "sourceFile": "OR_ABI-L2-ADPF-M6_G18_s20262581850206_e20262581859514_c20262581902558.nc",
+              "validPixelCount": 16933,
+              "mediumConfidencePixels": 14,
+              "highConfidencePixels": 2,
+              "lowConfidencePixels": 13138,
+              "scanEnd": "2026-09-15T19:19:51Z",
+              "sourceFile": "OR_ABI-L2-ADPF-M6_G18_s20262581910206_e20262581919514_c20262581922497.nc",
               "renderVersion": 3
             }
           ],
@@ -4464,7 +4461,7 @@
       "shortTitle": "E Pac/W NA",
       "group": "Broad",
       "domain": "north-pacific",
-      "anchorLayer": "raw-ir",
+      "anchorLayer": "raw-visir",
       "frameIntervalMinutes": 20,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 180,
@@ -4569,7 +4566,7 @@
       "notes": [
         "The Pacific-centred crop covers roughly 170\u00b0E\u2013102\u00b0W and 20\u201366\u00b0N without a dateline seam.",
         "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
-        "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
+        "NOAA VIS/IR uses GeoColor: true colour by day and its infrared composite at night. NOAA IR is a separate calibrated brightness-temperature display.",
         "Pacific NOAA VIS/IR uses genuine GOES-18 full-disk scan times at a nominal ten-minute cadence; the half-hour Himawari-9/GOES-18 blend remains the infrared and availability fallback.",
         "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; BC regional products use the ECCC/CLDN raster trail where GOES-18 GLM coverage is less useful.",
         "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
@@ -4588,7 +4585,7 @@
       "shortTitle": "North America",
       "group": "Broad",
       "domain": "north-america",
-      "anchorLayer": "westwx-ir",
+      "anchorLayer": "raw-visir",
       "frameIntervalMinutes": 20,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 60,
@@ -4693,7 +4690,7 @@
       "notes": [
         "NOAA VIS/IR uses the same NOAA STAR GeoColor source as the Pacific views, projected directly to the North America grid. NOAA IR retains the calibrated GOES-18 infrared source.",
         "Radar is observed only where the ECCC continental mosaic has coverage; hatching marks the remainder.",
-        "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
+        "NOAA VIS/IR uses GeoColor: true colour by day and its infrared composite at night. NOAA IR is a separate calibrated brightness-temperature display.",
         "North America NOAA VIS/IR uses NOAA STAR GOES-18 GeoColor at a nominal ten-minute cadence. The far eastern edge has weaker GOES-West viewing geometry.",
         "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; BC regional products use the ECCC/CLDN raster trail where GOES-18 GLM coverage is less useful.",
         "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
@@ -4712,7 +4709,7 @@
       "shortTitle": "Pacific",
       "group": "Broad",
       "domain": "north-pacific",
-      "anchorLayer": "raw-ir",
+      "anchorLayer": "raw-visir",
       "frameIntervalMinutes": 20,
       "dayFrameIntervalMinutes": 30,
       "archiveFrameIntervalMinutes": 180,
@@ -4817,7 +4814,7 @@
       "notes": [
         "NOAA GOES-18 GeoColor supplies the ten-minute VIS/IR clock; the slower Himawari-9/GOES-18 blend remains available for infrared and fallback coverage.",
         "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
-        "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 \u00b5m infrared at night; no false-colour IR is mixed across the terminator.",
+        "NOAA VIS/IR uses GeoColor: true colour by day and its infrared composite at night. NOAA IR is a separate calibrated brightness-temperature display.",
         "Pacific NOAA VIS/IR uses genuine GOES-18 full-disk scan times at a nominal ten-minute cadence; the half-hour Himawari-9/GOES-18 blend remains the infrared and availability fallback.",
         "GLM symbols are optical total-lightning flash centroids, not ground-strike locations; BC regional products use the ECCC/CLDN raster trail where GOES-18 GLM coverage is less useful.",
         "Agency-reported Canadian and U.S. active wildfire locations are shown separately from CWFIS satellite thermal detections.",
@@ -4902,8 +4899,8 @@
     "bc-large-overlay": {
       "eccc-geocolor": {
         "archive": {
-          "generation": "20260915T1800Z-1b884dcda5e1",
-          "manifestPath": "video-manifests/bc-large-overlay/eccc-geocolor/archive/20260915T1800Z-1b884dcda5e1.json",
+          "generation": "20260915T1800Z-e4124cbeebcf",
+          "manifestPath": "video-manifests/bc-large-overlay/eccc-geocolor/archive/20260915T1800Z-e4124cbeebcf.json",
           "composites": [
             {
               "presetId": "operational-default-v1",
@@ -4922,9 +4919,58 @@
                 "model-hgt500"
               ],
               "rangeHours": 168,
-              "generatedAt": "2026-09-15T18:51:56.524506Z",
+              "generatedAt": "2026-09-15T19:19:50.180361Z",
               "endValidTime": "2026-09-15T18:00:00Z",
               "endSourceTime": "2026-09-15T18:00:20Z",
+              "cadenceMinutes": 60
+            },
+            {
+              "presetId": "weather-full-v1",
+              "layerIds": [
+                "base-dark",
+                "eccc-geocolor",
+                "radar-coverage",
+                "radar-rain",
+                "watersheds",
+                "transmission-lines",
+                "boundaries",
+                "lightning-trail",
+                "model-mslp",
+                "model-hgt500"
+              ],
+              "rangeHours": 168,
+              "generatedAt": "2026-09-15T19:19:50.180361Z",
+              "endValidTime": "2026-09-15T18:00:00Z",
+              "endSourceTime": "2026-09-15T18:00:20Z",
+              "cadenceMinutes": 60
+            }
+          ]
+        }
+      }
+    },
+    "north-america-overlay": {
+      "raw-visir": {
+        "archive": {
+          "generation": "20260915T1900Z-0c99caeb4870",
+          "manifestPath": "video-manifests/north-america-overlay/raw-visir/archive/20260915T1900Z-0c99caeb4870.json",
+          "composites": [
+            {
+              "presetId": "operational-default-v1",
+              "layerIds": [
+                "base-dark",
+                "raw-visir",
+                "radar-coverage",
+                "radar-rain",
+                "boundaries",
+                "glm-lightning-trail",
+                "lightning-trail",
+                "model-mslp",
+                "model-hgt500"
+              ],
+              "rangeHours": 168,
+              "generatedAt": "2026-09-15T19:34:43.140377Z",
+              "endValidTime": "2026-09-15T19:00:00Z",
+              "endSourceTime": "2026-09-15T19:00:00Z",
               "cadenceMinutes": 60
             }
           ]
@@ -4934,27 +4980,24 @@
     "north-pacific-overlay": {
       "raw-visir": {
         "archive": {
-          "generation": "20260915T1800Z-fb16e2298f5c",
-          "manifestPath": "video-manifests/north-pacific-overlay/raw-visir/archive/20260915T1800Z-fb16e2298f5c.json",
+          "generation": "20260915T1800Z-c38b341205d4",
+          "manifestPath": "video-manifests/north-pacific-overlay/raw-visir/archive/20260915T1800Z-c38b341205d4.json",
           "composites": [
             {
               "presetId": "operational-default-v1",
               "layerIds": [
                 "base-dark",
                 "raw-visir",
-                "smoke",
                 "radar-coverage",
                 "radar-rain",
-                "transmission-lines",
                 "boundaries",
                 "glm-lightning-trail",
                 "lightning-trail",
-                "hotspots",
                 "model-mslp",
                 "model-hgt500"
               ],
               "rangeHours": 168,
-              "generatedAt": "2026-09-15T18:48:04.152888Z",
+              "generatedAt": "2026-09-15T19:36:20.303891Z",
               "endValidTime": "2026-09-15T18:00:00Z",
               "endSourceTime": "2026-09-15T18:00:00Z",
               "cadenceMinutes": 180
@@ -4966,8 +5009,8 @@
     "pacific-wna-overlay": {
       "raw-visir": {
         "archive": {
-          "generation": "20260915T1500Z-4c9af21d04f3",
-          "manifestPath": "video-manifests/pacific-wna-overlay/raw-visir/archive/20260915T1500Z-4c9af21d04f3.json",
+          "generation": "20260915T1800Z-489cc96de897",
+          "manifestPath": "video-manifests/pacific-wna-overlay/raw-visir/archive/20260915T1800Z-489cc96de897.json",
           "composites": [
             {
               "presetId": "operational-default-v1",
@@ -4977,7 +5020,6 @@
                 "smoke",
                 "radar-coverage",
                 "radar-rain",
-                "transmission-lines",
                 "boundaries",
                 "glm-lightning-trail",
                 "lightning-trail",
@@ -4986,9 +5028,28 @@
                 "model-hgt500"
               ],
               "rangeHours": 168,
-              "generatedAt": "2026-09-15T18:12:40.546955Z",
-              "endValidTime": "2026-09-15T15:00:00Z",
-              "endSourceTime": "2026-09-15T15:00:00Z",
+              "generatedAt": "2026-09-15T19:34:43.716257Z",
+              "endValidTime": "2026-09-15T18:00:00Z",
+              "endSourceTime": "2026-09-15T18:00:00Z",
+              "cadenceMinutes": 180
+            },
+            {
+              "presetId": "weather-full-v1",
+              "layerIds": [
+                "base-dark",
+                "raw-visir",
+                "radar-coverage",
+                "radar-rain",
+                "boundaries",
+                "glm-lightning-trail",
+                "lightning-trail",
+                "model-mslp",
+                "model-hgt500"
+              ],
+              "rangeHours": 168,
+              "generatedAt": "2026-09-15T19:34:43.716257Z",
+              "endValidTime": "2026-09-15T18:00:00Z",
+              "endSourceTime": "2026-09-15T18:00:00Z",
               "cadenceMinutes": 180
             }
           ]
@@ -5018,11 +5079,34 @@
               "model-hgt500"
             ],
             "rangeHours": 24,
-            "generation": "20260915T1800Z-892cd65fc773",
-            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/day/operational-default-v1/24/20260915T1800Z-892cd65fc773.json",
-            "generatedAt": "2026-09-15T18:41:25.004175Z",
-            "endValidTime": "2026-09-15T18:00:00Z",
-            "endSourceTime": "2026-09-15T18:00:20Z",
+            "generation": "20260915T1830Z-e7a9108279ca",
+            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/day/operational-default-v1/24/20260915T1830Z-e7a9108279ca.json",
+            "generatedAt": "2026-09-15T19:12:38.734078Z",
+            "endValidTime": "2026-09-15T18:30:00Z",
+            "endSourceTime": "2026-09-15T18:30:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1830Z-513118553fc0",
+            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/day/weather-full-v1/24/20260915T1830Z-513118553fc0.json",
+            "generatedAt": "2026-09-15T19:12:38.734078Z",
+            "endValidTime": "2026-09-15T18:30:00Z",
+            "endSourceTime": "2026-09-15T18:30:20Z",
             "renditionPolicy": "high-only"
           }
         ],
@@ -5045,11 +5129,34 @@
               "model-hgt500"
             ],
             "rangeHours": 3,
-            "generation": "20260915T1840Z-4a74764e4e64",
-            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1840Z-4a74764e4e64.json",
-            "generatedAt": "2026-09-15T19:03:38.638505Z",
-            "endValidTime": "2026-09-15T18:40:00Z",
-            "endSourceTime": "2026-09-15T18:40:20Z",
+            "generation": "20260915T1910Z-a7b7f73ec311",
+            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1910Z-a7b7f73ec311.json",
+            "generatedAt": "2026-09-15T19:37:36.158338Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-fa61f7ad2916",
+            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/weather-full-v1/3/20260915T1910Z-fa61f7ad2916.json",
+            "generatedAt": "2026-09-15T19:37:36.158338Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
             "renditionPolicy": "high-only"
           },
           {
@@ -5070,11 +5177,34 @@
               "model-hgt500"
             ],
             "rangeHours": 6,
-            "generation": "20260915T1820Z-a9d610e90494",
-            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1820Z-a9d610e90494.json",
-            "generatedAt": "2026-09-15T18:55:38.767967Z",
-            "endValidTime": "2026-09-15T18:20:00Z",
-            "endSourceTime": "2026-09-15T18:20:20Z",
+            "generation": "20260915T1910Z-bae89d3aee7e",
+            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1910Z-bae89d3aee7e.json",
+            "generatedAt": "2026-09-15T19:38:23.103543Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-9d976ba797be",
+            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/weather-full-v1/6/20260915T1910Z-9d976ba797be.json",
+            "generatedAt": "2026-09-15T19:38:23.103543Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
             "renditionPolicy": "high-only"
           },
           {
@@ -5095,11 +5225,218 @@
               "model-hgt500"
             ],
             "rangeHours": 12,
-            "generation": "20260915T1830Z-bae6fb90d463",
-            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1830Z-bae6fb90d463.json",
-            "generatedAt": "2026-09-15T18:57:21.864662Z",
-            "endValidTime": "2026-09-15T18:30:00Z",
-            "endSourceTime": "2026-09-15T18:30:20Z",
+            "generation": "20260915T1910Z-ce9ce9783b45",
+            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1910Z-ce9ce9783b45.json",
+            "generatedAt": "2026-09-15T19:38:59.552342Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-caa2a79079a3",
+            "manifestPath": "composite-manifests/bc-large-overlay/eccc-geocolor/live/weather-full-v1/12/20260915T1910Z-caa2a79079a3.json",
+            "generatedAt": "2026-09-15T19:38:59.552342Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          }
+        ]
+      }
+    },
+    "bc-northeast-overlay": {
+      "eccc-geocolor": {
+        "day": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1900Z-727415f28a32",
+            "manifestPath": "composite-manifests/bc-northeast-overlay/eccc-geocolor/day/operational-default-v1/24/20260915T1900Z-727415f28a32.json",
+            "generatedAt": "2026-09-15T19:31:02.618383Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1900Z-6041386e1d95",
+            "manifestPath": "composite-manifests/bc-northeast-overlay/eccc-geocolor/day/weather-full-v1/24/20260915T1900Z-6041386e1d95.json",
+            "generatedAt": "2026-09-15T19:31:02.618383Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:20Z",
+            "renditionPolicy": "high-only"
+          }
+        ],
+        "live": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-a4534ae159bd",
+            "manifestPath": "composite-manifests/bc-northeast-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1910Z-a4534ae159bd.json",
+            "generatedAt": "2026-09-15T19:38:08.699651Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-cc12be8a2558",
+            "manifestPath": "composite-manifests/bc-northeast-overlay/eccc-geocolor/live/weather-full-v1/3/20260915T1910Z-cc12be8a2558.json",
+            "generatedAt": "2026-09-15T19:38:08.699651Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-f738ff59a117",
+            "manifestPath": "composite-manifests/bc-northeast-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1910Z-f738ff59a117.json",
+            "generatedAt": "2026-09-15T19:38:37.155452Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-0ceca0c32d48",
+            "manifestPath": "composite-manifests/bc-northeast-overlay/eccc-geocolor/live/weather-full-v1/6/20260915T1910Z-0ceca0c32d48.json",
+            "generatedAt": "2026-09-15T19:38:37.155452Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-ef7266538c34",
+            "manifestPath": "composite-manifests/bc-northeast-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1910Z-ef7266538c34.json",
+            "generatedAt": "2026-09-15T19:39:09.952989Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-b39d1c55ef1c",
+            "manifestPath": "composite-manifests/bc-northeast-overlay/eccc-geocolor/live/weather-full-v1/12/20260915T1910Z-b39d1c55ef1c.json",
+            "generatedAt": "2026-09-15T19:39:09.952989Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
             "renditionPolicy": "high-only"
           }
         ]
@@ -5126,11 +5463,34 @@
               "model-hgt500"
             ],
             "rangeHours": 24,
-            "generation": "20260915T1800Z-542e473684cc",
-            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/day/operational-default-v1/24/20260915T1800Z-542e473684cc.json",
-            "generatedAt": "2026-09-15T18:41:25.004174Z",
-            "endValidTime": "2026-09-15T18:00:00Z",
-            "endSourceTime": "2026-09-15T18:00:20Z",
+            "generation": "20260915T1830Z-df0b69c7d53e",
+            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/day/operational-default-v1/24/20260915T1830Z-df0b69c7d53e.json",
+            "generatedAt": "2026-09-15T19:19:49.937946Z",
+            "endValidTime": "2026-09-15T18:30:00Z",
+            "endSourceTime": "2026-09-15T18:30:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1830Z-504ecfa1762e",
+            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/day/weather-full-v1/24/20260915T1830Z-504ecfa1762e.json",
+            "generatedAt": "2026-09-15T19:19:49.937946Z",
+            "endValidTime": "2026-09-15T18:30:00Z",
+            "endSourceTime": "2026-09-15T18:30:20Z",
             "renditionPolicy": "high-only"
           }
         ],
@@ -5153,11 +5513,34 @@
               "model-hgt500"
             ],
             "rangeHours": 3,
-            "generation": "20260915T1840Z-21d7c81cdd85",
-            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1840Z-21d7c81cdd85.json",
-            "generatedAt": "2026-09-15T19:03:38.623549Z",
-            "endValidTime": "2026-09-15T18:40:00Z",
-            "endSourceTime": "2026-09-15T18:40:20Z",
+            "generation": "20260915T1910Z-3888e5704a87",
+            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1910Z-3888e5704a87.json",
+            "generatedAt": "2026-09-15T19:37:36.112716Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-333bfe1e9004",
+            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/weather-full-v1/3/20260915T1910Z-333bfe1e9004.json",
+            "generatedAt": "2026-09-15T19:37:36.112716Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
             "renditionPolicy": "high-only"
           },
           {
@@ -5178,11 +5561,34 @@
               "model-hgt500"
             ],
             "rangeHours": 6,
-            "generation": "20260915T1820Z-2a306090b9a6",
-            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1820Z-2a306090b9a6.json",
-            "generatedAt": "2026-09-15T18:55:38.767925Z",
-            "endValidTime": "2026-09-15T18:20:00Z",
-            "endSourceTime": "2026-09-15T18:20:20Z",
+            "generation": "20260915T1910Z-c36637467b0d",
+            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1910Z-c36637467b0d.json",
+            "generatedAt": "2026-09-15T19:38:22.857507Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-1b186ab664a9",
+            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/weather-full-v1/6/20260915T1910Z-1b186ab664a9.json",
+            "generatedAt": "2026-09-15T19:38:22.857507Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
             "renditionPolicy": "high-only"
           },
           {
@@ -5203,11 +5609,34 @@
               "model-hgt500"
             ],
             "rangeHours": 12,
-            "generation": "20260915T1830Z-38590839e8b0",
-            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1830Z-38590839e8b0.json",
-            "generatedAt": "2026-09-15T18:57:21.864668Z",
-            "endValidTime": "2026-09-15T18:30:00Z",
-            "endSourceTime": "2026-09-15T18:30:20Z",
+            "generation": "20260915T1910Z-1c9f01ea25e6",
+            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1910Z-1c9f01ea25e6.json",
+            "generatedAt": "2026-09-15T19:38:59.552702Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-6139330f7192",
+            "manifestPath": "composite-manifests/bc-small-overlay/eccc-geocolor/live/weather-full-v1/12/20260915T1910Z-6139330f7192.json",
+            "generatedAt": "2026-09-15T19:38:59.552702Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
             "renditionPolicy": "high-only"
           }
         ]
@@ -5232,11 +5661,32 @@
               "hotspots"
             ],
             "rangeHours": 3,
-            "generation": "20260915T1840Z-37a582c8f7f7",
-            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1840Z-37a582c8f7f7.json",
-            "generatedAt": "2026-09-15T19:03:50.201218Z",
-            "endValidTime": "2026-09-15T18:40:00Z",
-            "endSourceTime": "2026-09-15T18:40:20Z",
+            "generation": "20260915T1910Z-33610863d84d",
+            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1910Z-33610863d84d.json",
+            "generatedAt": "2026-09-15T19:38:08.699587Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-ef45962a7fd4",
+            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/weather-full-v1/3/20260915T1910Z-ef45962a7fd4.json",
+            "generatedAt": "2026-09-15T19:38:08.699587Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
             "renditionPolicy": "high-only"
           },
           {
@@ -5255,11 +5705,32 @@
               "hotspots"
             ],
             "rangeHours": 6,
-            "generation": "20260915T1820Z-ce77d7e12f8d",
-            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1820Z-ce77d7e12f8d.json",
-            "generatedAt": "2026-09-15T18:55:44.992902Z",
-            "endValidTime": "2026-09-15T18:20:00Z",
-            "endSourceTime": "2026-09-15T18:20:20Z",
+            "generation": "20260915T1910Z-c7d680e46ff0",
+            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1910Z-c7d680e46ff0.json",
+            "generatedAt": "2026-09-15T19:38:37.155506Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-8cc12bb58f49",
+            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/weather-full-v1/6/20260915T1910Z-8cc12bb58f49.json",
+            "generatedAt": "2026-09-15T19:38:37.155506Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
             "renditionPolicy": "high-only"
           },
           {
@@ -5278,11 +5749,604 @@
               "hotspots"
             ],
             "rangeHours": 12,
-            "generation": "20260915T1830Z-99690a7f092a",
-            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1830Z-99690a7f092a.json",
-            "generatedAt": "2026-09-15T18:57:33.706006Z",
+            "generation": "20260915T1910Z-cd094946303f",
+            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1910Z-cd094946303f.json",
+            "generatedAt": "2026-09-15T19:39:09.953064Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-f342f9887e4e",
+            "manifestPath": "composite-manifests/bc-south-coast-overlay/eccc-geocolor/live/weather-full-v1/12/20260915T1910Z-f342f9887e4e.json",
+            "generatedAt": "2026-09-15T19:39:09.953064Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          }
+        ]
+      }
+    },
+    "bc-southeast-overlay": {
+      "eccc-geocolor": {
+        "day": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1900Z-8782595c831e",
+            "manifestPath": "composite-manifests/bc-southeast-overlay/eccc-geocolor/day/operational-default-v1/24/20260915T1900Z-8782595c831e.json",
+            "generatedAt": "2026-09-15T19:26:31.225768Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1900Z-3359fbdcb5f5",
+            "manifestPath": "composite-manifests/bc-southeast-overlay/eccc-geocolor/day/weather-full-v1/24/20260915T1900Z-3359fbdcb5f5.json",
+            "generatedAt": "2026-09-15T19:26:31.225768Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:20Z",
+            "renditionPolicy": "high-only"
+          }
+        ],
+        "live": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-89a1406b0fdf",
+            "manifestPath": "composite-manifests/bc-southeast-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1910Z-89a1406b0fdf.json",
+            "generatedAt": "2026-09-15T19:37:54.681828Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-eccc79f02f46",
+            "manifestPath": "composite-manifests/bc-southeast-overlay/eccc-geocolor/live/weather-full-v1/3/20260915T1910Z-eccc79f02f46.json",
+            "generatedAt": "2026-09-15T19:37:54.681828Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-3154200023ca",
+            "manifestPath": "composite-manifests/bc-southeast-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1910Z-3154200023ca.json",
+            "generatedAt": "2026-09-15T19:38:30.322164Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-45468cc5c766",
+            "manifestPath": "composite-manifests/bc-southeast-overlay/eccc-geocolor/live/weather-full-v1/6/20260915T1910Z-45468cc5c766.json",
+            "generatedAt": "2026-09-15T19:38:30.322164Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-759bcb9692ab",
+            "manifestPath": "composite-manifests/bc-southeast-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1910Z-759bcb9692ab.json",
+            "generatedAt": "2026-09-15T19:39:05.264288Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-f169e51f885c",
+            "manifestPath": "composite-manifests/bc-southeast-overlay/eccc-geocolor/live/weather-full-v1/12/20260915T1910Z-f169e51f885c.json",
+            "generatedAt": "2026-09-15T19:39:05.264288Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          }
+        ]
+      }
+    },
+    "bc-southwest-overlay": {
+      "eccc-geocolor": {
+        "day": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1830Z-2884f029b60e",
+            "manifestPath": "composite-manifests/bc-southwest-overlay/eccc-geocolor/day/operational-default-v1/24/20260915T1830Z-2884f029b60e.json",
+            "generatedAt": "2026-09-15T19:24:43.360651Z",
             "endValidTime": "2026-09-15T18:30:00Z",
             "endSourceTime": "2026-09-15T18:30:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1830Z-903819d53504",
+            "manifestPath": "composite-manifests/bc-southwest-overlay/eccc-geocolor/day/weather-full-v1/24/20260915T1830Z-903819d53504.json",
+            "generatedAt": "2026-09-15T19:24:43.360651Z",
+            "endValidTime": "2026-09-15T18:30:00Z",
+            "endSourceTime": "2026-09-15T18:30:20Z",
+            "renditionPolicy": "high-only"
+          }
+        ],
+        "live": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-cac2ceaef384",
+            "manifestPath": "composite-manifests/bc-southwest-overlay/eccc-geocolor/live/operational-default-v1/3/20260915T1910Z-cac2ceaef384.json",
+            "generatedAt": "2026-09-15T19:37:54.681905Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 3,
+            "generation": "20260915T1910Z-9a991602c575",
+            "manifestPath": "composite-manifests/bc-southwest-overlay/eccc-geocolor/live/weather-full-v1/3/20260915T1910Z-9a991602c575.json",
+            "generatedAt": "2026-09-15T19:37:54.681905Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-3d4aefa608a3",
+            "manifestPath": "composite-manifests/bc-southwest-overlay/eccc-geocolor/live/operational-default-v1/6/20260915T1910Z-3d4aefa608a3.json",
+            "generatedAt": "2026-09-15T19:38:30.322115Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 6,
+            "generation": "20260915T1910Z-f53c3d111c59",
+            "manifestPath": "composite-manifests/bc-southwest-overlay/eccc-geocolor/live/weather-full-v1/6/20260915T1910Z-f53c3d111c59.json",
+            "generatedAt": "2026-09-15T19:38:30.322115Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail",
+              "hotspots"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-230f3d634349",
+            "manifestPath": "composite-manifests/bc-southwest-overlay/eccc-geocolor/live/operational-default-v1/12/20260915T1910Z-230f3d634349.json",
+            "generatedAt": "2026-09-15T19:39:05.359553Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "eccc-geocolor",
+              "radar-coverage",
+              "radar-rain",
+              "watersheds",
+              "transmission-lines",
+              "boundaries",
+              "lightning-trail"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1910Z-5e17167678e3",
+            "manifestPath": "composite-manifests/bc-southwest-overlay/eccc-geocolor/live/weather-full-v1/12/20260915T1910Z-5e17167678e3.json",
+            "generatedAt": "2026-09-15T19:39:05.359553Z",
+            "endValidTime": "2026-09-15T19:10:00Z",
+            "endSourceTime": "2026-09-15T19:10:20Z",
+            "renditionPolicy": "high-only"
+          }
+        ]
+      }
+    },
+    "north-america-overlay": {
+      "raw-visir": {
+        "day": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "raw-visir",
+              "radar-coverage",
+              "radar-rain",
+              "boundaries",
+              "glm-lightning-trail",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1900Z-c5aaaff02555",
+            "manifestPath": "composite-manifests/north-america-overlay/raw-visir/day/operational-default-v1/24/20260915T1900Z-c5aaaff02555.json",
+            "generatedAt": "2026-09-15T19:34:05.686268Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:00Z",
+            "renditionPolicy": "high-only"
+          }
+        ],
+        "live": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "raw-visir",
+              "radar-coverage",
+              "radar-rain",
+              "boundaries",
+              "glm-lightning-trail",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1920Z-f093c0ca3cb6",
+            "manifestPath": "composite-manifests/north-america-overlay/raw-visir/live/operational-default-v1/12/20260915T1920Z-f093c0ca3cb6.json",
+            "generatedAt": "2026-09-15T19:39:14.314764Z",
+            "endValidTime": "2026-09-15T19:20:00Z",
+            "endSourceTime": "2026-09-15T19:20:00Z",
+            "renditionPolicy": "high-only"
+          }
+        ]
+      }
+    },
+    "north-pacific-overlay": {
+      "raw-visir": {
+        "day": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "raw-visir",
+              "radar-coverage",
+              "radar-rain",
+              "boundaries",
+              "glm-lightning-trail",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1900Z-2f62a7c65f3e",
+            "manifestPath": "composite-manifests/north-pacific-overlay/raw-visir/day/operational-default-v1/24/20260915T1900Z-2f62a7c65f3e.json",
+            "generatedAt": "2026-09-15T19:35:53.557935Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:00Z",
+            "renditionPolicy": "high-only"
+          }
+        ],
+        "live": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "raw-visir",
+              "radar-coverage",
+              "radar-rain",
+              "boundaries",
+              "glm-lightning-trail",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1900Z-805eb95ea5cb",
+            "manifestPath": "composite-manifests/north-pacific-overlay/raw-visir/live/operational-default-v1/12/20260915T1900Z-805eb95ea5cb.json",
+            "generatedAt": "2026-09-15T19:35:27.862920Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:00Z",
+            "renditionPolicy": "high-only"
+          }
+        ]
+      }
+    },
+    "pacific-wna-overlay": {
+      "raw-visir": {
+        "day": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "raw-visir",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "boundaries",
+              "glm-lightning-trail",
+              "lightning-trail",
+              "hotspots",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1900Z-1936fb16a99a",
+            "manifestPath": "composite-manifests/pacific-wna-overlay/raw-visir/day/operational-default-v1/24/20260915T1900Z-1936fb16a99a.json",
+            "generatedAt": "2026-09-15T19:33:41.841130Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:00Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "raw-visir",
+              "radar-coverage",
+              "radar-rain",
+              "boundaries",
+              "glm-lightning-trail",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 24,
+            "generation": "20260915T1900Z-0bf6e6ba547d",
+            "manifestPath": "composite-manifests/pacific-wna-overlay/raw-visir/day/weather-full-v1/24/20260915T1900Z-0bf6e6ba547d.json",
+            "generatedAt": "2026-09-15T19:33:41.841130Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:00Z",
+            "renditionPolicy": "high-only"
+          }
+        ],
+        "live": [
+          {
+            "schemaVersion": 1,
+            "presetId": "operational-default-v1",
+            "layerIds": [
+              "base-dark",
+              "raw-visir",
+              "smoke",
+              "radar-coverage",
+              "radar-rain",
+              "boundaries",
+              "glm-lightning-trail",
+              "lightning-trail",
+              "hotspots",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1900Z-fd84c3c280ad",
+            "manifestPath": "composite-manifests/pacific-wna-overlay/raw-visir/live/operational-default-v1/12/20260915T1900Z-fd84c3c280ad.json",
+            "generatedAt": "2026-09-15T19:32:47.613582Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:00Z",
+            "renditionPolicy": "high-only"
+          },
+          {
+            "schemaVersion": 1,
+            "presetId": "weather-full-v1",
+            "layerIds": [
+              "base-dark",
+              "raw-visir",
+              "radar-coverage",
+              "radar-rain",
+              "boundaries",
+              "glm-lightning-trail",
+              "lightning-trail",
+              "model-mslp",
+              "model-hgt500"
+            ],
+            "rangeHours": 12,
+            "generation": "20260915T1900Z-bf7feb759fcb",
+            "manifestPath": "composite-manifests/pacific-wna-overlay/raw-visir/live/weather-full-v1/12/20260915T1900Z-bf7feb759fcb.json",
+            "generatedAt": "2026-09-15T19:32:47.613582Z",
+            "endValidTime": "2026-09-15T19:00:00Z",
+            "endSourceTime": "2026-09-15T19:00:00Z",
             "renditionPolicy": "high-only"
           }
         ]

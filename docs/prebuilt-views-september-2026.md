@@ -47,11 +47,13 @@ own true-colour/neutral-infrared rendering. NOAA VIS/IR uses the NOAA STAR/CIRA
 GeoColor image already downloaded for the Pacific. The same source download
 now also projects directly to North America, skipping already-rendered targets.
 Both are NOAA observations; differences come from the rendering and coverage.
+GeoColor uses a daytime true-colour image and a different infrared composite at
+night; WestWX uses its own neutral infrared blend across twilight.
 The GOES-West eastern edge remains less well observed than the western domain.
 NOAA IR retains its existing calibrated infrared source.
 
 North America had no retained NOAA STAR archive at migration time. Existing
-WestWX observations can bridge that history with explicit transition provenance;
+WestWX observations bridge that history with explicit transition provenance;
 new and available recent slots become NOAA STAR GeoColor. Do not relabel old
 observation times or interpolate synthetic intermediate observations. This
 bounded migration avoids downloading seven days of large raw ABI files.

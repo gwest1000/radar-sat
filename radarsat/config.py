@@ -601,14 +601,14 @@ def _broad_product(
 ) -> dict[str, object]:
     rapid_north_america = domain == "north-america"
     satellite_prefix = "raw"
-    anchor_layer = "westwx-ir" if rapid_north_america else "raw-ir"
+    ir_layer = "westwx-ir" if rapid_north_america else "raw-ir"
     product: dict[str, object] = {
         "id": product_id,
         "title": title,
         "shortTitle": short_title,
         "group": "Broad",
         "domain": domain,
-        "anchorLayer": anchor_layer,
+        "anchorLayer": "raw-visir",
         "frameIntervalMinutes": 20,
         "dayFrameIntervalMinutes": 30,
         "archiveFrameIntervalMinutes": 180 if domain == "north-pacific" else 60,
@@ -617,7 +617,7 @@ def _broad_product(
         "layers": [
             {"id": "base-dark", "opacity": 1.0},
             {"id": f"{satellite_prefix}-visir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite", "controlId": "noaa-visir"},
-            {"id": anchor_layer, "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlId": "noaa-ir"},
+            {"id": ir_layer, "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlId": "noaa-ir"},
             {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": product_id == "pacific-wna-overlay"},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
@@ -631,7 +631,7 @@ def _broad_product(
             {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "model-contours"},
         ],
         "legends": [
-            anchor_layer,
+            ir_layer,
             "radar-rain",
             "ptype",
             "glm-lightning-age",
@@ -640,7 +640,7 @@ def _broad_product(
         ],
         "notes": notes
         + [
-            "Visible/IR uses a solar-elevation blend from calibrated true colour by day to neutral 10.3/10.4 µm infrared at night; no false-colour IR is mixed across the terminator.",
+            "NOAA VIS/IR uses GeoColor: true colour by day and its infrared composite at night. NOAA IR is a separate calibrated brightness-temperature display.",
             *(
                 ["North America NOAA VIS/IR uses NOAA STAR GOES-18 GeoColor at a nominal ten-minute cadence. The far eastern edge has weaker GOES-West viewing geometry."]
                 if rapid_north_america

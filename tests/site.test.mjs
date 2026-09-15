@@ -898,7 +898,7 @@ test("ships a runtime data configuration", async () => {
   const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
   assert.equal(northPacific.shortTitle, "Pacific");
   assert.equal(demo.domains["north-pacific"].title, "Pacific");
-  assert.equal(northAmerica.anchorLayer, "westwx-ir");
+  assert.equal(northAmerica.anchorLayer, "raw-visir");
   assert.equal(northAmerica.frameIntervalMinutes, 20);
   assert.equal(northAmerica.dayFrameIntervalMinutes, 30);
   assert.equal(northAmerica.archiveFrameIntervalMinutes, 60);
@@ -918,7 +918,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, false);
   assert.equal(northAmerica.layers.find((layer) => layer.id === "model-hgt500").optional, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
-  assert.equal(northPacific.anchorLayer, "raw-ir");
+  assert.equal(northPacific.anchorLayer, "raw-visir");
   assert.equal(northPacific.frameIntervalMinutes, 20);
   assert.match(viewer, /"lightning-hour"/);
   assert.match(viewer, /"glm-lightning-hour"/);

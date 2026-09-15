@@ -16,6 +16,11 @@ class PrebuiltPolicyTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         self.assertEqual(sum(actual.values()), 60)
 
+    def test_availability_anchor_is_the_default_satellite(self):
+        for product in PRODUCTS:
+            satellite=next(layer for layer in product['layers'] if layer.get('choiceGroup')=='satellite' and layer.get('defaultEnabled'))
+            self.assertEqual(product['anchorLayer'],satellite['id'])
+
     def test_zoom_keeps_centers_aspect_and_display_size(self):
         old = {'southwest': (.3381,.5300,.4048,.3438),
                'southeast': (.5268,.4854,.4050,.3473),
