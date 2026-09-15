@@ -578,6 +578,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
             "transmissionRenderVersion": STATIC_TRANSMISSION_RENDER_VERSION,
             "width": REGIONAL_STATIC_WIDTH,
             "boundaryScale": REGIONAL_BOUNDARY_SCALE,
+            "regionalCityScale": "match-full-grid-v1",
             "lineWidthScale": REGIONAL_LINE_WIDTH_SCALE,
             "transmissionLineWidthScale": {"south-coast": SOUTH_COAST_TRANSMISSION_SCALE, "quadrants": 0.75},
             "viewports": {
@@ -633,6 +634,8 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
                     boundary_scale=REGIONAL_BOUNDARY_SCALE,
                     line_width_scale=REGIONAL_LINE_WIDTH_SCALE,
                     render_base=False,
+                    city_scale=(1.0 if region_id == "south-coast" else
+                                REGIONAL_STATIC_WIDTH / (domain.width * viewport["width"])),
                 )
                 render_transmission_overlay(
                     regional_domain,

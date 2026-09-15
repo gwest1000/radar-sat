@@ -368,7 +368,7 @@ latest_token() {
             if $recipe.enabledWith then
               ($optionalLayers | index($recipe.enabledWith)) != null
             elif $recipe.choiceGroup == "satellite" then
-              $recipe.id == $satellite
+              $recipe.id == $satellite and $product.id != "bc-south-coast-overlay"
             elif $recipe.optional then
               ($optionalLayers | index($recipe.id)) != null
             else

@@ -580,6 +580,7 @@ def render_static_maps(
     line_width_scale: float = 1.0,
     render_base: bool = True,
     black_province_borders: bool = False,
+    city_scale: float = 1.0,
 ) -> None:
     import matplotlib
 
@@ -764,10 +765,10 @@ def render_static_maps(
             city_x,
             city_y,
             marker="o",
-            markersize=2.8 * boundary_scale,
+            markersize=2.8 * boundary_scale * city_scale,
             color="#ffffff",
             markeredgecolor="#071018",
-            markeredgewidth=0.9 * boundary_scale,
+            markeredgewidth=0.9 * boundary_scale * city_scale,
             zorder=8,
         )
         text = axis.text(
@@ -775,13 +776,13 @@ def render_static_maps(
             city_y + (bbox[3] - bbox[1]) * 0.0038,
             name,
             color="#ffffff",
-            fontsize=7.3 * boundary_scale,
+            fontsize=7.3 * boundary_scale * city_scale,
             weight="medium",
             zorder=9,
         )
         text.set_path_effects([
             path_effects.Stroke(
-                linewidth=2.1 * boundary_scale,
+                linewidth=2.1 * boundary_scale * city_scale,
                 foreground="#071018",
             ),
             path_effects.Normal(),

@@ -10,7 +10,7 @@ from radarsat.cloud_raster import ensure_enhanced_msc, expose_enhanced_msc, ENHA
 from radarsat import cloud_style
 from radarsat.config import VIEWPORTS, VIDEO_COMPOSITE_PRESETS, video_composite_layer_ids
 from radarsat.composite_video import _RenderContext, _render_high_frame
-from radarsat.video import VIDEO_PROFILES, SelectedFrame
+from radarsat.video import VIDEO_PROFILES, SelectedFrame, _composite_presets
 from dataclasses import replace
 
 class BCRefinementTests(unittest.TestCase):
@@ -33,6 +33,7 @@ class BCRefinementTests(unittest.TestCase):
             spec=replace(next(s for s in VIDEO_PROFILES if s.product_id=='bc-south-coast-overlay'),width=32,height=24)
             t=dt.datetime(2026,9,15,20,tzinfo=dt.timezone.utc)
             frame=SelectedFrame(t,t,{},'eccc-geocolor','missing-source.png','fetched')
+            self.assertEqual(len(_composite_presets(spec)), 2)
             for preset in VIDEO_COMPOSITE_PRESETS[spec.product_id]:
                 ids=video_composite_layer_ids(spec.product_id,spec.layer_id,preset['id'])
                 self.assertNotIn('eccc-geocolor',ids)

@@ -951,11 +951,11 @@ def _composite_presets(
     include_hybrid: bool = False,
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
     product = _product(spec.product_id)
-    if not any(
-        str(recipe.get("id", "")) == spec.layer_id
-        and bool(recipe.get("defaultEnabled", False))
-        for recipe in product.get("layers", [])
-    ):
+    # A no-satellite composite still needs an observation clock for its frames.
+    default_clock = next((str(recipe["id"]) for recipe in product.get("layers", [])
+                          if recipe.get("choiceGroup") == "satellite" and recipe.get("defaultEnabled")),
+                         product.get("anchorLayer"))
+    if spec.layer_id != default_clock:
         return ()
     values = VIDEO_COMPOSITE_PRESETS.get(spec.product_id, ())
     requested = set(preset_ids) if preset_ids is not None else None
