@@ -74,7 +74,8 @@ satellite timestamp is advertised in the visible layer list. Satellite remains a
 optional custom layer. Fire adds smoke and fire icons.
 
 BC NE/SE/SW receive an additional centered 10% zoom, with unchanged display size and
-aspect ratio. Separate regional transmission rasters use a thinner line scale. BC
+aspect ratio. City labels retain their previous full-grid display scale. Separate
+regional transmission rasters use a thinner line scale. BC
 and BC XL province/state borders are thicker and solid black; coastal linework and
 the separate regional boundary style remain unchanged.
 
