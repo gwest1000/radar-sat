@@ -10,7 +10,7 @@ are retired, including the old scheduler lane and stale environment override.
 | BC XL | 3, 6, 12, 24 h; 7 d | Full; Full + Fire | Enhanced MSC GeoColour |
 | BC | 3, 6, 12, 24 h | Full; Full + Fire | Enhanced MSC GeoColour |
 | BC NE / SE / SW | 3, 6, 12, 24 h | Full; Full + Fire | Enhanced MSC GeoColour |
-| South Coast | 3, 6, 12 h | Radar/Lightning; Radar/Lightning + Fire | Enhanced MSC GeoColour |
+| South Coast | 3, 6, 12 h | Radar/Lightning; Radar/Lightning + Fire | None (basemap) |
 | E Pac/W NA | 12, 24 h; 7 d | Full; Full + Fire | Enhanced NOAA VIS/IR |
 | Pacific / North America | 12, 24 h; 7 d | Full | Enhanced NOAA VIS/IR |
 
@@ -20,7 +20,7 @@ views also include MSLP/500 hPa. Regional model contours remain optional
 custom layers. Transmission lines are absent from the three broad products.
 South Coast transmission width is reduced by 15%, with a slightly wider
 watershed core. The three BC quadrant crops retain their centers and aspect
-ratios while their width/height are divided by 1.15; output dimensions stay
+ratios while their width/height are divided successively by 1.15 and 1.10; output dimensions stay
 unchanged. Regional overlay metadata prevents old cropped rasters from being
 reused at a new viewport.
 
@@ -64,3 +64,33 @@ the same 50% soft-colour grade, per-domain solar geometry and CRF 22 encoding.
 Complete enhanced generations replace untreated loops atomically. Original
 observation rasters remain available for custom layers and regeneration; graded
 PNGs stay in the existing shared 6 GB local cache and are not uploaded to R2.
+
+
+## BC view refinements (15 September)
+
+The South Coast exact recipes omit satellite entirely. Their existing MSC observation
+clock still schedules the frames, but rendering begins with the dark basemap and no
+satellite timestamp is advertised in the visible layer list. Satellite remains an
+optional custom layer. Fire adds smoke and fire icons.
+
+BC NE/SE/SW receive an additional centered 10% zoom, with unchanged display size and
+aspect ratio. Separate regional transmission rasters use a thinner line scale. BC
+and BC XL province/state borders are thicker and solid black; coastal linework and
+the separate regional boundary style remain unchanged.
+
+All encoders add eight repeated bottom-edge image rows before the remaining hidden
+alternating clock strip. This prevents scaling/codec filtering from exposing a
+flashing white line. The displayed dimensions and extent are unchanged. Cache and
+video render versions invalidate older untreated encodes.
+
+The Prebuilt Views menu opens on mouseover and remains available by click/touch.
+Its popover starts below the trigger, so hover cannot put an option under a click
+intended for the trigger. Headless desktop verification confirms this geometry.
+
+Custom MSC GeoColour uses a native-resolution server-rendered enhanced derivative,
+encoded once at WebP quality 88. Source rasters stay local encoder inputs; the public
+MSC layer and rapid edge expose enhanced derivatives only. Each observation is
+processed once, with source-correction/style invalidation and bounded advisory locks.
+Publication projection is idempotent, and an unavailable enhancement is not replaced
+by untreated imagery. Original NOAA imagery is no longer spliced into the custom MSC
+layer. The initial 189-image retained archive took about 320 seconds with two workers.
