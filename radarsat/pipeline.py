@@ -96,12 +96,12 @@ BROAD_FIRE_SYMBOL_REFERENCE_WIDTH = 1920
 LIGHTNING_TRAIL_HOURS = 24.0
 LIGHTNING_ARCHIVE_HOURS = 168.0
 FIRE_ARCHIVE_HOURS = 168.0
-STATIC_BOUNDARY_RENDER_VERSION = 4
+STATIC_BOUNDARY_RENDER_VERSION = 5
 STATIC_TRANSMISSION_RENDER_VERSION = 2
 STATIC_WATERSHED_RENDER_VERSION = 2
 REGIONAL_WATERSHED_WIDTH = 2880
 REGIONAL_STATIC_WIDTH = 2880
-REGIONAL_STATIC_REGIONS = ("south-coast",)
+REGIONAL_STATIC_REGIONS = ("south-coast", "northeast", "southeast", "southwest")
 REGIONAL_BOUNDARY_SCALE = 1.25
 REGIONAL_LINE_WIDTH_SCALE = 2.0
 SOUTH_COAST_TRANSMISSION_SCALE = 1.7
@@ -224,6 +224,9 @@ def write_metadata(
     temporary = destination.with_name(f"{destination.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(payload, indent=2) + "\n")
     temporary.replace(destination)
+    if domain.id == "bc" and layer.id == "eccc-geocolor":
+        from .cloud_raster import ensure_enhanced_msc
+        ensure_enhanced_msc(root, payload)
 
 
 def selected_times(times: Iterable[dt.datetime], hours: float, latest_only: bool) -> list[dt.datetime]:
@@ -525,7 +528,8 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
         or not boundaries.exists()
         or static_versions.get("boundaries") != STATIC_BOUNDARY_RENDER_VERSION
     ):
-        render_static_maps(domain, base, boundaries)
+        render_static_maps(domain, base, boundaries, render_base=not base.exists(),
+                           black_province_borders=domain.id == "bc")
         static_versions["boundaries"] = STATIC_BOUNDARY_RENDER_VERSION
     watersheds = root / "static" / domain.id / "bch-watersheds.png"
     watershed_signature = {
@@ -575,7 +579,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
             "width": REGIONAL_STATIC_WIDTH,
             "boundaryScale": REGIONAL_BOUNDARY_SCALE,
             "lineWidthScale": REGIONAL_LINE_WIDTH_SCALE,
-            "transmissionLineWidthScale": SOUTH_COAST_TRANSMISSION_SCALE,
+            "transmissionLineWidthScale": {"south-coast": SOUTH_COAST_TRANSMISSION_SCALE, "quadrants": 0.75},
             "viewports": {
                 region_id: VIEWPORTS[region_id]
                 for region_id in REGIONAL_STATIC_REGIONS
@@ -634,7 +638,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
                     regional_domain,
                     regional_transmission,
                     output_width=REGIONAL_STATIC_WIDTH,
-                    line_width_scale=SOUTH_COAST_TRANSMISSION_SCALE,
+                    line_width_scale=SOUTH_COAST_TRANSMISSION_SCALE if region_id == "south-coast" else 0.75,
                 )
             static_versions["regionalDetail"] = regional_signature
     version_path.parent.mkdir(parents=True, exist_ok=True)

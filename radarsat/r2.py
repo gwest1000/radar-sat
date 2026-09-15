@@ -1754,6 +1754,8 @@ def discover_objects(
         catalog = json.loads(catalog_bytes)
     except json.JSONDecodeError as error:
         raise PublicationSafetyError("catalog.json is not valid JSON") from error
+    from .cloud_raster import expose_enhanced_msc
+    expose_enhanced_msc(catalog)
     # Ingest and retention intentionally run while publication is pending.
     # Normalize the catalog against files that still exist, and degrade a
     # broken optional tile pyramid to its whole-frame fallback.

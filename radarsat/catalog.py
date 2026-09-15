@@ -786,7 +786,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
                 )
                 static_files.extend(
                     (layer_id, filename)
-                    for region_id in ("south-coast",)
+                    for region_id in ("south-coast", "northeast", "southeast", "southwest")
                     for layer_id, filename in (
                         (
                             f"boundaries-region-{region_id}",

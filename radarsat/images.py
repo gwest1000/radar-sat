@@ -579,6 +579,7 @@ def render_static_maps(
     boundary_scale: float = 2,
     line_width_scale: float = 1.0,
     render_base: bool = True,
+    black_province_borders: bool = False,
 ) -> None:
     import matplotlib
 
@@ -696,7 +697,13 @@ def render_static_maps(
                 ("cultural", "admin_1_states_provinces_lines"),
             )
         )
-        for segments, dark_width, light_width, light_alpha in linework:
+        for index, (segments, dark_width, light_width, light_alpha) in enumerate(linework):
+            if black_province_borders and index == 2:
+                axis.add_collection(LineCollection(
+                    segments, colors="#000000", linewidths=3.2 * boundary_scale * line_width_scale,
+                    alpha=1.0, zorder=7,
+                ))
+                continue
             axis.add_collection(LineCollection(
                 segments,
                 colors="#071018",

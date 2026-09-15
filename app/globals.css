@@ -1032,7 +1032,8 @@ input:focus-visible {
 }
 
 /* Published recipes stay discoverable even while their media is delayed. */
-.prebuilt-popover { z-index: 90; }
+.prebuilt-selector > .layers-summary { height: 42px; }
+.prebuilt-popover { z-index: 90; top: 49px; bottom: 0; }
 .prebuilt-popover p { color: var(--muted); font-size: 0.75rem; line-height: 1.5; }
 .prebuilt-combo-list { display: grid; gap: 7px; }
 .prebuilt-combo {

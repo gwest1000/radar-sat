@@ -14,6 +14,7 @@ from PIL import Image
 
 from .catalog import build_catalog
 from . import cloud_style, cloud_policy
+from .video_clock import append_clock_strip
 from .config import (
     VIDEO_COMPOSITE_PRESETS,
     VIDEO_EXACT_RANGES,
@@ -56,7 +57,7 @@ from .video import (
 COMPOSITE_SIDECAR_SCHEMA_VERSION = 1
 HYBRID_COMPOSITE_SIDECAR_SCHEMA_VERSION = 2
 CLOUD_PILOT_VIDEO_CRF = 22
-COMPOSITE_FRAME_CACHE_VERSION = 1
+COMPOSITE_FRAME_CACHE_VERSION = 2
 COMPOSITE_FRAME_CACHE_MAX_AGE_HOURS = 36.0
 COMPOSITE_FRAME_CACHE_MAX_BYTES = 6_000_000_000
 COMPOSITE_LOCAL_GENERATIONS_TO_KEEP = 1
@@ -467,7 +468,7 @@ def _render_high_frame(
     destination: Path,
 ) -> None:
     stack_order = {layer_id: index for index, layer_id in enumerate(layer_ids)}
-    composed = context.satellite(frame).convert("RGBA")
+    composed = (context.satellite(frame) if spec.layer_id in layer_ids else context.base).convert("RGBA")
     try:
         for selection in sorted(
             selections,
@@ -490,11 +491,7 @@ def _render_high_frame(
         clock_phase = int(
             frame.valid_time.timestamp() // (spec.cadence_minutes * 60)
         ) % 2
-        encoded = Image.new(
-            "RGB",
-            (spec.width, spec.height + VIDEO_CLOCK_STRIP_HEIGHT),
-            (255, 255, 255) if clock_phase else (0, 0, 0),
-        )
+        encoded = append_clock_strip(composed, clock_phase)
         try:
             encoded.paste(composed.convert("RGB"), (0, 0))
             _atomic_png(destination, encoded)
@@ -542,12 +539,8 @@ def _derive_rendition(
         # Copy the hidden phase strip without spatially softening it. The high
         # cache uses a solid black or white strip, so one sampled pixel is exact.
         with Image.open(high_path) as source:
-            phase_colour = source.getpixel((0, high_content_height))
-        encoded = Image.new(
-            "RGB",
-            (width, height + VIDEO_CLOCK_STRIP_HEIGHT),
-            phase_colour,
-        )
+            phase_colour = source.getpixel((0, source.height - 1))
+        encoded = append_clock_strip(resized, int(phase_colour[0] > 127))
         try:
             encoded.paste(resized, (0, 0))
             _atomic_png(destination, encoded)

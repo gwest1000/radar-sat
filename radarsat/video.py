@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 from PIL import Image
 
 from . import cloud_style, cloud_policy
+from .video_clock import append_clock_strip
 from .catalog import build_catalog
 from .hotspots import render_fire_overlay
 from .config import (
@@ -36,7 +37,7 @@ from .config import (
 
 UTC = dt.timezone.utc
 VIDEO_SCHEMA_VERSION = 2
-VIDEO_RENDER_VERSION = 17
+VIDEO_RENDER_VERSION = 18
 PROXY_RENDER_VERSION = 1
 COMPOSITE_RENDER_VERSION = 2
 METEOROLOGICAL_MINUTE_SECONDS = 0.02
@@ -1230,15 +1231,7 @@ def _prepare_satellite_images(
         clock_phase = int(
             frame.valid_time.timestamp() // (spec.cadence_minutes * 60)
         ) % 2
-        encoded = Image.new(
-            "RGB",
-            (
-                spec.resolved_media_width,
-                spec.resolved_media_height + VIDEO_CLOCK_STRIP_HEIGHT,
-            ),
-            (255, 255, 255) if clock_phase else (0, 0, 0),
-        )
-        encoded.paste(composed, (0, 0))
+        encoded = append_clock_strip(composed, clock_phase)
         encoded.save(destination, "PNG", optimize=False, compress_level=1)
         if cached is None:
             rendered[key] = destination
@@ -1369,11 +1362,7 @@ def _prepare_composite_images(
         clock_phase = int(
             frame.valid_time.timestamp() // (spec.cadence_minutes * 60)
         ) % 2
-        encoded = Image.new(
-            "RGB",
-            (spec.width, spec.height + VIDEO_CLOCK_STRIP_HEIGHT),
-            (255, 255, 255) if clock_phase else (0, 0, 0),
-        )
+        encoded = append_clock_strip(composed, clock_phase)
         encoded.paste(composed.convert("RGB"), (0, 0))
         destination = temporary_root / f"composite-{index:04d}.png"
         encoded.save(destination, "PNG", optimize=False, compress_level=1)

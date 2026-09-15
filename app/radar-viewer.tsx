@@ -1173,6 +1173,10 @@ function activeAnchorLayer(product: Product, optionalLayers: Record<string, bool
     const recipe = product.layers.find((candidate) => candidate.id === id);
     return Boolean(recipe && isProductLayerEnabled(recipe, optionalLayers, product.layers));
   };
+  // South Coast's no-satellite prebuilts retain their existing observation clock.
+  if (product.id === "bc-south-coast-overlay" && !product.layers.some(
+    (recipe) => recipe.choiceGroup === "satellite" && enabled(recipe.id),
+  )) return product.anchorLayer;
   return ["eccc-geocolor", "raw-visir-5min", "raw-visir", "westwx-visir", "raw-ir", "westwx-ir", "convective", "snowfog", "radar-rain", "ptype", "lightning-trail", "hotspots"]
     .find(enabled) ?? product.anchorLayer;
 }
@@ -1527,7 +1531,7 @@ function sourceLabel(layerId: string): string | null {
 }
 
 function layerControlLabel(layerId: string): string {
-  if (layerId === "eccc-geocolor") return "MSC GeoColor";
+  if (layerId === "eccc-geocolor") return "Enhanced MSC GeoColour";
   if (layerId === "convective") return "ECCC Convective";
   if (layerId === "snowfog") return "Snow / Fog";
   if (layerId === "westwx-visir") return "WestWX VIS/IR";
@@ -2302,17 +2306,6 @@ export function RadarViewer() {
         ...(historical ?? edgeLayer),
         ...edgeLayer,
         frames: mergedFrames(historical?.frames ?? [], edgeLayer.frames ?? []),
-      };
-    }
-    const mscLayer = layers["eccc-geocolor"];
-    if (domain.id === "bc" && mscLayer) {
-      layers["eccc-geocolor"] = {
-        ...mscLayer,
-        frames: mscPrimaryFrames(
-          mscLayer.frames ?? [],
-          layers["raw-visir-native"]?.frames ?? [],
-          layers["raw-visir"]?.frames ?? [],
-        ),
       };
     }
     return { ...domain, layers };
@@ -4283,7 +4276,7 @@ export function RadarViewer() {
                   ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
                   opacity: layer.opacity,
                   filter: ["Overlay", "Broad"].includes(product.group)
-                    && ["convective", "snowfog", "eccc-geocolor", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
+                    && ["convective", "snowfog", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
                     ? satelliteFilter
                     : undefined,
                 }}
@@ -4301,7 +4294,7 @@ export function RadarViewer() {
                       ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
                       opacity: layer.opacity,
                       filter: [
-                        "convective", "snowfog", "eccc-geocolor",
+                        "convective", "snowfog",
                         "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir",
                       ].includes(layer.id) ? satelliteFilter : undefined,
                     }}
@@ -4349,6 +4342,7 @@ export function RadarViewer() {
         <aside className="legend-rail" aria-label="Map legends">
           <div className="layer-toolbar">
             <div className={`prebuilt-selector${viewsMenuOpen ? " is-open" : ""}`}
+              onMouseEnter={() => { setLayersMenuOpen(false); setViewsMenuOpen(true); }}
               onMouseLeave={() => setViewsMenuOpen(false)}
               onKeyDown={(event) => {
                 if (event.key === "Escape") setViewsMenuOpen(false);

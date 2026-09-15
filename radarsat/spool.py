@@ -545,6 +545,9 @@ def ingest_spool(
             destination = frame_path(output_root, domain, layer, valid_time)
             metadata = metadata_path(output_root, domain, layer, valid_time)
             if destination.exists() and _metadata_source(metadata) == NATIVE_SOURCE:
+                if layer_id == "eccc-geocolor":
+                    from .cloud_raster import ensure_enhanced_msc
+                    ensure_enhanced_msc(output_root, json.loads(metadata.read_text()))
                 if layer_id == "lightning":
                     derive_eccc_lightning_points(output_root, domain, valid_time)
                 continue

@@ -871,7 +871,7 @@ test("ships a runtime data configuration", async () => {
     ["eccc-geocolor", "raw-visir", "raw-ir", "convective", "snowfog"],
   );
   assert.equal(overlay.layers.find((layer) => layer.id === "raw-visir").defaultEnabled, false);
-  assert.match(viewer, /layerId === "eccc-geocolor"\) return "MSC GeoColor"/);
+  assert.match(viewer, /layerId === "eccc-geocolor"\) return "Enhanced MSC GeoColour"/);
   assert.equal(overlay.layers.find((layer) => layer.id === "snowfog").defaultEnabled, false);
   assert.equal(overlay.layers.find((layer) => layer.id === "model-hgt500").defaultEnabled, true);
   assert.equal(overlay.layers.find((layer) => layer.id === "model-mslp").optional, true);

@@ -18,6 +18,9 @@ class PrebuiltPolicyTests(unittest.TestCase):
 
     def test_availability_anchor_is_the_default_satellite(self):
         for product in PRODUCTS:
+            if product['id'] == 'bc-south-coast-overlay':
+                self.assertFalse(any(layer.get('defaultEnabled') for layer in product['layers'] if layer.get('choiceGroup') == 'satellite'))
+                continue
             satellite=next(layer for layer in product['layers'] if layer.get('choiceGroup')=='satellite' and layer.get('defaultEnabled'))
             self.assertEqual(product['anchorLayer'],satellite['id'])
 
@@ -29,8 +32,8 @@ class PrebuiltPolicyTests(unittest.TestCase):
             new = VIEWPORTS[key]
             self.assertAlmostEqual(new['left']+new['width']/2, x+w/2)
             self.assertAlmostEqual(new['top']+new['height']/2, y+h/2)
-            self.assertAlmostEqual(w/new['width'], 1.15)
-            self.assertAlmostEqual(h/new['height'], 1.15)
+            self.assertAlmostEqual(w/new['width'], 1.15 * 1.10)
+            self.assertAlmostEqual(h/new['height'], 1.15 * 1.10)
             self.assertEqual(_display_size('bc', new), _display_size('bc', dict(left=x,top=y,width=w,height=h)))
 
     def test_solar_grids_match_each_crop_and_cross_dateline_continuously(self):

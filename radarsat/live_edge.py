@@ -77,7 +77,9 @@ def build_live_edge_index(
     for domain_id in DOMAINS:
         layers: dict[str, Any] = {}
         for layer_id in live_edge_layer_ids():
-            frame = _latest_metadata(root, domain_id, layer_id)
+            from .cloud_raster import ENHANCED_LAYER
+            source_layer_id = ENHANCED_LAYER if domain_id == "bc" and layer_id == "eccc-geocolor" else layer_id
+            frame = _latest_metadata(root, domain_id, source_layer_id)
             if frame is None:
                 continue
             layer = LAYERS[layer_id]

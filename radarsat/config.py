@@ -121,6 +121,11 @@ LAYERS: dict[str, Layer] = {
         source="ECCC Datamart",
         max_age_minutes=35,
     ),
+    "eccc-geocolor-enhanced": Layer(
+        id="eccc-geocolor-enhanced", title="Enhanced MSC GeoColour",
+        source_layer=None, image_format="image/webp", extension="webp",
+        role="background", source="ECCC Datamart", max_age_minutes=35,
+    ),
     "radar-rain": Layer(
         id="radar-rain",
         title="Radar rain rate",
@@ -506,10 +511,10 @@ BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
 }
 
 
-# A 15% magnification keeps each regional center and aspect ratio unchanged.
+# Successive 15% and 10% magnifications preserve regional centers/aspect ratios.
 for _region in ("northeast", "southeast", "southwest"):
     _crop = VIEWPORTS[_region]
-    _width, _height = _crop["width"] / 1.15, _crop["height"] / 1.15
+    _width, _height = _crop["width"] / (1.15 * 1.10), _crop["height"] / (1.15 * 1.10)
     VIEWPORTS[_region] = {
         "left": _crop["left"] + (_crop["width"] - _width) / 2,
         "top": _crop["top"] + (_crop["height"] - _height) / 2,
@@ -583,6 +588,9 @@ def _overlay_product(
     if max_hours is not None:
         product["maxHours"] = max_hours
     if product_id == "bc-south-coast-overlay":
+        for recipe in product["layers"]:
+            if recipe.get("choiceGroup") == "satellite":
+                recipe["defaultEnabled"] = False
         product["notes"].insert(
             1,
             "South Coast radar keeps the ECCC one-kilometre continental rain-rate mosaic as its complete-coverage base and overlays public 250-m-range-bin dual-polarization precipitation rates from KATX and KLGX where those U.S. radars can see.",
@@ -827,7 +835,7 @@ def _resolved_video_layer_ids(
                 selected.append(recipe_id)
             continue
         if recipe.get("choiceGroup") == "satellite":
-            if recipe_id == satellite_layer_id:
+            if recipe_id == satellite_layer_id and product_id != "bc-south-coast-overlay":
                 selected.append(recipe_id)
             continue
         if recipe.get("optional") and recipe_id not in requested:
