@@ -11,8 +11,8 @@ are retired, including the old scheduler lane and stale environment override.
 | BC | 3, 6, 12, 24 h | Full; Full + Fire | Enhanced MSC GeoColour |
 | BC NE / SE / SW | 3, 6, 12, 24 h | Full; Full + Fire | Enhanced MSC GeoColour |
 | South Coast | 3, 6, 12 h | Radar/Lightning; Radar/Lightning + Fire | Enhanced MSC GeoColour |
-| E Pac/W NA | 12, 24 h; 7 d | Full; Full + Fire | NOAA VIS/IR |
-| Pacific / North America | 12, 24 h; 7 d | Full | NOAA VIS/IR |
+| E Pac/W NA | 12, 24 h; 7 d | Full; Full + Fire | Enhanced NOAA VIS/IR |
+| Pacific / North America | 12, 24 h; 7 d | Full | Enhanced NOAA VIS/IR |
 
 There are 60 combinations. Fire adds enhanced smoke and agency fire/thermal
 hotspot icons. Full includes radar and lightning; BC XL, BC and the broad
@@ -26,7 +26,7 @@ reused at a new viewport.
 
 ## Enhancement and cost
 
-All BC MSC prebuilt tracks use source-preserving layered daylight, soft colour,
+All BC MSC and broad NOAA VIS/IR prebuilt tracks use source-preserving layered daylight, soft colour,
 50% depth and CRF 22. No model inference, generated clouds, pixel displacement,
 or invented cloud geometry is involved. Each viewport has a projected geographic
 lookup for solar direction, daylight gating, convergence and map distortion.
@@ -58,6 +58,9 @@ new and available recent slots become NOAA STAR GeoColor. Do not relabel old
 observation times or interpolate synthetic intermediate observations. This
 bounded migration avoids downloading seven days of large raw ABI files.
 
-A source-preserving NOAA enhancement comparison was rendered separately. NOAA
-prebuilts remain unenhanced pending appearance review; enabling it later requires
-an explicit operational policy change and a complete, uniformly graded rebuild.
+The approved NOAA enhancement is enabled for all E Pac/W NA, Pacific and North
+America prebuilt durations, including transitional WestWX observations. It uses
+the same 50% soft-colour grade, per-domain solar geometry and CRF 22 encoding.
+Complete enhanced generations replace untreated loops atomically. Original
+observation rasters remain available for custom layers and regeneration; graded
+PNGs stay in the existing shared 6 GB local cache and are not uploaded to R2.

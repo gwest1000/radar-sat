@@ -112,15 +112,18 @@ export function catalogGenerationIsOlder(incoming: string, accepted: string): bo
   return Boolean(accepted) && Date.parse(incoming) < Date.parse(accepted);
 }
 
-// The BC MSC GeoColour loops prioritize a complete, consistently graded loop
+// Enhanced MSC and NOAA satellite loops prioritize a complete, consistently graded loop
 // over unprocessed newer rasters. Observation timestamps remain unchanged.
 export function uniformCloudStyleProfile(
   productId: string | undefined,
   layerId: string,
   rangeHours: number,
 ): boolean {
-  return Boolean(productId?.startsWith("bc-")) && layerId === "eccc-geocolor"
-    && rangeHours > 0;
+  return rangeHours > 0 && (
+    (Boolean(productId?.startsWith("bc-")) && layerId === "eccc-geocolor")
+    || (["pacific-wna-overlay", "north-pacific-overlay", "north-america-overlay"].includes(productId ?? "")
+      && layerId === "raw-visir")
+  );
 }
 
 export function permitsLiveEdgeReplacement(

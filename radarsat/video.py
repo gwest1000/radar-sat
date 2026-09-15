@@ -2484,7 +2484,8 @@ def _build_profile_from_snapshot(
     build_now = (now or dt.datetime.now(UTC)).astimezone(UTC)
     enhanced = cloud_policy.enabled(spec)
     if enhanced:
-        spec = replace(spec, media_group="bc-xl-enhanced", media_viewport=dict(spec.viewport),
+        spec = replace(spec, media_group=("bc-xl-enhanced" if spec.domain_id == "bc" else "noaa-enhanced"),
+                       media_viewport=dict(spec.viewport),
                        media_width=spec.width, media_height=spec.height, crf=22)
     index_path = output_root / "video-index" / spec.product_id / f"{spec.layer_id}.json"
     current_index = _load_index(index_path)

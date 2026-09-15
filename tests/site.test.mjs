@@ -1022,6 +1022,10 @@ test("enhanced BC XL loops keep the encoded final frame instead of an untreated 
   for (const hours of [3, 6, 12, 24, 168]) assert.equal(uniformCloudStyleProfile("bc-large-overlay", "eccc-geocolor", hours), true);
   assert.equal(uniformCloudStyleProfile("bc-small-overlay", "eccc-geocolor", 3), true);
   assert.equal(uniformCloudStyleProfile("bc-large-overlay", "raw-ir", 3), false);
+  for (const product of ["pacific-wna-overlay", "north-pacific-overlay", "north-america-overlay"]) {
+    for (const hours of [12, 24, 168]) assert.equal(uniformCloudStyleProfile(product, "raw-visir", hours), true);
+    assert.equal(uniformCloudStyleProfile(product, "raw-ir", 12), false);
+  }
   assert.equal(permitsLiveEdgeReplacement({ satelliteStyle: "layered-daylight-soft-50-v1-test" }), false);
   assert.equal(permitsLiveEdgeReplacement({}), true);
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");

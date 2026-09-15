@@ -22,6 +22,13 @@ class CloudStyleTests(unittest.TestCase):
             for hours in (3, 6, 12, 24, 168):
                 self.assertTrue(cloud_policy.enabled(spec, hours))
                 self.assertEqual(_composite_video_crf(spec, hours), 22)
+        for product in ('pacific-wna-overlay', 'north-pacific-overlay', 'north-america-overlay'):
+            for track in ('live', 'day', 'archive'):
+                spec = replace(self.spec, product_id=product, layer_id='raw-visir', track_name=track)
+                for hours in (12, 24, 168):
+                    self.assertTrue(cloud_policy.enabled(spec, hours))
+                    self.assertEqual(_composite_video_crf(spec, hours), 22)
+                self.assertFalse(cloud_policy.enabled(replace(spec, layer_id='raw-ir')))
         for spec in (replace(self.spec, layer_id='raw-visir'),
                      replace(self.spec, product_id='north-america-overlay')):
             self.assertFalse(cloud_policy.enabled(spec))
@@ -86,21 +93,29 @@ class CloudStyleTests(unittest.TestCase):
         from radarsat.video import build_profile
         if not shutil.which('ffmpeg'):
             self.skipTest('ffmpeg unavailable')
+        for product, domain, layer in [('bc-large-overlay', 'bc', 'eccc-geocolor'),
+                                       ('north-america-overlay', 'north-america', 'raw-visir')]:
+            self._check_base_and_archive(product, domain, layer)
+
+    def _check_base_and_archive(self, product, domain, layer):
+        import json, shutil
+        from radarsat.video import build_profile
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source, output = root / 'source', root / 'output'
-            (source / 'static/bc').mkdir(parents=True)
-            Image.new('RGBA', (64, 48), (30, 40, 50, 255)).save(source / 'static/bc/base-dark.png')
+            (source / f'static/{domain}').mkdir(parents=True)
+            Image.new('RGBA', (64, 48), (30, 40, 50, 255)).save(source / f'static/{domain}/base-dark.png')
             frames = []
             for index in range(3):
                 name = f'source{index}.png'
                 Image.new('RGBA', (64, 48), (160, 170, 180, 255)).save(source / name)
                 timestamp = (self.time + dt.timedelta(hours=index)).isoformat()
                 frames.append({'validTime': timestamp, 'path': name, 'fetchedAt': timestamp})
-            catalog = {'domains': {'bc': {'staticLayers': {}, 'layers': {
-                'eccc-geocolor': {'frames': frames, 'maxAgeMinutes': 90}}}}}
+            catalog = {'domains': {domain: {'staticLayers': {}, 'layers': {
+                layer: {'frames': frames, 'maxAgeMinutes': 90}}}}}
             for track in ('live', 'day', 'archive'):
-                spec = replace(self.spec, track_name=track, width=64, height=48, cadence_minutes=60)
+                spec = next(s for s in VIDEO_PROFILES if s.product_id == product and s.layer_id == layer and s.track == track)
+                spec = replace(spec, width=64, height=48, cadence_minutes=60)
                 with mock.patch.object(cloud_policy, 'frame_image', side_effect=lambda sr, out, sp, f: Image.new('RGB', (sp.width, sp.height), (180, 190, 200))) as render:
                     result = build_profile(source, output, catalog, spec, ffmpeg=shutil.which('ffmpeg'), hours=168,
                                            now=self.time + dt.timedelta(hours=2))
