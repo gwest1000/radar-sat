@@ -245,6 +245,7 @@ def retained_times(
     latest_only: bool,
     now: dt.datetime,
     tier: str,
+    domain_id: str | None = None,
 ) -> list[dt.datetime]:
     """Select only source times that can survive the archive policy.
 
@@ -257,9 +258,9 @@ def retained_times(
     if latest_only:
         return values
     # Keep the genuine six-minute ECCC radar clock during the first day on
-    # continental/Pacific displays. ``keep_frame`` still thins broad archives
-    # older than 24 hours to hourly, so the storage increase remains small.
-    return [value for value in values if keep_frame(value, now, tier)]
+    # continental/Pacific displays. Older E Pac/NA observations retain hourly
+    # slots; other domains retain their existing three-hour archive policy.
+    return [value for value in values if keep_frame(value, now, tier, domain_id)]
 
 
 def ingest_hotspot_snapshot(
@@ -795,6 +796,7 @@ def ingest_geomet(
             latest_only,
             dt.datetime.now(UTC),
             domain.tier,
+            domain.id,
         )
         timelines[layer_id] = list(timeline.times)
         for valid_time in times:
@@ -987,7 +989,7 @@ def derive_lightning_trails(root: Path, domain: Domain, timelines: dict[str, lis
                     # aggregates retained for seven-day playback. Preserve
                     # their full bins; do not reconstruct them from thinned data.
                     if (derived_layer in hour_layers and valid_time < archive_cutoff
-                            and keep_layer_frame(valid_time, newest_observation, domain.tier, derived_layer.id)):
+                            and keep_layer_frame(valid_time, newest_observation, domain.tier, derived_layer.id, domain.id)):
                         allowed_stamps.add(path.stem)
                         continue
                     image_path = safe_archive_path(root, str(payload.get("path", "")))
@@ -2766,7 +2768,7 @@ def prune(root: Path, now: dt.datetime) -> int:
                 meta_path.unlink(missing_ok=True)
                 removed += 1
                 continue
-            if keep_layer_frame(valid_time, now, domain.tier, layer_id):
+            if keep_layer_frame(valid_time, now, domain.tier, layer_id, domain.id):
                 continue
             image_path.unlink(missing_ok=True)
             meta_path.unlink(missing_ok=True)

@@ -121,7 +121,7 @@ export function uniformCloudStyleProfile(
 ): boolean {
   return rangeHours > 0 && (
     (Boolean(productId?.startsWith("bc-")) && layerId === "eccc-geocolor")
-    || (["pacific-wna-overlay", "north-pacific-overlay", "north-america-overlay"].includes(productId ?? "")
+    || (["north-pacific-overlay", "north-america-overlay"].includes(productId ?? "")
       && layerId === "raw-visir")
   );
 }

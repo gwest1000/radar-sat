@@ -95,3 +95,25 @@ processed once, with source-correction/style invalidation and bounded advisory l
 Publication projection is idempotent, and an unavailable enhancement is not replaced
 by untreated imagery. Original NOAA imagery is no longer spliced into the custom MSC
 layer. The initial 189-image retained archive took about 320 seconds with two workers.
+
+### September 16: E Pac/NA consolidation and archive synchronization
+
+The E Pac/W NA crop is retired from products, public catalog and both production
+schedulers. North America is displayed as **E Pac/NA**, retaining its existing grid
+and enhanced NOAA GeoColor source. It now has Full and Full + Fires at 12h, 24h and
+7d. The total is 57 prebuilt combinations. Across the menu, the fire recipe is
+**Full + Fires** (or **Radar/Lightning + Fires** for South Coast); subtracting smoke
+and fire/hotspot layers gives Full. BC retains enhanced MSC GeoColour.
+
+NE/SE/SW BC and South Coast now cap the duration menu at 24h, removing 7d without
+adding any new prebuilt durations. BC and BC XL retain their existing choices.
+
+E Pac/NA's seven-day encoder uses real hourly satellite slots, with two-minute
+scan-start tolerance and no held intermediate images. Sparse legacy three-hour
+history therefore advances all available layers on the same displayed snapshot.
+Lightning scan-start tolerance matches satellite tolerance. Local retention,
+remote expiry and bootstrap downloads now preserve hourly North America
+observations for seven days; ECMWF contours retain their three-hour source cycle.
+Already-deleted intermediate rasters are not reconstructed. The existing sparse
+portion ages out as hourly history accumulates. Other domains keep their current
+three-hour observation archive retention, now correctly described by the catalog.

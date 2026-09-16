@@ -37,17 +37,16 @@ PUBLIC_VIDEO_LAYERS = {
     "bc-northeast-overlay": "eccc-geocolor",
     "bc-south-coast-overlay": "eccc-geocolor",
     "north-america-overlay": "raw-visir",
-    "pacific-wna-overlay": "raw-visir",
     "north-pacific-overlay": "raw-visir",
 }
 
 
-def retention_policy(tier: str) -> dict[str, int]:
+def retention_policy(tier: str, domain_id: str | None = None) -> dict[str, int]:
     """Describe the policy enforced locally and by the R2 expiry pass."""
     return {
         "allFramesHours": 24,
         "archiveDays": 7,
-        "archiveCadenceMinutes": 30 if tier == "bc" else 60,
+        "archiveCadenceMinutes": 60 if domain_id == "north-america" else 180,
     }
 
 
@@ -766,7 +765,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
                                     "schemaVersion": 1,
                                     "coordinateSpace": "normalized-top-left",
                                     "pointSchema": list(specification.point_schema),
-                                    "retention": retention_policy(domain.tier),
+                                    "retention": retention_policy(domain.tier, domain.id),
                                 }
                         layers[layer_directory.name] = entry
             static_layers: dict[str, Any] = {}
@@ -811,7 +810,7 @@ def build_catalog(root: Path) -> dict[str, Any]:
                 "width": domain.width,
                 "height": domain.height,
                 "projection": domain.crs,
-                "retention": retention_policy(domain.tier),
+                "retention": retention_policy(domain.tier, domain.id),
                 "layers": layers,
                 "staticLayers": static_layers,
             }

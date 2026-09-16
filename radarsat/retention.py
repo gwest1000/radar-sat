@@ -9,7 +9,7 @@ ECMWF_SOURCE_INTERVAL_HOURS = 3
 RAPID_RETENTION_HOURS = 3
 
 
-def keep_frame(valid_time: dt.datetime, now: dt.datetime, tier: str) -> bool:
+def keep_frame(valid_time: dt.datetime, now: dt.datetime, tier: str, domain_id: str | None = None) -> bool:
     age = now - valid_time
     if age < dt.timedelta(0):
         return True
@@ -17,7 +17,7 @@ def keep_frame(valid_time: dt.datetime, now: dt.datetime, tier: str) -> bool:
         return False
     if age <= dt.timedelta(hours=24):
         return True
-    return valid_time.minute == 0 and valid_time.hour % 3 == 0
+    return valid_time.minute == 0 and (domain_id == "north-america" or valid_time.hour % 3 == 0)
 
 
 def keep_layer_frame(
@@ -25,9 +25,10 @@ def keep_layer_frame(
     now: dt.datetime,
     tier: str,
     layer_id: str,
+    domain_id: str | None = None,
 ) -> bool:
     """Apply the general archive policy plus layer-specific cadence thinning."""
-    if not keep_frame(valid_time, now, tier):
+    if not keep_frame(valid_time, now, tier, domain_id):
         return False
     age = now - valid_time
     if layer_id.startswith("glm-lightning-live"):

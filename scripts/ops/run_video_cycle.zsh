@@ -87,7 +87,7 @@ run_parallel_video_groups() {
   run_video_group "${track}" "${north_america_layers}" north-america-overlay &
   north_america_pid=$!
   run_video_group "${track}" "${pacific_layers}" \
-    pacific-wna-overlay north-pacific-overlay &
+    north-pacific-overlay &
   pacific_pid=$!
   wait "${bc_primary_pid}" || build_status=1
   wait "${bc_secondary_pid}" || build_status=1

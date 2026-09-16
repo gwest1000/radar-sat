@@ -22,7 +22,7 @@ class CloudStyleTests(unittest.TestCase):
             for hours in (3, 6, 12, 24, 168):
                 self.assertTrue(cloud_policy.enabled(spec, hours))
                 self.assertEqual(_composite_video_crf(spec, hours), 22)
-        for product in ('pacific-wna-overlay', 'north-pacific-overlay', 'north-america-overlay'):
+        for product in ('north-pacific-overlay', 'north-america-overlay'):
             for track in ('live', 'day', 'archive'):
                 spec = replace(self.spec, product_id=product, layer_id='raw-visir', track_name=track)
                 for hours in (12, 24, 168):

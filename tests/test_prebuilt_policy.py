@@ -5,16 +5,16 @@ from radarsat.cloud_geo import geography
 from radarsat.video import _display_size
 
 class PrebuiltPolicyTests(unittest.TestCase):
-    def test_requested_matrix_has_exactly_sixty_entries(self):
+    def test_requested_matrix_has_exactly_fifty_seven_entries(self):
         expected = {'bc-large-overlay': 10, 'bc-small-overlay': 8,
                     'bc-northeast-overlay': 8, 'bc-southeast-overlay': 8,
                     'bc-southwest-overlay': 8, 'bc-south-coast-overlay': 6,
-                    'pacific-wna-overlay': 6, 'north-pacific-overlay': 3,
-                    'north-america-overlay': 3}
+                    'north-pacific-overlay': 3,
+                    'north-america-overlay': 6}
         actual = {p: len(presets) * (len(VIDEO_EXACT_RANGES[p]) + (p in VIDEO_ARCHIVE_PRODUCTS))
                   for p, presets in VIDEO_COMPOSITE_PRESETS.items()}
         self.assertEqual(actual, expected)
-        self.assertEqual(sum(actual.values()), 60)
+        self.assertEqual(sum(actual.values()), 57)
 
     def test_availability_anchor_is_the_default_satellite(self):
         for product in PRODUCTS:

@@ -181,7 +181,7 @@ class VideoSelectionTests(unittest.TestCase):
             if "day" in tracks:
                 self.assertEqual(tracks["day"], 30)
             if "archive" in tracks:
-                self.assertEqual(tracks["archive"], 180 if product_id in {"pacific-wna-overlay", "north-pacific-overlay"} else 60)
+                self.assertEqual(tracks["archive"], 180 if product_id in {"north-pacific-overlay"} else 60)
 
         specs = {
             (spec.product_id, spec.layer_id, spec.track): spec
@@ -491,7 +491,7 @@ class VideoSelectionTests(unittest.TestCase):
             "radar-rain": {"maxAgeMinutes": 20, "frames": overlays},
             "smoke": {"maxAgeMinutes": 40, "frames": overlays},
         }}}}
-        for product_id in ("pacific-wna-overlay", "north-pacific-overlay"):
+        for product_id in ("north-pacific-overlay",):
             spec = next(s for s in VIDEO_PROFILES if s.product_id == product_id
                         and s.layer_id == "raw-visir" and s.track == "archive")
             selected = _selected_satellite_frames(catalog, spec, 12)
@@ -505,7 +505,7 @@ class VideoSelectionTests(unittest.TestCase):
 
     def test_pacific_agency_fires_survive_missing_thermal_raster(self) -> None:
         base = dt.datetime(2026, 9, 11, tzinfo=UTC)
-        spec = next(s for s in VIDEO_PROFILES if s.product_id == "pacific-wna-overlay"
+        spec = next(s for s in VIDEO_PROFILES if s.product_id == "north-pacific-overlay"
                     and s.layer_id == "raw-visir" and s.track == "archive")
         spec = replace(spec, width=240, height=148)
         relative = "frames/north-pacific/active-fire-points/report.json"
@@ -569,8 +569,6 @@ class VideoSelectionTests(unittest.TestCase):
             [
                 base,
                 base + dt.timedelta(hours=1),
-                base + dt.timedelta(hours=2),
-                base + dt.timedelta(hours=3),
                 base + dt.timedelta(hours=4),
             ],
         )
@@ -578,8 +576,6 @@ class VideoSelectionTests(unittest.TestCase):
             [item.source_valid_time for item in selected],
             [
                 base + dt.timedelta(seconds=22),
-                base + dt.timedelta(hours=1, seconds=22),
-                base + dt.timedelta(hours=1, seconds=22),
                 base + dt.timedelta(hours=1, seconds=22),
                 base + dt.timedelta(hours=4, seconds=22),
             ],
@@ -743,7 +739,7 @@ class VideoBuildTests(unittest.TestCase):
             self.assertEqual(set(presets[0]["optionalLayers"]), expected)
             self.assertEqual(
                 len(presets),
-                1 if product_id in {"north-america-overlay", "north-pacific-overlay"} else 2,
+                1 if product_id == "north-pacific-overlay" else 2,
             )
 
     def test_full_and_fire_recipes_have_no_dynamic_upper_layers(self):

@@ -52,7 +52,7 @@ DOMAINS: dict[str, Domain] = {
     ),
     "north-america": Domain(
         id="north-america",
-        title="North America",
+        title="E Pac/NA",
         west=-180.0,
         south=5.0,
         east=-50.0,
@@ -498,9 +498,6 @@ LAYERS[_south_coast_radar_id] = Layer(
 
 
 BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
-    # 170 E–102 W, 20–66 N: the eastern half of the North Pacific through the
-    # eastern edge of Colorado, without Kamchatka or the far tropical Pacific.
-    "pacific-wna": {"left": 0.2100, "top": 0.1479, "width": 0.6500, "height": 0.7117},
     # Crop the continental display near 69 N and the eastern edge of Maine.
     # Keeping the source grid intact means satellite, radar and hazards remain
     # pixel-registered while the browser devotes its space to useful terrain.
@@ -626,7 +623,7 @@ def _broad_product(
             {"id": "base-dark", "opacity": 1.0},
             {"id": f"{satellite_prefix}-visir", "opacity": 1.0, "optional": True, "defaultEnabled": True, "choiceGroup": "satellite", "controlId": "noaa-visir"},
             {"id": ir_layer, "opacity": 1.0, "optional": True, "defaultEnabled": False, "choiceGroup": "satellite", "controlId": "noaa-ir"},
-            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": product_id == "pacific-wna-overlay"},
+            {"id": "smoke", "opacity": 1.0, "optional": True, "defaultEnabled": product_id == "north-america-overlay"},
             {"id": "radar-coverage", "opacity": 1.0, "enabledWith": "radar-rain"},
             {"id": "radar-rain", "opacity": 0.84, "optional": True, "defaultEnabled": True, "choiceGroup": "precipitation"},
             {"id": "ptype-coverage", "opacity": 1.0, "enabledWith": "ptype"},
@@ -634,7 +631,7 @@ def _broad_product(
             {"id": "boundaries", "opacity": 1.0},
             {"id": "glm-lightning-trail", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "lightning"},
             {"id": "lightning-trail", "opacity": 1.0, "enabledWith": "glm-lightning-trail"},
-            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": product_id == "pacific-wna-overlay"},
+            {"id": "hotspots", "opacity": 1.0, "optional": True, "defaultEnabled": product_id == "north-america-overlay"},
             {"id": "model-mslp", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "model-contours"},
             {"id": "model-hgt500", "opacity": 1.0, "optional": True, "defaultEnabled": True, "controlId": "model-contours"},
         ],
@@ -667,33 +664,21 @@ def _broad_product(
 PRODUCTS: list[dict[str, object]] = [
     _overlay_product("bc-large-overlay", "BC XL", "BC XL", BC_XL_VIEWPORT),
     _overlay_product("bc-small-overlay", "BC", "BC", VIEWPORTS["small"], five_minute=True, max_hours=168),
-    _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"], five_minute=True, max_hours=168),
-    _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"], five_minute=True, max_hours=168),
-    _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"], max_hours=168),
+    _overlay_product("bc-southwest-overlay", "BC Southwest", "BC SW", VIEWPORTS["southwest"], five_minute=True, max_hours=24),
+    _overlay_product("bc-southeast-overlay", "BC Southeast", "BC SE", VIEWPORTS["southeast"], five_minute=True, max_hours=24),
+    _overlay_product("bc-northeast-overlay", "BC Northeast", "BC NE", VIEWPORTS["northeast"], max_hours=24),
     _overlay_product(
         "bc-south-coast-overlay",
         "South Coast",
         "South Coast",
         VIEWPORTS["south-coast"],
         five_minute=True,
-        max_hours=168,
-    ),
-    _broad_product(
-        "pacific-wna-overlay",
-        "Eastern Pacific / Western North America",
-        "E Pac/W NA",
-        "north-pacific",
-        "A focused Eastern Pacific and Western North America satellite view with real West Coast radar coverage.",
-        [
-            "The Pacific-centred crop covers roughly 170°E–102°W and 20–66°N without a dateline seam.",
-            "There is no radar over the open ocean; hatching makes the available West Coast mosaic footprint explicit.",
-        ],
-        BROAD_VIEWPORTS["pacific-wna"],
+        max_hours=24,
     ),
     _broad_product(
         "north-america-overlay",
-        "North America Satellite / Radar",
-        "North America",
+        "Eastern Pacific / North America Satellite / Radar",
+        "E Pac/NA",
         "north-america",
         "NOAA STAR GOES-18 GeoColor imagery with the ECCC continental radar composite.",
         [
@@ -727,7 +712,6 @@ VIDEO_EXACT_RANGES: dict[str, tuple[int, ...]] = {
     "bc-northeast-overlay": (3, 6, 12, 24),
     "bc-large-overlay": (3, 6, 12, 24),
     "bc-south-coast-overlay": (3, 6, 12),
-    "pacific-wna-overlay": (12, 24),
     "north-america-overlay": (12, 24),
     "north-pacific-overlay": (12, 24),
 }
@@ -735,7 +719,6 @@ VIDEO_EXACT_RANGES: dict[str, tuple[int, ...]] = {
 VIDEO_ARCHIVE_PRODUCTS = frozenset(
     {
         "bc-large-overlay",
-        "pacific-wna-overlay",
         "north-america-overlay",
         "north-pacific-overlay",
     }
@@ -787,7 +770,7 @@ VIDEO_COMPOSITE_PRESETS: dict[str, tuple[dict[str, object], ...]] = {
 VIDEO_HYBRID_CORE_PRODUCTS = frozenset()
 VIDEO_SMOKE_CORE_PRODUCTS = frozenset()
 for _product_id in VIDEO_EXACT_RANGES:
-    if _product_id in {"north-america-overlay", "north-pacific-overlay"}:
+    if _product_id == "north-pacific-overlay":
         continue
     VIDEO_COMPOSITE_PRESETS[_product_id] += ({
         "id": "weather-full-v1",

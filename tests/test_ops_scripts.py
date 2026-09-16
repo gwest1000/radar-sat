@@ -29,7 +29,6 @@ class OpsScriptTests(unittest.TestCase):
             ("bc-southeast-overlay", "bc", "eccc-geocolor"),
             ("bc-northeast-overlay", "bc", "eccc-geocolor"),
             ("bc-south-coast-overlay", "bc", "eccc-geocolor"),
-            ("pacific-wna-overlay", "north-pacific", "raw-visir"),
             ("north-america-overlay", "north-america", "westwx-visir"),
             ("north-pacific-overlay", "north-pacific", "raw-visir"),
         ]
@@ -294,7 +293,7 @@ class OpsScriptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             environment, calls = self._video_scheduler_fixture(root)
-            for _ in range(4):
+            for _ in range(3):
                 result = subprocess.run(
                     ["/bin/zsh", str(RUN_VIDEO_SCHEDULER)],
                     cwd=PROJECT,
@@ -311,7 +310,6 @@ class OpsScriptTests(unittest.TestCase):
             ]
             expected = [
                 ("bc-large-overlay", "eccc-geocolor"),
-                ("pacific-wna-overlay", "raw-visir"),
                 ("north-america-overlay", "raw-visir"),
                 ("north-pacific-overlay", "raw-visir"),
             ]

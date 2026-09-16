@@ -398,7 +398,9 @@ def _at_or_before_source_time(
     frames: Sequence[Mapping[str, Any]],
     target: dt.datetime,
     max_age_minutes: int | None,
+    slot_tolerance_minutes: int = 0,
 ) -> Mapping[str, Any] | None:
+    latest = target + dt.timedelta(minutes=slot_tolerance_minutes)
     selected: Mapping[str, Any] | None = None
     selected_source_time: dt.datetime | None = None
     selected_source_count = -1
@@ -406,7 +408,7 @@ def _at_or_before_source_time(
     for frame in frames:
         frame_time = _parse_time(frame.get("validTime"))
         source_time = _frame_source_time(frame)
-        if frame_time is None or source_time is None or frame_time > target or source_time > target:
+        if frame_time is None or source_time is None or frame_time > latest or source_time > latest:
             continue
         source_times = frame.get("sourceTimes")
         source_count = len(source_times) if isinstance(source_times, Mapping) else 0
@@ -624,6 +626,11 @@ def _selected_satellite_frames(
                 ),
                 reverse=True,
             ))
+        elif spec.track == "archive" and spec.domain_id == "north-america":
+            # Retained history may have three-hour gaps. Encode only real
+            # same-slot observations, so radar/lightning never advance under
+            # a held satellite image on an invented intermediate timestamp.
+            candidates = ((_nearest(anchor_frames, valid_time, 2), selection_layer_id, broad_max_age),)
         else:
             candidates = (
                 (
@@ -676,7 +683,7 @@ def _selected_satellite_frames(
             # nor the deadline-qualified NOAA fill exists for this slot, omit
             # it instead of disguising an older satellite observation as a
             # new frame. This matches the browser's live-edge selector.
-            if msc_first or (spec.track == "archive" and spec.domain_id == "north-pacific"):
+            if msc_first or (spec.track == "archive" and spec.domain_id in {"north-pacific", "north-america"}):
                 continue
             if not selected:
                 continue
@@ -1117,7 +1124,10 @@ def _proxy_selections(
             assert rendered_id is not None
             assert prepared_recipe_id is not None
             if "lightning" in rendered_id:
-                frame = _at_or_before_source_time(frames, anchor, max_age_minutes)
+                frame = _at_or_before_source_time(
+                    frames, anchor, max_age_minutes,
+                    slot_tolerance_minutes=2 if spec.track == "archive" else 0,
+                )
             elif rendered_id.startswith("radar-rain-region-"):
                 # A regional frame combines the exact six-minute ECCC mosaic
                 # with asynchronous NEXRAD scans. Its catalog time can

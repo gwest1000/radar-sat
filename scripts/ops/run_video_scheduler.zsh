@@ -24,7 +24,7 @@ KILL_REAP_SECONDS="${RADARSAT_VIDEO_KILL_REAP_SECONDS:-5}"
 FAILURE_BACKOFF_SECONDS="${RADARSAT_VIDEO_FAILURE_BACKOFF_SECONDS:-120}"
 PRUNE_INTERVAL_SECONDS="${RADARSAT_VIDEO_PRUNE_INTERVAL_SECONDS:-3600}"
 MAX_EXACT_WORKERS="${RADARSAT_VIDEO_MAX_EXACT_WORKERS:-2}"
-HYBRID_CORE_ENABLED="0" # Retired: the configured exact Full / Full + Fire matrix owns these slots.
+HYBRID_CORE_ENABLED="0" # Retired: the configured exact Full / Full + Fires matrix owns these slots.
 MAX_HYBRID_UNITS="${RADARSAT_VIDEO_MAX_HYBRID_UNITS:-3}"
 HYBRID_BUDGET_SECONDS="${RADARSAT_VIDEO_HYBRID_BUDGET_SECONDS:-90}"
 HYBRID_CORE_PRESETS=(weather-core-v1 weather-smoke-core-v1)
@@ -609,7 +609,6 @@ range_products() {
         bc-southeast-overlay \
         bc-northeast-overlay \
         bc-south-coast-overlay \
-        pacific-wna-overlay \
         north-america-overlay \
         north-pacific-overlay
       ;;
@@ -620,14 +619,12 @@ range_products() {
         bc-southwest-overlay \
         bc-southeast-overlay \
         bc-northeast-overlay \
-        pacific-wna-overlay \
         north-america-overlay \
         north-pacific-overlay
       ;;
     168)
       print -l -- \
         bc-large-overlay \
-        pacific-wna-overlay \
         north-america-overlay \
         north-pacific-overlay
       ;;
@@ -902,7 +899,7 @@ run_archive_worker() {
   case "${product}" in
     bc-large-overlay) layer="eccc-geocolor" ;;
     north-america-overlay) layer="raw-visir" ;;
-    pacific-wna-overlay|north-pacific-overlay) layer="raw-visir" ;;
+    north-pacific-overlay) layer="raw-visir" ;;
     *)
       print -u2 "No public archive satellite layer is configured for ${product}."
       return 2

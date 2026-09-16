@@ -213,7 +213,6 @@ const REGION_MENU_BOTTOM_TO_TOP = [
   "bc-northeast-overlay",
   "bc-small-overlay",
   "bc-large-overlay",
-  "pacific-wna-overlay",
   "north-america-overlay",
   "north-pacific-overlay",
 ] as const;
@@ -1348,7 +1347,7 @@ function compositeProfileFreshEnough(
   const compositeNewest = Date.parse(pointer.endSourceTime);
   if (!Number.isFinite(imageNewest) || !Number.isFinite(compositeNewest)) return false;
   const pacificArchive = rangeHours === 168
-    && ["pacific-wna-overlay", "north-pacific-overlay"].includes(productId ?? "");
+    && ["north-pacific-overlay"].includes(productId ?? "");
   const allowanceMinutes = pacificArchive ? 200 : (COMPOSITE_FRESHNESS_MINUTES[rangeHours]
     ?? Math.max(20, Math.ceil(rangeHours / 24) * 10));
   return imageNewest - compositeNewest
@@ -4379,7 +4378,7 @@ export function RadarViewer() {
                         selectPrebuiltCombo(pointer);
                         setViewsMenuOpen(false);
                       }}>
-                      <strong>{pointer.rangeHours === 168 ? "7 days" : `${pointer.rangeHours} hours`} · {product.id === "bc-south-coast-overlay" ? "Radar/Lightning" : "Full"}{pointer.layerIds.includes("hotspots") ? " + Fire" : ""}{selected ? " · Selected" : ""}</strong>
+                      <strong>{pointer.rangeHours === 168 ? "7 days" : `${pointer.rangeHours} hours`} · {product.id === "bc-south-coast-overlay" ? "Radar/Lightning" : "Full"}{pointer.layerIds.includes("hotspots") ? " + Fires" : ""}{selected ? " · Selected" : ""}</strong>
                       <span>{labels.join(" + ")}</span>
                       <small>{failed ? "Unavailable · image fallback" : fresh ? "Published" : "Delayed · image fallback"} · through {shortClock(pointer.endSourceTime)}</small>
                     </button>;

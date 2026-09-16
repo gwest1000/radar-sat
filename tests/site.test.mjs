@@ -165,7 +165,7 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /filter\(\(item\) => productHasFrames\(catalog, item\)\)/);
   assert.match(viewer, /actualSourceTime\(item\.id, item\.frame\)/);
   assert.match(viewer, /RANGE_OPTIONS = \[3, 6, 12, 24, 168\]/);
-  assert.match(viewer, /REGION_MENU_BOTTOM_TO_TOP = \[\s*"bc-south-coast-overlay",\s*"bc-southwest-overlay",\s*"bc-southeast-overlay",\s*"bc-northeast-overlay",\s*"bc-small-overlay",\s*"bc-large-overlay",\s*"pacific-wna-overlay",\s*"north-america-overlay",\s*"north-pacific-overlay",\s*\]/);
+  assert.match(viewer, /REGION_MENU_BOTTOM_TO_TOP = \[\s*"bc-south-coast-overlay",\s*"bc-southwest-overlay",\s*"bc-southeast-overlay",\s*"bc-northeast-overlay",\s*"bc-small-overlay",\s*"bc-large-overlay",\s*"north-america-overlay",\s*"north-pacific-overlay",\s*\]/);
   assert.match(viewer, /REGION_MENU_TOP_TO_BOTTOM = \[\.\.\.REGION_MENU_BOTTOM_TO_TOP\]\.reverse\(\)/);
   assert.match(viewer, /regionMenuProducts\.map\(\(item\) =>/);
   assert.match(viewer, /rangeMenuOptions\.map\(\(hours\) =>/);
@@ -892,12 +892,12 @@ test("ships a runtime data configuration", async () => {
   assert.equal(demo.products.some((product) => product.id === "north-america-overlay"), true);
   assert.equal(demo.products.some((product) => product.id === "north-pacific-overlay"), true);
   const pacificWna = demo.products.find((product) => product.id === "pacific-wna-overlay");
-  assert.equal(pacificWna.shortTitle, "E Pac/W NA");
-  assert.deepEqual(pacificWna.viewport, { left: 0.21, top: 0.1479, width: 0.65, height: 0.7117 });
+  assert.equal(pacificWna, undefined);
   const northAmerica = demo.products.find((product) => product.id === "north-america-overlay");
   const northPacific = demo.products.find((product) => product.id === "north-pacific-overlay");
   assert.equal(northPacific.shortTitle, "Pacific");
   assert.equal(demo.domains["north-pacific"].title, "Pacific");
+  assert.equal(northAmerica.shortTitle, "E Pac/NA");
   assert.equal(northAmerica.anchorLayer, "raw-visir");
   assert.equal(northAmerica.frameIntervalMinutes, 20);
   assert.equal(northAmerica.dayFrameIntervalMinutes, 30);
@@ -915,7 +915,7 @@ test("ships a runtime data configuration", async () => {
   assert.doesNotMatch(viewer, /if \(!controlId\) continue;[\s\S]{0,500}sharedControls\.set/);
   assert.match(viewer, /Additional BC satellite/);
   assert.doesNotMatch(viewer, /Additional MSC\/ECCC satellite views are available/);
-  assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, false);
+  assert.equal(northAmerica.layers.find((layer) => layer.id === "hotspots").defaultEnabled, true);
   assert.equal(northAmerica.layers.find((layer) => layer.id === "model-hgt500").optional, true);
   assert.equal(northAmerica.legends.includes("hotspots"), true);
   assert.equal(northPacific.anchorLayer, "raw-visir");
@@ -1022,7 +1022,7 @@ test("enhanced BC XL loops keep the encoded final frame instead of an untreated 
   for (const hours of [3, 6, 12, 24, 168]) assert.equal(uniformCloudStyleProfile("bc-large-overlay", "eccc-geocolor", hours), true);
   assert.equal(uniformCloudStyleProfile("bc-small-overlay", "eccc-geocolor", 3), true);
   assert.equal(uniformCloudStyleProfile("bc-large-overlay", "raw-ir", 3), false);
-  for (const product of ["pacific-wna-overlay", "north-pacific-overlay", "north-america-overlay"]) {
+  for (const product of ["north-pacific-overlay", "north-america-overlay"]) {
     for (const hours of [12, 24, 168]) assert.equal(uniformCloudStyleProfile(product, "raw-visir", hours), true);
     assert.equal(uniformCloudStyleProfile(product, "raw-ir", 12), false);
   }

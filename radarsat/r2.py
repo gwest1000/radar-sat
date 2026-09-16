@@ -2243,7 +2243,7 @@ def expired_remote_keys(remote: Mapping[str, int], now: dt.datetime) -> list[str
         valid_time, tier = parsed
         parts = Path(key).parts
         layer_id = parts[2] if len(parts) > 2 else ""
-        if layer_id in UNPUBLISHED_LAYER_IDS or not keep_layer_frame(valid_time, now, tier, layer_id):
+        if layer_id in UNPUBLISHED_LAYER_IDS or not keep_layer_frame(valid_time, now, tier, layer_id, parts[1]):
             expired.append(key)
     return sorted(expired)
 

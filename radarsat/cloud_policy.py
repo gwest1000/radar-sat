@@ -6,7 +6,7 @@ from . import cloud_style
 
 def enabled(spec, hours=None):
     return ((spec.product_id.startswith("bc-") and spec.layer_id == "eccc-geocolor")
-            or (spec.product_id in {"pacific-wna-overlay", "north-pacific-overlay",
+            or (spec.product_id in {"north-pacific-overlay",
                                     "north-america-overlay"} and spec.layer_id == "raw-visir"))
 
 
