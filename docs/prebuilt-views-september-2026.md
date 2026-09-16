@@ -76,8 +76,8 @@ optional custom layer. Fire adds smoke and fire icons.
 BC NE/SE/SW receive an additional centered 10% zoom, with unchanged display size and
 aspect ratio. City labels retain their previous full-grid display scale. Separate
 regional transmission rasters use a thinner line scale. BC
-and BC XL province/state borders are thicker and solid black; coastal linework and
-the separate regional boundary style remain unchanged.
+and BC XL coastlines, country borders and province/state borders use the same
+thicker solid black stroke. The separate regional boundary style remains unchanged.
 
 All encoders add eight repeated bottom-edge image rows before the remaining hidden
 alternating clock strip. This prevents scaling/codec filtering from exposing a

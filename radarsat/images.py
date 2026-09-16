@@ -579,7 +579,7 @@ def render_static_maps(
     boundary_scale: float = 2,
     line_width_scale: float = 1.0,
     render_base: bool = True,
-    black_province_borders: bool = False,
+    black_boundaries: bool = False,
     city_scale: float = 1.0,
 ) -> None:
     import matplotlib
@@ -681,10 +681,9 @@ def render_static_maps(
                 segments.extend(geometry_segments(clipped))
             return segments
 
-        # Coastlines, international borders and state/province borders use
-        # one deliberately subdued hierarchy.  A dark casing keeps every line
-        # legible over bright cloud, while the narrower gray centre avoids the
-        # stark white country/coast emphasis used by the earlier render.
+        # BC and BC XL use the same solid black stroke for coastlines,
+        # international borders and state/province borders. Other BC views
+        # retain their lighter centre and dark casing.
         linework = tuple(
             (
                 natural_earth_segments(category, name),
@@ -698,8 +697,8 @@ def render_static_maps(
                 ("cultural", "admin_1_states_provinces_lines"),
             )
         )
-        for index, (segments, dark_width, light_width, light_alpha) in enumerate(linework):
-            if black_province_borders and index == 2:
+        for segments, dark_width, light_width, light_alpha in linework:
+            if black_boundaries:
                 axis.add_collection(LineCollection(
                     segments, colors="#000000", linewidths=3.2 * boundary_scale * line_width_scale,
                     alpha=1.0, zorder=7,

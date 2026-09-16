@@ -96,7 +96,7 @@ BROAD_FIRE_SYMBOL_REFERENCE_WIDTH = 1920
 LIGHTNING_TRAIL_HOURS = 24.0
 LIGHTNING_ARCHIVE_HOURS = 168.0
 FIRE_ARCHIVE_HOURS = 168.0
-STATIC_BOUNDARY_RENDER_VERSION = 5
+STATIC_BOUNDARY_RENDER_VERSION = 6
 STATIC_TRANSMISSION_RENDER_VERSION = 2
 STATIC_WATERSHED_RENDER_VERSION = 2
 REGIONAL_WATERSHED_WIDTH = 2880
@@ -529,7 +529,7 @@ def ensure_static_assets(client: GeoMetClient, root: Path, domain: Domain) -> No
         or static_versions.get("boundaries") != STATIC_BOUNDARY_RENDER_VERSION
     ):
         render_static_maps(domain, base, boundaries, render_base=not base.exists(),
-                           black_province_borders=domain.id == "bc")
+                           black_boundaries=domain.id == "bc")
         static_versions["boundaries"] = STATIC_BOUNDARY_RENDER_VERSION
     watersheds = root / "static" / domain.id / "bch-watersheds.png"
     watershed_signature = {
