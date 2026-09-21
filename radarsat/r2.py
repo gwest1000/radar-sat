@@ -242,11 +242,15 @@ class PublishState:
         self.connection.execute(
             "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
         )
+        self.connection.execute("CREATE TABLE IF NOT EXISTS pointer_content (key TEXT PRIMARY KEY, digest TEXT, generated TEXT)")
+        self.connection.execute("CREATE TABLE IF NOT EXISTS live_edge_protection (object_key TEXT PRIMARY KEY, until TEXT NOT NULL)")
         previous = self.connection.execute(
             "SELECT value FROM metadata WHERE key = 'scope'"
         ).fetchone()
         if previous is not None and str(previous[0]) != scope:
             self.connection.execute("DELETE FROM objects")
+            self.connection.execute("DELETE FROM pointer_content")
+            self.connection.execute("DELETE FROM live_edge_protection")
             self.connection.execute(
                 "DELETE FROM metadata WHERE key IN ('public_video_keys', 'retired_video_keys')"
             )
@@ -292,6 +296,8 @@ class PublishState:
         self.connection.commit()
 
     def forget(self, keys: Iterable[str]) -> None:
+        keys = list(keys)
+        self.connection.executemany("DELETE FROM pointer_content WHERE key = ?", ((key,) for key in keys))
         self.connection.executemany(
             "DELETE FROM objects WHERE object_key = ?", ((key,) for key in keys)
         )
@@ -340,6 +346,20 @@ class PublishState:
             raise PublicationSafetyError("Invalid retired video protection state")
         return values
 
+    def protect_live_edge(self, keys: Iterable[str], now: dt.datetime) -> None:
+        self.connection.execute("DELETE FROM live_edge_protection WHERE until < ?", (format_utc(now),))
+        until = format_utc(now + dt.timedelta(hours=2))
+        self.connection.executemany(
+            "INSERT INTO live_edge_protection VALUES (?,?) ON CONFLICT(object_key) DO UPDATE SET until=MAX(until,excluded.until)",
+            ((key, until) for key in keys),
+        )
+        self.connection.commit()
+
+    def protected_live_edge(self, now: dt.datetime) -> set[str]:
+        return {row[0] for row in self.connection.execute(
+            "SELECT object_key FROM live_edge_protection WHERE until >= ?", (format_utc(now),)
+        )}
+
     def protected_video_keys(self, now: dt.datetime) -> set[str] | None:
         current = self.public_video_keys()
         if current is None:
@@ -349,15 +369,16 @@ class PublishState:
 
     def deletable_keys(self, keys: Iterable[str], now: dt.datetime) -> list[str]:
         protected = self.protected_video_keys(now)
-        return [key for key in keys if not key.startswith(VIDEO_IMMUTABLE_PREFIXES)
-                or (protected is not None and key not in protected)]
+        live = self.protected_live_edge(now)
+        return [key for key in keys if key not in live and (not key.startswith((*VIDEO_IMMUTABLE_PREFIXES, "frame-blobs/"))
+                or (protected is not None and key not in protected))]
 
     def protect_catalog(
         self, keys: Iterable[str], *, committed: bool = False,
         now: dt.datetime | None = None, previous_remote_keys: Iterable[str] = (),
     ) -> None:
         """Journal both sides of a catalog handoff before the remote pointer PUT."""
-        protected = {key for key in keys if key.startswith(VIDEO_IMMUTABLE_PREFIXES)}
+        protected = {key for key in keys if key.startswith((*VIDEO_IMMUTABLE_PREFIXES, "frame-blobs/"))}
         previous = self.public_video_keys()
         if not committed:
             if previous is None:
@@ -373,7 +394,7 @@ class PublishState:
                 # First rollout has no trustworthy public dependency journal;
                 # retain all previously remote video objects for one handoff.
                 previous = {key for key in previous_remote_keys
-                            if key.startswith(VIDEO_IMMUTABLE_PREFIXES)}
+                            if key.startswith((*VIDEO_IMMUTABLE_PREFIXES, "frame-blobs/"))}
             until = format_utc(now + VIDEO_ORPHAN_GRACE)
             for key in previous.difference(protected):
                 retired[key] = until
@@ -1815,17 +1836,24 @@ def discover_objects(
         catalog,
         existing_video_keys=existing_video_keys,
     )
+    from .publication_content import enabled, project_frames
+    compact = enabled()
+    try:
+        compact_paths = project_frames(root, catalog) if compact else set()
+    except FileNotFoundError as error:
+        raise PublicationSafetyError("Catalog asset is missing or unreadable: frames/rotated") from error
     catalog_bytes = json.dumps(catalog, separators=(",", ":")).encode()
 
-    relative_paths: set[str] = set()
+    relative_paths: set[str] = set(compact_paths)
     frame_count = 0
     for domain in catalog.get("domains", {}).values():
         for layer in domain.get("layers", {}).values():
             for frame in layer.get("frames", []):
                 key = str(frame.get("path", ""))
                 relative_paths.add(key)
-                metadata_path = _metadata_path_for_frame(root, key)
-                relative_paths.add(metadata_path.relative_to(root).as_posix())
+                if not compact:
+                    metadata_path = _metadata_path_for_frame(root, key)
+                    relative_paths.add(metadata_path.relative_to(root).as_posix())
                 frame_count += 1
                 tiles = frame.get("tiles")
                 if isinstance(tiles, dict) and isinstance(tiles.get("manifest"), str):
@@ -1847,6 +1875,13 @@ def discover_objects(
     # treating it as an unreferenced remote object.
     if (root / LIVE_EDGE_KEY).is_file():
         relative_paths.add(LIVE_EDGE_KEY)
+        edge = json.loads((root / LIVE_EDGE_KEY).read_bytes())
+        for domain in edge.get("domains", {}).values():
+            for layer in domain.get("layers", {}).values():
+                for frame in layer.get("frames", []):
+                    key = str(frame.get("path", ""))
+                    if key.startswith("frame-blobs/") and (root / key).is_file():
+                        relative_paths.add(key)
 
     if frame_count == 0:
         raise PublicationSafetyError("Refusing to publish a catalog containing zero frames")
@@ -2156,6 +2191,8 @@ def list_remote_objects(client: Any, bucket: str) -> dict[str, int]:
 
 
 def content_type(path: Path) -> str:
+    if path.name.endswith(".json.gz"):
+        return "application/gzip"
     if path.suffix.lower() == ".mp4":
         return "video/mp4"
     if path.suffix.lower() == ".m3u8":
@@ -2171,9 +2208,9 @@ def content_type(path: Path) -> str:
 def cache_control(key: str) -> str:
     if key == LIVE_EDGE_KEY:
         return CATALOG_CACHE_CONTROL
-    if key.startswith(VIDEO_IMMUTABLE_PREFIXES):
+    if key.startswith((*VIDEO_IMMUTABLE_PREFIXES, "frame-blobs/")):
         return IMMUTABLE_CACHE_CONTROL
-    if key.startswith(("frames/", "metadata/")):
+    if key.startswith(("frames/", "metadata/", "metadata-bundles/")):
         # Same-valid-time native frames and derived trails can be corrected in
         # place, so these keys must never be advertised as immutable.
         return MUTABLE_CACHE_CONTROL
@@ -2806,15 +2843,16 @@ def size_guard(
 ) -> dict[str, int]:
     values = list(objects)
     catalog_index_bytes = build_catalog_index(catalog_bytes)
+    westwx_bytes = json.dumps(build_westwx_catalog(json.loads(catalog_bytes)), separators=(",", ":")).encode()
     local_bytes = (
-        sum(item.size for item in values)
+        len(westwx_bytes) + sum(item.size for item in values)
         + len(catalog_bytes)
         + len(catalog_index_bytes)
     )
     remote_bytes = sum(remote.values())
     replaced_bytes = sum(remote.get(item.key, 0) for item in values) + remote.get(
         "catalog.json", 0
-    ) + remote.get("catalog-index.json", 0)
+    ) + remote.get("catalog-index.json", 0) + remote.get("westwx-catalog.json", 0)
     peak_projected_bytes = remote_bytes - replaced_bytes + local_bytes
     desired_keys = {item.key for item in values}
     pending_delete_bytes = sum(
@@ -3036,6 +3074,9 @@ def publish(
             )
         else:
             expired = []
+        if sync_delete and not fast:
+            from .publication_content import expired_compact_keys
+            expired = sorted(set(expired) | set(expired_compact_keys(remote, remote_modified, desired_keys, now)))
         expired = state.deletable_keys(expired, now)
         sizes = size_guard(
             objects,
@@ -3070,8 +3111,9 @@ def publish(
             write_status(status_path, result)
             return result
 
-        def upload(item: LocalObject) -> tuple[LocalObject, str]:
-            return item, upload_object(client, config, item)
+        from .publication_ledger import put_if_changed, put_pointer
+        def upload(item: LocalObject):
+            return item, put_if_changed(client, config, item, state_path, pointer=item.key == LIVE_EDGE_KEY)
 
         uploaded = 0
         progress.report("upload", pendingObjects=len(pending), uploadedObjects=0)
@@ -3080,13 +3122,8 @@ def publish(
         ) as executor:
             futures = {executor.submit(upload, item): item for item in pending}
             for future in as_completed(futures):
-                item, sha256 = future.result()
-                # Keep SQLite writes on the publishing thread. Only the
-                # independent network transfers run concurrently. Recording
-                # futures as they finish also prevents one slow PUT from
-                # hiding the successful progress of every later upload.
-                state.record(item, sha256)
-                uploaded += 1
+                item, (sha256, did_upload) = future.result()
+                uploaded += int(did_upload)
                 progress.report("upload", force=False, uploadedObjects=uploaded)
 
         # Commit complete compatibility catalogs first. The small operational
@@ -3096,19 +3133,11 @@ def publish(
         # If the worker is interrupted between the remote pointer PUT and the
         # final local state write, the union preserves both possible catalogs.
         state.protect_catalog(desired_keys)
-        upload_catalog(
-            client,
-            config,
-            westwx_catalog_bytes,
-            key="westwx-catalog.json",
-        )
-        upload_catalog(client, config, catalog_bytes)
-        upload_catalog(
-            client,
-            config,
-            catalog_index_bytes,
-            key="catalog-index.json",
-        )
+        catalog_uploads = sum([
+            put_pointer(client, config, westwx_catalog_bytes, "westwx-catalog.json", state_path),
+            put_pointer(client, config, catalog_bytes, "catalog.json", state_path),
+            put_pointer(client, config, catalog_index_bytes, "catalog-index.json", state_path),
+        ])
         commit_time = now + dt.timedelta(seconds=time.monotonic() - progress.started)
         catalog_committed_at = format_utc(commit_time)
         state.protect_catalog(
@@ -3122,15 +3151,22 @@ def publish(
         # All non-aged handoff cleanup remains after the catalog commit.
         # Regular reconciliation applies its broader policies from an
         # authoritative bucket listing.
-        post_commit_expired = state.deletable_keys(expired, commit_time)
-        progress.report("remote-cleanup", deleteObjects=len(post_commit_expired))
-        postcommit_deleted = (
-            delete_objects(client, config, post_commit_expired)
-            if post_commit_expired
-            else 0
-        )
-        if post_commit_expired:
-            state.forget(post_commit_expired)
+        # Serialize the final protection check/delete/forget with rapid
+        # dependency registration. A reused old blob must not be deleted
+        # between publishing a new live-edge reference and the next catalog.
+        from .publication_ledger import object_lock
+        postcommit_deleted = 0
+        cleanup_started = time.monotonic()
+        for offset in range(0, len(expired), 1000):
+            # Release the lock between network batches so live observations
+            # do not wait behind a large one-time archive cleanup.
+            with object_lock(state_path, "publication-gc"):
+                cleanup_now = commit_time + dt.timedelta(seconds=time.monotonic() - cleanup_started)
+                batch = state.deletable_keys(expired[offset:offset + 1000], cleanup_now)
+                if batch:
+                    postcommit_deleted += delete_objects(client, config, batch)
+                    state.forget(batch)
+            progress.report("remote-cleanup", force=False, deletedObjects=postcommit_deleted)
 
         result = {
             "status": "ok",
@@ -3142,6 +3178,8 @@ def publish(
             "bucket": config.bucket,
             "objects": len(objects),
             "uploaded": uploaded,
+            "catalogUploads": catalog_uploads,
+            "contentReused": len(pending) - uploaded,
             "unchanged": len(objects) - uploaded,
             "deleted": precommit_deleted + postcommit_deleted,
             "precommitDeleted": precommit_deleted,
@@ -3156,6 +3194,9 @@ def publish(
             result["catalogIndexUrl"] = (
                 f"{config.public_base_url}/catalog-index.json"
             )
+        if not fast:
+            from .publication_content import prune_local
+            result["localCompactPruned"] = prune_local(root, desired_keys, now)
         write_status(status_path, result)
         progress.report("complete", status="ok")
         return result

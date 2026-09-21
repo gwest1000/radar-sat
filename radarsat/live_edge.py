@@ -118,69 +118,39 @@ def publish_live_edge(
     if not objects:
         raise RuntimeError("No live-edge satellite, radar, or lightning objects are available")
     r2_client = client or boto3_client(config)
-    previous: dict[str, list[int]] = {}
-    if state_path is not None:
-        try:
-            decoded = json.loads(state_path.read_text())
-            previous = {
-                str(key): [int(value[0]), int(value[1])]
-                for key, value in decoded.get("objects", {}).items()
-                if isinstance(value, list) and len(value) == 2
-            }
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            previous = {}
-    changed = [
-        item for item in objects
-        if previous.get(item.key) != [item.size, item.mtime_ns]
-    ]
-    # R2's endpoint is most reliable with a modest targeted upload fan-out.
+    from .publication_content import enabled, project_frames, atomic_bytes, semantic_digest
+    from .publication_ledger import put_if_changed, put_pointer, object_lock
+    from .r2 import PublishState
+    if enabled():
+        keys = project_frames(root, payload, bundles=False)
+        objects = [LocalObject(key, root / key, (root / key).stat().st_size,
+                               (root / key).stat().st_mtime_ns) for key in sorted(keys)]
+    shared_state = (state_path.parent if state_path is not None else root / '.publish-state') / 'r2-publish.sqlite3'
+    state = PublishState(shared_state, f"{config.account_id}/{config.bucket}")
+    with object_lock(shared_state, "publication-gc"):
+        state.protect_live_edge((item.key for item in objects), dt.datetime.now(dt.timezone.utc))
+        known = state.known_objects()
+    state.close()
+    changed = [item for item in objects if known.get(item.key) != (item.size, item.mtime_ns)]
     with ThreadPoolExecutor(max_workers=min(6, max(1, len(changed)))) as executor:
-        hashes = list(executor.map(lambda item: upload_object(r2_client, config, item), changed))
+        results = list(executor.map(lambda item: put_if_changed(r2_client, config, item, shared_state), changed))
     encoded = json.dumps(payload, separators=(",", ":")).encode()
-    # Persist the exact remotely committed pointer so full R2 reconciliation
-    # can protect and republish it.  Replace atomically only after every
-    # referenced raster upload succeeded.
-    root.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="wb",
-        dir=root,
-        prefix=".live-edge-",
-        suffix=".json",
-        delete=False,
-    ) as handle:
-        temporary = Path(handle.name)
-        handle.write(encoded)
-        handle.flush()
-        os.fsync(handle.fileno())
-    temporary.replace(root / LIVE_EDGE_KEY)
-    upload_catalog(r2_client, config, encoded, key=LIVE_EDGE_KEY)
-    if state_path is not None:
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_payload = json.dumps({
-            "schemaVersion": 1,
-            "generatedAt": payload["generatedAt"],
-            "objects": {
-                item.key: [item.size, item.mtime_ns]
-                for item in objects
-            },
-        }, separators=(",", ":")).encode()
-        with tempfile.NamedTemporaryFile(
-            mode="wb",
-            dir=state_path.parent,
-            prefix=f".{state_path.name}-",
-            delete=False,
-        ) as handle:
-            state_temporary = Path(handle.name)
-            handle.write(state_payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        state_temporary.replace(state_path)
+    index_uploaded = put_pointer(r2_client, config, encoded, LIVE_EDGE_KEY, shared_state)
+    # Never let a slower rapid publisher roll the local recovery pointer back.
+    with object_lock(shared_state, 'local-live-edge'):
+        local = root / LIVE_EDGE_KEY
+        previous = local.read_bytes() if local.exists() else None
+        if previous is None or (payload['generatedAt'] >= json.loads(previous).get('generatedAt', '')
+                                and semantic_digest(previous) != semantic_digest(encoded)):
+            atomic_bytes(local, encoded)
     return {
         "status": "published",
         "generatedAt": payload["generatedAt"],
         "objects": len(objects),
-        "uploadedObjects": len(changed),
+        "uploadedObjects": sum(int(result[1]) for result in results),
+        "indexUploaded": index_uploaded,
+        "contentReused": sum(int(not result[1]) for result in results),
         "bytes": sum(item.size for item in objects),
-        "hashes": len(hashes),
+        "hashes": len(results),
         "url": f"{config.public_base_url}/{LIVE_EDGE_KEY}" if config.public_base_url else LIVE_EDGE_KEY,
     }

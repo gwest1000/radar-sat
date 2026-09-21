@@ -95,7 +95,7 @@ class PublisherReconciliationTests(unittest.TestCase):
         self.assertEqual(result["uploaded"], 0)
         self.assertGreater(result["unchanged"], 0)
         self.assertEqual(self.client.events[0], ("inventory", ""))
-        self.assertEqual(self.client.events[-1], ("put", "catalog-index.json"))
+        self.assertEqual(result["catalogUploads"], 0)
 
     def test_snapshot_on_source_disk_preserves_mutable_content_and_cleans_legacy_layout(self):
         legacy = self.state.parent / "r2-publish-snapshot-interrupted"
@@ -185,7 +185,7 @@ class PublisherReconciliationTests(unittest.TestCase):
         self.assertEqual(result["uploaded"], 1)
         self.assertEqual(self.client.objects[key], expected)
         self.assertFalse(self.frame.exists())
-        self.assertEqual(self.client.events[-1], ("put", "catalog-index.json"))
+        self.assertEqual(result["catalogUploads"], 0)
 
     def test_remote_wrong_size_and_changed_local_assets_are_repaired(self):
         remote_key = self.frame.relative_to(self.root).as_posix()
@@ -205,6 +205,7 @@ class PublisherReconciliationTests(unittest.TestCase):
     def test_progress_preserves_last_committed_generation_when_new_commit_fails(self):
         committed = json.loads(self.status.read_text())
         self.catalog["generatedAt"] = "2026-09-09T16:10:00Z"
+        self.catalog["domains"]["bc"]["layers"]["radar-rain"]["frames"][0]["fetchedAt"] = "2026-09-09T16:09:00Z"
         (self.root / "catalog.json").write_text(json.dumps(self.catalog))
         self.client.fail_catalog = True
         with mock.patch("radarsat.r2.retry", side_effect=lambda operation, *args: operation()):

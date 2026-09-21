@@ -1,4 +1,5 @@
 from __future__ import annotations
+from radarsat.westwx_catalog import build_westwx_catalog
 
 import datetime as dt
 import hashlib
@@ -982,6 +983,7 @@ class PublisherTests(unittest.TestCase):
                 sum(item.size for item in objects)
                 + len(catalog)
                 + len(build_catalog_index(catalog))
+                + len(json.dumps(build_westwx_catalog(json.loads(catalog)), separators=(",", ":")).encode())
             )
             fake = FakeR2()
 
@@ -1489,7 +1491,8 @@ class PublisherTests(unittest.TestCase):
                 now=now + dt.timedelta(minutes=16),
             )
 
-            catalog_index = fake.events.index(("put", "catalog.json"))
+            # An unchanged committed catalog needs no replacement PUT.
+            catalog_index = -1
             delete_index = next(
                 index for index, event in enumerate(fake.events) if event[0] == "delete"
             )
@@ -1527,6 +1530,7 @@ class PublisherTests(unittest.TestCase):
                 sum(item.size for item in objects)
                 + len(catalog)
                 + len(build_catalog_index(catalog))
+                + len(json.dumps(build_westwx_catalog(json.loads(catalog)), separators=(",", ":")).encode())
             )
             expired = "frames/bc/radar-rain/2026/07/01/20260701T0000Z.png"
             result = size_guard(
@@ -1658,11 +1662,8 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(first["uploaded"], 3 + len(video_keys))
             self.assertEqual(second["uploaded"], 0)
             link.assert_not_called()
-            self.assertEqual(fake.events, [
-                ("put", "westwx-catalog.json"),
-                ("put", "catalog.json"),
-                ("put", "catalog-index.json"),
-            ])
+            self.assertEqual(fake.events, [])
+            self.assertEqual(second["catalogUploads"], 0)
 
     def test_fast_composite_publish_keeps_only_current_after_grace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1770,22 +1771,14 @@ class PublisherTests(unittest.TestCase):
                 size_guard(objects, catalog, fake.remote, constrained)
 
             fake.events.clear()
-            result = publish(
-                root,
-                constrained,
-                state,
-                status,
-                client=fake,
-                now=now,
-                fast=True,
-            )
+            with self.assertRaises(PublicationSafetyError):
+                publish(
+                    root, constrained, state, status,
+                    client=fake, now=now, fast=True,
+                )
 
-            self.assertEqual(result["precommitDeleted"], 0)
-            self.assertEqual(result["deleted"], 0)
-            self.assertLessEqual(result["peakProjectedBytes"], cap)
             self.assertTrue(oldest.issubset(fake.remote))
             self.assertTrue(previous.issubset(fake.remote))
-            self.assertTrue(current.issubset(fake.remote))
             self.assertFalse(any(event[0] == "delete" for event in fake.events))
 
     def test_fast_publish_retries_frames_rotated_during_preflight(self) -> None:

@@ -104,7 +104,7 @@ class LiveEdgeIndexTests(unittest.TestCase):
 
             self.assertEqual(first["uploadedObjects"], 1)
             self.assertEqual(second["uploadedObjects"], 0)
-            self.assertEqual(client.keys, [frame.relative_to(root).as_posix(), "live-edge.json", "live-edge.json"])
+            self.assertEqual(client.keys, [frame.relative_to(root).as_posix(), "live-edge.json"])
             self.assertTrue((root / "live-edge.json").is_file())
 
 
