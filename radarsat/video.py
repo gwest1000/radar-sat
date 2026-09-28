@@ -41,6 +41,7 @@ VIDEO_RENDER_VERSION = 18
 PROXY_RENDER_VERSION = 1
 COMPOSITE_RENDER_VERSION = 2
 METEOROLOGICAL_MINUTE_SECONDS = 0.02
+PLAYBACK_FRAME_SECONDS = 10 * METEOROLOGICAL_MINUTE_SECONDS
 FFCONCAT_TIMEBASE_FPS = 50
 # A 10-minute weather step lasts 0.2 media seconds, so 5 fps preserves every
 # source timestep exactly. Higher CFR values only repeat identical pictures
@@ -1173,10 +1174,7 @@ def _frame_durations(
 ) -> list[float]:
     if not selected:
         return []
-    nominal = max(
-        1 / VIDEO_FRAME_RATE,
-        cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS,
-    )
+    nominal = max(1 / VIDEO_FRAME_RATE, PLAYBACK_FRAME_SECONDS)
     # Playback is a sequence of available observations, not a wall-clock
     # reconstruction of missing data. Encoding a four-hour source gap as a
     # four-times-long frame makes an otherwise healthy loop appear frozen.
@@ -1185,7 +1183,7 @@ def _frame_durations(
     return [nominal] * len(selected)
 
 
-def _segment_pts_offset(valid_time: dt.datetime) -> float:
+def _segment_pts_offset(valid_time: dt.datetime, cadence_minutes: int) -> float:
     """Return a stable compressed-time PTS for an independent TS segment.
 
     The absolute compressed-weather clock is stable as a rolling playlist
@@ -1193,7 +1191,7 @@ def _segment_pts_offset(valid_time: dt.datetime) -> float:
     range preserves normal rollover handling.
     """
     utc = valid_time.astimezone(UTC)
-    weather_clock = utc.timestamp() / 60 * METEOROLOGICAL_MINUTE_SECONDS
+    weather_clock = utc.timestamp() / 60 * (PLAYBACK_FRAME_SECONDS / cadence_minutes)
     return weather_clock % MPEGTS_TIMESTAMP_WRAP_SECONDS
 
 
@@ -1816,7 +1814,7 @@ def _build_hls_media(
     segment_entries: list[Mapping[str, Any]] = []
     for indexes in groups:
         encoded_durations = [durations[index] for index in indexes]
-        pts_offset = _segment_pts_offset(selected[indexes[0]].valid_time)
+        pts_offset = _segment_pts_offset(selected[indexes[0]].valid_time, spec.cadence_minutes)
         segment_payload: dict[str, Any] = {
             "videoRenderVersion": VIDEO_RENDER_VERSION,
             "domainId": spec.domain_id,
@@ -1981,10 +1979,7 @@ def _build_exact_composite_range(
         raise RuntimeError(
             f"{spec.product_id} {hours}h composite has fewer than two frames"
         )
-    nominal_duration = max(
-        1 / VIDEO_FRAME_RATE,
-        spec.cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS,
-    )
+    nominal_duration = max(1 / VIDEO_FRAME_RATE, PLAYBACK_FRAME_SECONDS)
     durations = [nominal_duration] * len(range_frames)
     durations[-1] = nominal_duration * 4
     range_inputs = list(composite_inputs[first_frame:])

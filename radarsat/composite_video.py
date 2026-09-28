@@ -24,7 +24,7 @@ from .config import (
 )
 from .video import (
     COMPOSITE_VIDEO_CRF,
-    METEOROLOGICAL_MINUTE_SECONDS,
+    PLAYBACK_FRAME_SECONDS,
     PROXY_RENDER_VERSION,
     UTC,
     VIDEO_CLOCK_STRIP_HEIGHT,
@@ -697,10 +697,7 @@ def _build_range_sidecar(
         raise RuntimeError(
             f"{spec.product_id} {preset_id} {hours}h has fewer than two frames"
         )
-    nominal = max(
-        1 / VIDEO_FRAME_RATE,
-        spec.cadence_minutes * METEOROLOGICAL_MINUTE_SECONDS,
-    )
+    nominal = max(1 / VIDEO_FRAME_RATE, PLAYBACK_FRAME_SECONDS)
     durations = [nominal] * len(range_frames)
     durations[-1] *= 4
     renditions: list[Mapping[str, Any]] = []

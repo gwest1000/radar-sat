@@ -73,6 +73,19 @@ def write_rgba(path: Path, colour: tuple[int, int, int, int], size: tuple[int, i
 
 
 class VideoSelectionTests(unittest.TestCase):
+    def test_playback_advances_one_frame_in_same_time_for_every_cadence(self) -> None:
+        base = dt.datetime(2026, 9, 28, 0, tzinfo=UTC)
+        for cadence in (10, 20, 30, 60, 180):
+            with self.subTest(cadence=cadence):
+                frames = [
+                    SelectedFrame(base + dt.timedelta(minutes=index * cadence), base, {}, "", "", "")
+                    for index in range(3)
+                ]
+                self.assertEqual(video_module._frame_durations(frames, cadence), [0.2] * 3)
+                offsets = [video_module._segment_pts_offset(frame.valid_time, cadence) for frame in frames]
+                self.assertAlmostEqual(offsets[1] - offsets[0], 0.2, places=5)
+                self.assertAlmostEqual(offsets[2] - offsets[1], 0.2, places=5)
+
     def test_bc_video_timeline_remains_on_regular_satellite_slots(self) -> None:
         base = dt.datetime(2026, 8, 1, 0, tzinfo=UTC)
         satellite = [
@@ -677,6 +690,21 @@ class VideoSelectionTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg is required")
 class VideoBuildTests(unittest.TestCase):
+    def test_twenty_minute_prebuilt_encodes_with_same_frame_duration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog, source_spec = self.make_source(root)
+            spec = replace(source_spec, cadence_minutes=20)
+            result = build_profile(
+                root / "source", root / "output", catalog, spec,
+                ffmpeg=str(shutil.which("ffmpeg")), hours=1,
+                now=dt.datetime(2026, 8, 1, 1, tzinfo=UTC),
+            )
+            manifest = json.loads((root / "output" / str(result["manifestPath"])).read_text())
+            self.assertEqual([frame["durationSeconds"] for frame in manifest["frames"]], [0.2, 0.2])
+            self.assertEqual([frame["ptsSeconds"] for frame in manifest["frames"]], [0.0, 0.2])
+            self.assertAlmostEqual(manifest["media"]["segments"][0]["durationSeconds"], 0.4)
+
     def test_composite_cache_prunes_oldest_files_to_byte_budget(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

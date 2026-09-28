@@ -104,11 +104,12 @@ frame, so the live edge is not held behind video encoding. ECCC DayVis/NightIR
 and standalone NightIR are no longer subscribed, rendered or exposed; NOAA
 remains the IR-only choice.
 
-The browser intentionally buffers complete live tracks because a 24-hour
-weather loop is only about 25–33 seconds of encoded playback and must remain
-smooth at 4×. Archive tracks are two to four minutes long, so hls.js targets a
-45-second forward buffer with a 60-second ceiling, a 48 MiB byte budget, and a
-15-second back buffer. Immutable segments already visited remain in the normal
+The browser intentionally buffers complete live tracks. Every weather frame
+now lasts 0.2 seconds at 1× regardless of whether the observations are 10,
+20, 30, 60, or 180 minutes apart; a 24-hour loop is roughly 10 seconds long.
+Archive tracks are roughly 12–35 seconds long, so hls.js targets a 45-second
+forward buffer with a 60-second ceiling, a 48 MiB byte budget, and a 15-second
+back buffer. Immutable segments already visited remain in the normal
 HTTP cache for later seeks and loop passes. Prepared overlay surfaces use an
 adaptive decoded-memory budget, allowing a six-hour loop—and, on an 8 GB+
 device, normally the full 24-hour loop—to avoid rebuilding overlays after its

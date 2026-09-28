@@ -186,7 +186,8 @@ test("refreshes the runtime catalog for long-open displays", async () => {
   assert.match(viewer, /PLAYBACK_SPEEDS = \[0\.25, 0\.5, 0\.75, 1, 1\.5, 2, 3, 4\]/);
   assert.match(viewer, /useState\(3\)/);
   assert.match(viewer, /\? stored\.speedIndex\s*: 3/);
-  assert.match(viewer, /110 \* stepFactor/);
+  assert.match(viewer, /const delay = \(220 \+ \(finalFrame \? 215 : 0\)\) \/ speed/);
+  assert.doesNotMatch(viewer, /playbackStepFactor/);
   assert.match(viewer, /\+ \(finalFrame \? 215 : 0\)/);
   assert.match(viewer, /pageVisible && anchorFrames\.length > 1/);
   assert.match(viewer, /setPageVisible\(document\.visibilityState === "visible"\)/);
@@ -309,6 +310,8 @@ test("uses an atomic H.264 compositor for complete live and archive profiles", a
   assert.match(viewer, /label: "Prebuilt loop"/);
   assert.match(viewer, /Published prebuilt combinations/);
   assert.match(viewer, /selectPrebuiltCombo\(pointer\)/);
+  assert.match(viewer, /publishedPrebuiltCombos\(catalog, item, catalog\.domains\[item\.domain\], \[\], \[\]\)\[0\]/);
+  assert.match(viewer, /setRangeHours\(firstPrebuilt\?\.pointer\.rangeHours \?\? item\.defaultHours\)/);
   assert.match(viewer, /"Prebuilt delayed"/);
   assert.doesNotMatch(viewer, /decoderMenuOpen|Playback decoder|Decoder:/);
   assert.match(viewer, /"Loading prebuilt"/);

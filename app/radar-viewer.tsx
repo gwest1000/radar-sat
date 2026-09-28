@@ -1393,6 +1393,21 @@ function publishedPrebuiltCombos(
     || a.anchor.localeCompare(b.anchor));
 }
 
+function prebuiltLayerChoices(
+  product: Product,
+  pointer: CompositeProfilePointer,
+  current: Record<string, boolean>,
+): Record<string, boolean> {
+  const selected = new Set(pointer.bakedLayerIds ?? pointer.layerIds);
+  const next = { ...current };
+  for (const layer of product.layers) {
+    if (!layer.optional || layer.enabledWith) continue;
+    next[layer.id] = selected.has(layer.id);
+    next[layer.controlId ?? layer.id] = selected.has(layer.id);
+  }
+  return next;
+}
+
 function atOrBefore(frames: Frame[], target: string, maxAgeMinutes?: number): Frame | undefined {
   const targetTime = Date.parse(target);
   if (!Number.isFinite(targetTime)) return undefined;
@@ -1496,15 +1511,6 @@ function archiveSpan(frames: Frame[]): string {
     ? `${(spanHours / 24).toFixed(1)} d available`
     : `${spanHours.toFixed(1)} h available`;
   return `${span} · ${utcClock(first.validTime)}–${utcClock(last.validTime)} UTC`;
-}
-
-function playbackStepFactor(frames: Frame[], currentIndex: number): number {
-  if (currentIndex < 0 || currentIndex >= frames.length - 1) return 1;
-  const minutes = (
-    Date.parse(frames[currentIndex + 1].validTime)
-    - Date.parse(frames[currentIndex].validTime)
-  ) / 60_000;
-  return Number.isFinite(minutes) ? Math.max(1, Math.min(6, minutes / 5)) : 1;
 }
 
 function layerLabel(layerId: string): string {
@@ -3266,7 +3272,6 @@ export function RadarViewer() {
     }
   }, [anchorFrames.length, currentFrameIndex]);
   const showLiveEdge = liveEdgeState.active && currentFrameIndex === anchorFrames.length - 1;
-  const stepFactor = playbackStepFactor(anchorFrames, currentFrameIndex);
   const isAnimating = playing && pageVisible && anchorFrames.length > 1;
   const anchor = anchorFrames[currentFrameIndex];
   const displayAnchor = showLiveEdge && liveEdgeState.anchor ? liveEdgeState.anchor : anchor;
@@ -3803,7 +3808,7 @@ export function RadarViewer() {
       candidate.pointReferences.forEach((reference) => preloadPointFrame(reference.url));
     });
     const finalFrame = currentFrameIndex === anchorFrames.length - 1;
-    const delay = (110 * stepFactor + (finalFrame ? 215 : 0)) / speed;
+    const delay = (220 + (finalFrame ? 215 : 0)) / speed;
     let cancelled = false;
     let timer: number | undefined;
     const advanceWhenReady = async (attempt = 0) => {
@@ -3839,7 +3844,6 @@ export function RadarViewer() {
     optionalLayers,
     product,
     speed,
-    stepFactor,
     videoModeReady,
   ]);
 
@@ -3985,16 +3989,7 @@ export function RadarViewer() {
     .map((layer) => layerControlLabel(layer.controlId ?? layer.id))
     .filter((label, index, all) => all.indexOf(label) === index);
   const selectPrebuiltCombo = (pointer: CompositeProfilePointer) => {
-    const selected = new Set(pointer.bakedLayerIds ?? pointer.layerIds);
-    setOptionalLayers((current) => {
-      const next = { ...current };
-      for (const layer of product.layers) {
-        if (!layer.optional || layer.enabledWith) continue;
-        next[layer.id] = selected.has(layer.id);
-        next[layer.controlId ?? layer.id] = selected.has(layer.id);
-      }
-      return next;
-    });
+    setOptionalLayers((current) => prebuiltLayerChoices(product, pointer, current));
     setRangeHours(pointer.rangeHours);
     resetToNewestFrame();
     setPlaying(true);
@@ -4144,12 +4139,14 @@ export function RadarViewer() {
                       aria-pressed={item.id === product.id}
                       key={item.id}
                       onClick={(event) => {
+                        const firstPrebuilt = catalog
+                          ? publishedPrebuiltCombos(catalog, item, catalog.domains[item.domain], [], [])[0]
+                          : undefined;
                         setPlaying(true);
-                        setOptionalLayers((current) => normalizeLayerChoices(
-                          current,
-                          item,
-                          availableProducts,
-                        ));
+                        setOptionalLayers((current) => firstPrebuilt
+                          ? prebuiltLayerChoices(item, firstPrebuilt.pointer, current)
+                          : normalizeLayerChoices(current, item, availableProducts));
+                        setRangeHours(firstPrebuilt?.pointer.rangeHours ?? item.defaultHours);
                         setProductId(item.id);
                         resetToNewestFrame();
                         setRegionMenuOpen(false);
