@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { FrameExportButton } from "./frame-export-button";
+import { WebcamOverlay } from "./webcam-overlay";
 import { captureMapFrame, frameExportFilename } from "./frame-export";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
@@ -4208,7 +4209,7 @@ export function RadarViewer() {
             data-composite-preset={activeComposite?.id ?? "dynamic"}
             data-composite-path={activeComposite?.media.path || undefined}
             data-composite-fallback={failedCompositeMedia[activeCompositeKey]}
-            role="img"
+            role={optionalLayers.webcams ? "group" : "img"}
             aria-label={`${product.title}${displayAnchor ? `, valid ${utcClock(displayAnchor.validTime)} UTC. ${sourceTimes}` : ", no frames available"}`}
           >
             {pageVisible && pendingExactComposite
@@ -4317,6 +4318,9 @@ export function RadarViewer() {
             {!videoModeReady && fireMarkers.length > 0 && (
               <FireCanvas markers={fireMarkers} style={cropStyle} />
             )}
+            {optionalLayers.webcams && (
+              <WebcamOverlay domain={product.domain} viewport={viewport} visible={pageVisible} key={product.id} />
+            )}
             {displayAnchor && (
               <div
                 className="map-status"
@@ -4405,18 +4409,24 @@ export function RadarViewer() {
                 >
                   <span className="layers-summary-heading">
                     <span className="selector-label">Add/Remove Layers</span>
-                    <span className="layers-count">{activeLayerLabels.length} on</span>
+                    <span className="layers-count">{activeLayerLabels.length + Number(Boolean(optionalLayers.webcams))} on</span>
                   </span>
                   <span className="layers-chevron" aria-hidden="true">⌄</span>
                 </button>
                 <div className="layers-popover" role="group" aria-label="Overlay layers">
                   <div className="layers-popover-heading">
                     <span>Add/Remove Layers</span>
-                    <span>{activeLayerLabels.length} active</span>
+                    <span>{activeLayerLabels.length + Number(Boolean(optionalLayers.webcams))} active</span>
                   </div>
                   <div className="sidebar-layer-controls">
                     <section className="layer-control-section" aria-label="Common weather layers">
                       <p className="layer-control-section-title">Common</p>
+                      <div className="field-select">
+                        <input id="layer-webcams" type="checkbox" aria-label="Webcams" data-layer-id="webcams"
+                          checked={Boolean(optionalLayers.webcams)}
+                          onChange={(event) => setOptionalLayers((current) => ({ ...current, webcams: event.target.checked }))} />
+                        <label htmlFor="layer-webcams">Webcams</label>
+                      </div>
                       {commonOptional.map((layer) => (
                         <div className="field-select" key={layer.id}>
                           <input
@@ -4485,6 +4495,11 @@ export function RadarViewer() {
           </div>
           <div className="legend-content">
             <h2 className="legend-title">Legend</h2>
+            {optionalLayers.webcams && <div className="webcam-attribution">
+              <p>📷 Hover for latest webcam view; click to open its webpage. Numbers group nearby cameras.</p>
+              <p>Locations: <a href="https://arfi.avalanche.ca/" target="_blank" rel="noopener noreferrer">Avalanche Canada ARFI</a> + <a href="https://www.drivebc.ca/cameras" target="_blank" rel="noopener noreferrer">DriveBC</a>.</p>
+              <p>Contains information licensed under the <a href="https://www2.gov.bc.ca/gov/content/data/open-data/open-government-licence-bc" target="_blank" rel="noopener noreferrer">Open Government Licence – British Columbia</a>.</p>
+            </div>}
             {visibleLegends.map((legendId) => {
               const legend = catalog.legends[legendId];
               if (!legend) return null;
