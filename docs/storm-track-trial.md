@@ -16,16 +16,20 @@ An upstream outage preserves the checked-in snapshot, with an explicit stale
 label when its model run is over 12 hours old. Open, visible viewers recheck
 the small catalogue every 30 minutes; hidden viewers suspend those checks.
 
-Cyan paths show MSLP-based cyclones passing within 300 km of British Columbia,
+Cyan paths show MSLP-based cyclones passing within 400 km of British Columbia,
 including centres inside the province. The checked-in region includes islands
 and is built from Natural Earth 1:10m admin-1 polygons (public domain), projected
-to BC Albers (EPSG:3005), simplified by 1 km, buffered by 300,000 metres, then
+to BC Albers (EPSG:3005), simplified by 1 km, buffered by 400,000 metres, then
 simplified by 1 km again. This is a meteorological approximation rather than a
 legal boundary or an exact geodesic-distance calculation. Rebuild with
 `python -m scripts.build_storm_region` (Cartopy required only for rebuilding).
 Track segments are checked for crossings between the native three-hour points;
 entry ordering has three-hour precision. A faint dashed outline shows the
-selection boundary. Entry does not by itself imply impacts in BC.
+selection boundary. Entry does not by itself imply impacts in BC. The initial
+300 km cutoff excluded the 30 October 2026 offshore-Vancouver-Island low:
+its 18 UTC forecast position was about 332 km from BC and its forecast closest
+approach about 328 km. The 400 km threshold includes it with room for modest
+forecast shifts, without a bespoke geographic exception.
 Dots carry UTC time and central pressure in hover tooltips. Dashed segments
 are forecast relative to catalogue generation time. Solid segments are elapsed
 model forecast positions, not observed tracks. Positions remain at their native
@@ -39,7 +43,7 @@ run**. They can change between runs. They are not yet permanent weekly briefing 
 ## Weekly identifiers: proposed next stage
 
 Use Monday 00:00 America/Vancouver through the following Monday, with a
-week-qualified identifier (e.g. `2026-W44 #2`). Use entry into BC plus 300 km
+week-qualified identifier (e.g. `2026-W44 #2`). Use entry into BC plus 400 km
 as the arrival rule.
 Maintain a persistent identity registry, match successive forecasts at common
 valid times using track distance and motion, and leave ambiguous split/merge

@@ -8,6 +8,7 @@ type Catalog = {
   schemaVersion: number; model: string; referenceTime: string; generatedAt: string;
   domains: Record<string, Track[]>;
   boundaries: Record<string, number[][][]>;
+  selection: { bufferKm: number; region: string };
 };
 
 export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewport, visible }: {
@@ -39,13 +40,13 @@ export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewp
   const stale = catalog && Date.now() - Date.parse(catalog.referenceTime) > 12 * 3600_000;
   return <div className="storm-track-overlay" aria-label="Experimental RDPS storm tracks">
     <p className="storm-track-key">{error || (catalog
-      ? `RDPS ${clock(catalog.referenceTime)}${stale ? " — STALE" : ""} · BC + 300 km${!catalog.domains[domain]?.length ? " · no qualifying systems" : ""} · latest forecast, independent of loop time · trial numbers reset each run`
+      ? `RDPS ${clock(catalog.referenceTime)}${stale ? " — STALE" : ""} · BC + ${catalog.selection.bufferKm} km${!catalog.domains[domain]?.length ? " · no qualifying systems" : ""} · latest forecast, independent of loop time · trial numbers reset each run`
       : "Loading RDPS storm tracks…")}</p>
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="RDPS cyclone paths">
       {(catalog?.boundaries?.[domain] ?? []).map((ring, index) =>
         <polyline key={`boundary-${index}`} className="storm-selection-boundary"
           points={ring.map(([x, y]) => `${(x - viewport.left) / viewport.width * 100},${(y - viewport.top) / viewport.height * 100}`).join(" ")}
-          aria-label="BC plus 300 kilometre storm-selection boundary" />)}
+          aria-label={`BC plus ${catalog!.selection.bufferKm} kilometre storm-selection boundary`} />)}
       {(catalog?.domains[domain] ?? []).map((track) => {
         const points = track.points.map(xy);
         const label = points.find((p) => p.x > 2 && p.x < 96 && p.y > 5 && p.y < 96);

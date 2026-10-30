@@ -27,7 +27,7 @@ def storm_region():
 
 
 def first_approach(points: list[dict]) -> str | None:
-    """First entry into BC+300 km, including crossings between native samples."""
+    """First entry into the buffered BC region, including crossings between samples."""
     project = Transformer.from_crs(4326, 3005, always_xy=True)
     coordinates = [project.transform(p["lon"], p["lat"]) for p in points]
     region = storm_region()
@@ -96,7 +96,7 @@ def assemble_tracks(collections: list[dict], reference: str) -> dict:
         domains[domain_id] = projected
     return {"schemaVersion": 1, "model": "RDPS", "kind": "Pressure-MSL",
             "referenceTime": reference, "numbering": "run-local-experimental", "domains": domains,
-            "selection": {"bufferKm": 300, "region": "British Columbia including islands"},
+            "selection": {"bufferKm": 400, "region": "British Columbia including islands"},
             "boundaries": boundaries}
 
 

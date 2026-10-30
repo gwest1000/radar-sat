@@ -41,7 +41,7 @@ class StormTracksTests(unittest.TestCase):
             collection("2026-10-30T15:00:00Z", [-48, 51]),
         ], RUN)["domains"]["bc"], [])
 
-    def test_three_hundred_km_from_bc_including_islands(self):
+    def test_four_hundred_km_from_bc_including_islands(self):
         project = Transformer.from_crs(4326, 3005, always_xy=True)
         # Victoria/VI and Fort Nelson are inside; remote Pacific and Saskatchewan are outside.
         for lon, lat, included in [(-123.37, 48.43, True), (-122.7, 58.8, True),
@@ -51,6 +51,15 @@ class StormTracksTests(unittest.TestCase):
         # The northern border is at 60 N: ~200 km north qualifies; ~450 km does not.
         self.assertTrue(storm_region().covers(Point(project.transform(-125, 61.8))))
         self.assertFalse(storm_region().covers(Point(project.transform(-125, 64))))
+
+    def test_offshore_vancouver_island_low_is_included(self):
+        # The 30 Oct 2026 12Z RDPS low remains ~328 km from BC at closest approach.
+        result = assemble_tracks([
+            collection(RUN, [-128.017, 46.336]),
+            collection("2026-10-30T18:00:00Z", [-127.902, 46.403]),
+        ], RUN)
+        self.assertEqual(len(result["domains"]["bc"]), 1)
+        self.assertEqual(result["selection"]["bufferKm"], 400)
 
     def test_track_crossing_between_samples_qualifies(self):
         points = [{"lon": lon, "lat": 54, "time": f"2026-10-30T{hour}:00:00Z"}
