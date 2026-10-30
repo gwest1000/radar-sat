@@ -1565,4 +1565,4 @@ input:focus-visible {
 .storm-track-overlay text { fill: #75efef; font-size: 1.5px; font-weight: 700; stroke: #122c38; stroke-width: 0.18px; paint-order: stroke; pointer-events: auto; }
 .storm-track-key { position: absolute; left: 6px; bottom: 6px; margin: 0; padding: 3px 5px; background: #10232de8; color: #bafcfc; font-size: 11px; max-width: 85%; }
 .storm-selection-boundary { fill: none; stroke: #9bced0; stroke-width: 1; stroke-dasharray: 4 6; vector-effect: non-scaling-stroke; opacity: 0.5; }
-.storm-track-overlay .storm-daily-label { font-size: 1px; font-weight: 600; stroke: #000; stroke-width: 0.2px; }
+.storm-track-overlay .storm-daily-label { font-size: 1.15px; font-weight: 600; stroke: #000; stroke-width: 0.2px; }

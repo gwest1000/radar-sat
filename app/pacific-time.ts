@@ -35,7 +35,7 @@ export function pacificTrackClock(value: string): string {
   const permanent = date.getTime() >= PERMANENT_PACIFIC_START;
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: permanent ? "Etc/GMT+7" : "America/Vancouver",
-    weekday: "long", hour: "2-digit", hourCycle: "h23",
+    weekday: "short", hour: "2-digit", hourCycle: "h23",
     ...(!permanent ? { timeZoneName: "short" as const } : {}),
   }).formatToParts(date);
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";

@@ -21,8 +21,8 @@ test("storm labels use weekdays and hours, with daily native positions and the e
   const points = Array.from({ length: 29 }, (_, i) => ({ time: new Date(start + i * 3 * 3600_000).toISOString() }));
   assert.deepEqual(dailyTrackPoints(points), [points[0], points[8], points[16], points[24], points[28]]);
   assert.deepEqual(dailyTrackPoints(points.slice(0, 8)), [points[0], points[7]]);
-  assert.equal(pacificTrackClock("2026-10-30T18:00:00Z"), "Friday 11 PCT");
-  assert.equal(pacificTrackClock("2026-11-01T06:00:00Z"), "Saturday 23 PCT");
+  assert.equal(pacificTrackClock("2026-10-30T18:00:00Z"), "Fri 11 PCT");
+  assert.equal(pacificTrackClock("2026-11-01T06:00:00Z"), "Sat 23 PCT");
 });
 
 test("storm paths require a current centre inside the selected cropped domain", () => {

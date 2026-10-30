@@ -31,7 +31,7 @@ its 18 UTC forecast position was about 332 km from BC and its forecast closest
 approach about 328 km. The 400 km threshold includes it with room for modest
 forecast shifts, without a bespoke geographic exception.
 Dots carry PCT time and central pressure in hover tooltips. Weekday/hour labels
-(e.g. `Friday 11 PCT`) are placed at 24-hour intervals from the first track point,
+(e.g. `Fri 11 PCT`) use three-letter days and are placed at 24-hour intervals from the first track point,
 plus the final native point so tracks shorter than a day have both endpoints
 labelled. These labels omit the calendar date and minutes. An arrowhead
 marks the final moving segment. The map caption is “Beta: RDPS storm tracks”;
