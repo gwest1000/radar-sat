@@ -6,7 +6,8 @@ import ts from "typescript";
 
 import { decodedVideoDimensionsError, selectHlsEngine, shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
 import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
-import { pacificClock, dailyTrackPoints } from "../app/pacific-time.ts";
+import { pacificClock, dailyTrackPoints, pacificTrackClock } from "../app/pacific-time.ts";
+import { stormPresentInViewport } from "../app/storm-track-policy.ts";
 
 test("BC Pacific clocks stay at UTC-7 across the former fall-back and through winter", () => {
   for (const date of ["2026-10-30", "2026-11-01", "2027-01-15"]) {
@@ -15,10 +16,26 @@ test("BC Pacific clocks stay at UTC-7 across the former fall-back and through wi
   assert.match(pacificClock("2026-01-15T16:00:00Z", true), /08:00.*PST/);
 });
 
-test("storm date labels follow native positions at 24-hour intervals", () => {
+test("storm labels use weekdays and hours, with daily native positions and the endpoint", () => {
   const start = Date.parse("2026-10-30T12:00:00Z");
   const points = Array.from({ length: 29 }, (_, i) => ({ time: new Date(start + i * 3 * 3600_000).toISOString() }));
-  assert.deepEqual(dailyTrackPoints(points), [points[0], points[8], points[16], points[24]]);
+  assert.deepEqual(dailyTrackPoints(points), [points[0], points[8], points[16], points[24], points[28]]);
+  assert.deepEqual(dailyTrackPoints(points.slice(0, 8)), [points[0], points[7]]);
+  assert.equal(pacificTrackClock("2026-10-30T18:00:00Z"), "Friday 11 PCT");
+  assert.equal(pacificTrackClock("2026-11-01T06:00:00Z"), "Saturday 23 PCT");
+});
+
+test("storm paths require a current centre inside the selected cropped domain", () => {
+  const start = Date.parse("2026-10-30T18:00:00Z");
+  const points = [0, 1, 2].map((i) => ({ time: new Date(start + i * 3 * 3600_000).toISOString(), x: 0.2 + i * 0.3, y: 0.5 }));
+  const whole = { left: 0, top: 0, width: 1, height: 1 };
+  const crop = { left: 0.4, top: 0.3, width: 0.2, height: 0.4 };
+  assert.equal(stormPresentInViewport(points, start - 1, whole), false, "not formed yet");
+  assert.equal(stormPresentInViewport(points, start + 7 * 3600_000, whole), false, "already dissipated");
+  assert.equal(stormPresentInViewport(points, start, crop), false, "future entry alone is insufficient");
+  assert.equal(stormPresentInViewport(points, start + 3 * 3600_000, crop), true);
+  assert.equal(stormPresentInViewport(points, start + 2.5 * 3600_000, crop), true, "interpolated current centre");
+  assert.equal(stormPresentInViewport([points[0], points[2]], start + 3 * 3600_000, crop), false, "do not bridge a missing source position");
 });
 
 async function pausedSeekHarness({ cached = true, playing = false, readyState = 2 } = {}) {

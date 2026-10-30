@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useEffect, useId, useState } from "react";
-import { dailyTrackPoints, pacificClock } from "./pacific-time";
+import { dailyTrackPoints, pacificClock, pacificTrackClock } from "./pacific-time";
+import { stormPresentInViewport } from "./storm-track-policy";
 
 type Point = { x: number; y: number; time: string; pressure: number };
 type Track = { id: string; number: number; points: Point[] };
@@ -19,6 +20,7 @@ export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewp
 }) {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [error, setError] = useState("");
+  const [asOf, setAsOf] = useState<number | null>(null);
   const arrowId = `storm-arrow-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   useEffect(() => {
     if (!visible) return;
@@ -28,6 +30,7 @@ export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewp
       const data = await response.json() as Catalog;
       if (data.schemaVersion !== 1 || data.model !== "RDPS" || !data.domains) throw new Error("Invalid storm tracks");
       setCatalog(data);
+      setAsOf(Date.now());
       setError("");
     }).catch((reason) => { if (!controller.signal.aborted) setError(String(reason.message)); });
     void refresh();
@@ -40,23 +43,25 @@ export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewp
   });
   const clock = (time: string) => new Date(time).toISOString().slice(5, 16).replace("T", " ") + "Z";
   const stale = catalog && Date.now() - Date.parse(catalog.referenceTime) > 12 * 3600_000;
+  const tracks = (catalog?.domains[domain] ?? []).filter((track) =>
+    stormPresentInViewport(track.points, asOf ?? NaN, viewport));
   return <div className="storm-track-overlay" aria-label="Experimental RDPS storm tracks">
     <p className="storm-track-key" title={error || (catalog
-      ? `RDPS ${clock(catalog.referenceTime)}${stale ? " — STALE" : ""} · BC + ${catalog.selection.bufferKm} km${!catalog.domains[domain]?.length ? " · no qualifying systems" : ""} · latest forecast, independent of loop time · trial numbers reset each run`
+      ? `RDPS ${clock(catalog.referenceTime)}${stale ? " — STALE" : ""} · BC + ${catalog.selection.bufferKm} km${!tracks.length ? " · no current systems in this view" : ""} · latest predicted paths for storms currently in this view; independent of loop time · trial numbers reset each run`
       : "Loading RDPS storm tracks…")}>Beta: RDPS storm tracks
       {(error || stale) && <span role="status"> · {error ? "unavailable" : "stale"}</span>}
     </p>
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="RDPS cyclone paths">
       <defs>
         <marker id={arrowId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-          <path d="M 1 1 L 9 5 L 1 9 Z" fill="#75efef" stroke="#122c38" strokeWidth="0.7" />
+          <path d="M 1 1 L 9 5 L 1 9 Z" fill="#75efef" stroke="#000" strokeWidth="1.3" />
         </marker>
       </defs>
       {(catalog?.boundaries?.[domain] ?? []).map((ring, index) =>
         <polyline key={`boundary-${index}`} className="storm-selection-boundary"
           points={ring.map(([x, y]) => `${(x - viewport.left) / viewport.width * 100},${(y - viewport.top) / viewport.height * 100}`).join(" ")}
           aria-label={`BC plus ${catalog!.selection.bufferKm} kilometre storm-selection boundary`} />)}
-      {(catalog?.domains[domain] ?? []).map((track) => {
+      {tracks.map((track) => {
         const points = track.points.map(xy);
         const label = points.find((p) => p.x > 2 && p.x < 96 && p.y > 5 && p.y < 96);
         if (!label) return null;
@@ -81,7 +86,7 @@ export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewp
             <text key={`day-${p.time}`} className="storm-daily-label"
               textAnchor={p.x > 65 ? "end" : "start"}
               x={p.x + (p.x > 65 ? -0.65 : 0.65)} y={p.y + (index % 2 ? -1.9 : 1.65)}>
-              {pacificClock(p.time, true)}
+              {pacificTrackClock(p.time)}
             </text>)}
           <text x={label.x + 0.65} y={label.y - 0.7}>
             <title>{track.id}</title>{`#${track.number}`}

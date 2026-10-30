@@ -19,10 +19,25 @@ export function pacificClock(value: string, compact = false): string {
 
 export function dailyTrackPoints<T extends { time: string }>(points: T[]): T[] {
   let next = -Infinity;
-  return points.filter((point) => {
+  const labels = points.filter((point) => {
     const time = Date.parse(point.time);
     if (!Number.isFinite(time) || time < next) return false;
     next = time + 24 * 3600_000;
     return true;
   });
+  const last = points.at(-1);
+  if (last && Number.isFinite(Date.parse(last.time)) && labels.at(-1)?.time !== last.time) labels.push(last);
+  return labels;
+}
+
+export function pacificTrackClock(value: string): string {
+  const date = new Date(value);
+  const permanent = date.getTime() >= PERMANENT_PACIFIC_START;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: permanent ? "Etc/GMT+7" : "America/Vancouver",
+    weekday: "long", hour: "2-digit", hourCycle: "h23",
+    ...(!permanent ? { timeZoneName: "short" as const } : {}),
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("weekday")} ${part("hour")} ${permanent ? "PCT" : part("timeZoneName")}`;
 }

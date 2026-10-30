@@ -30,8 +30,10 @@ selection boundary. Entry does not by itself imply impacts in BC. The initial
 its 18 UTC forecast position was about 332 km from BC and its forecast closest
 approach about 328 km. The 400 km threshold includes it with room for modest
 forecast shifts, without a bespoke geographic exception.
-Dots carry PCT time and central pressure in hover tooltips. Daily dated labels
-are placed at 24-hour intervals from the first track point, and an arrowhead
+Dots carry PCT time and central pressure in hover tooltips. Weekday/hour labels
+(e.g. `Friday 11 PCT`) are placed at 24-hour intervals from the first track point,
+plus the final native point so tracks shorter than a day have both endpoints
+labelled. These labels omit the calendar date and minutes. An arrowhead
 marks the final moving segment. The map caption is “Beta: RDPS storm tracks”;
 hover over it for the forecast run and selection details. New/unspecified layer
 preferences enable this layer by default; an explicit saved off choice persists.
@@ -40,6 +42,15 @@ are forecast relative to catalogue generation time. Solid segments are elapsed
 model forecast positions, not observed tracks. Positions remain at their native
 three-hour cadence. The overlay stays fixed at the latest RDPS forecast while
 the historical radar/satellite loop plays, and explicitly says so on the map.
+Only storms whose predicted centres are currently inside the selected map's
+cropped viewport are displayed. The current time is sampled when the catalogue
+is fetched (including its 30-minute refresh); it does not follow the historical
+animation clock. A storm forming later or forecast to enter this view later is
+excluded until present. Three-hourly source positions bracket the visibility
+check, with linear interpolation used only for that check; no extra track dots
+or weather frames are generated, and missing source slots are not bridged.
+The entire available predicted path remains visible for an included storm,
+clipped to the map. Local track numbers are preserved when others are hidden.
 It adds no per-frame decoding, image caches, or playback animation callbacks.
 
 The main map clock and storm labels use BC's permanent UTC-7 Pacific Time
