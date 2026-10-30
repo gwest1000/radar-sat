@@ -30,12 +30,22 @@ selection boundary. Entry does not by itself imply impacts in BC. The initial
 its 18 UTC forecast position was about 332 km from BC and its forecast closest
 approach about 328 km. The 400 km threshold includes it with room for modest
 forecast shifts, without a bespoke geographic exception.
-Dots carry UTC time and central pressure in hover tooltips. Dashed segments
+Dots carry PCT time and central pressure in hover tooltips. Daily dated labels
+are placed at 24-hour intervals from the first track point, and an arrowhead
+marks the final moving segment. The map caption is “Beta: RDPS storm tracks”;
+hover over it for the forecast run and selection details. New/unspecified layer
+preferences enable this layer by default; an explicit saved off choice persists.
+Dashed segments
 are forecast relative to catalogue generation time. Solid segments are elapsed
 model forecast positions, not observed tracks. Positions remain at their native
 three-hour cadence. The overlay stays fixed at the latest RDPS forecast while
 the historical radar/satellite loop plays, and explicitly says so on the map.
 It adds no per-frame decoding, image caches, or playback animation callbacks.
+
+The main map clock and storm labels use BC's permanent UTC-7 Pacific Time
+(`PCT`) from 8 March 2026 onward, even on browsers with older timezone data.
+Earlier historical timestamps retain their applicable Vancouver time-zone rule.
+Official terminology: https://news.gov.bc.ca/releases/2026CITZ0009-001073
 
 Trial numbers are sorted by first entry into that envelope **within this model
 run**. They can change between runs. They are not yet permanent weekly briefing identifiers.

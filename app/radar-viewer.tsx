@@ -15,6 +15,7 @@ import {
 import { FrameExportButton } from "./frame-export-button";
 import { WebcamOverlay } from "./webcam-overlay";
 import { StormTrackOverlay } from "./storm-track-overlay";
+import { pacificClock } from "./pacific-time";
 import { captureMapFrame, frameExportFilename } from "./frame-export";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
@@ -1480,15 +1481,7 @@ function utcClock(value: string): string {
 }
 
 function localClock(value: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Vancouver",
-    weekday: "short",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(value));
+  return pacificClock(value);
 }
 
 function shortClock(value: string): string {
@@ -2008,7 +2001,7 @@ export function RadarViewer() {
   const [playing, setPlaying] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(3);
   const [rangeHours, setRangeHours] = useState(3);
-  const [optionalLayers, setOptionalLayers] = useState<Record<string, boolean>>({});
+  const [optionalLayers, setOptionalLayers] = useState<Record<string, boolean>>({ stormTracks: true });
   const playbackQuality: PlaybackQuality = "high";
   const [lightningMarkers, setLightningMarkers] = useState<LightningMarker[]>([]);
   const [ecccFallbackLightningMarkers, setEcccFallbackLightningMarkers] = useState<LightningMarker[]>([]);
@@ -2048,7 +2041,7 @@ export function RadarViewer() {
     productId: "bc-large-overlay",
     speedIndex: 3,
     rangeHours: 3,
-    optionalLayers: {},
+    optionalLayers: { stormTracks: true },
     playing: true,
     playbackQuality: "high",
   });
@@ -2163,7 +2156,7 @@ export function RadarViewer() {
                 );
                 if (stored.optionalLayers && typeof stored.optionalLayers === "object") {
                   setOptionalLayers(normalizeLayerChoices(
-                    stored.optionalLayers,
+                    { stormTracks: true, ...stored.optionalLayers },
                     preferred,
                     nextCatalog.products,
                   ));

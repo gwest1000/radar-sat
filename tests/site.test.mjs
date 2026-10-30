@@ -6,6 +6,20 @@ import ts from "typescript";
 
 import { decodedVideoDimensionsError, selectHlsEngine, shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
 import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
+import { pacificClock, dailyTrackPoints } from "../app/pacific-time.ts";
+
+test("BC Pacific clocks stay at UTC-7 across the former fall-back and through winter", () => {
+  for (const date of ["2026-10-30", "2026-11-01", "2027-01-15"]) {
+    assert.match(pacificClock(`${date}T12:00:00Z`, true), /05:00.*PCT/);
+  }
+  assert.match(pacificClock("2026-01-15T16:00:00Z", true), /08:00.*PST/);
+});
+
+test("storm date labels follow native positions at 24-hour intervals", () => {
+  const start = Date.parse("2026-10-30T12:00:00Z");
+  const points = Array.from({ length: 29 }, (_, i) => ({ time: new Date(start + i * 3 * 3600_000).toISOString() }));
+  assert.deepEqual(dailyTrackPoints(points), [points[0], points[8], points[16], points[24]]);
+});
 
 async function pausedSeekHarness({ cached = true, playing = false, readyState = 2 } = {}) {
   // Exercise the production seek routine with a decoder that emits seeked,
