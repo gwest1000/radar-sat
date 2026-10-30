@@ -14,6 +14,7 @@ import {
 
 import { FrameExportButton } from "./frame-export-button";
 import { WebcamOverlay } from "./webcam-overlay";
+import { StormTrackOverlay } from "./storm-track-overlay";
 import { captureMapFrame, frameExportFilename } from "./frame-export";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
@@ -4321,6 +4322,9 @@ export function RadarViewer() {
             {optionalLayers.webcams && (
               <WebcamOverlay domain={product.domain} viewport={viewport} visible={pageVisible} key={product.id} />
             )}
+            {optionalLayers.stormTracks && (
+              <StormTrackOverlay domain={product.domain} viewport={viewport} visible={pageVisible} key={`storms-${product.id}`} />
+            )}
             {displayAnchor && (
               <div
                 className="map-status"
@@ -4409,18 +4413,24 @@ export function RadarViewer() {
                 >
                   <span className="layers-summary-heading">
                     <span className="selector-label">Add/Remove Layers</span>
-                    <span className="layers-count">{activeLayerLabels.length + Number(Boolean(optionalLayers.webcams))} on</span>
+                    <span className="layers-count">{activeLayerLabels.length + Number(Boolean(optionalLayers.webcams)) + Number(Boolean(optionalLayers.stormTracks))} on</span>
                   </span>
                   <span className="layers-chevron" aria-hidden="true">⌄</span>
                 </button>
                 <div className="layers-popover" role="group" aria-label="Overlay layers">
                   <div className="layers-popover-heading">
                     <span>Add/Remove Layers</span>
-                    <span>{activeLayerLabels.length + Number(Boolean(optionalLayers.webcams))} active</span>
+                    <span>{activeLayerLabels.length + Number(Boolean(optionalLayers.webcams)) + Number(Boolean(optionalLayers.stormTracks))} active</span>
                   </div>
                   <div className="sidebar-layer-controls">
                     <section className="layer-control-section" aria-label="Common weather layers">
                       <p className="layer-control-section-title">Common</p>
+                      <div className="field-select">
+                        <input id="layer-storm-tracks" type="checkbox" aria-label="RDPS storm tracks (trial)"
+                          checked={Boolean(optionalLayers.stormTracks)}
+                          onChange={(event) => setOptionalLayers((current) => ({ ...current, stormTracks: event.target.checked }))} />
+                        <label htmlFor="layer-storm-tracks">RDPS storm tracks (trial)</label>
+                      </div>
                       <div className="field-select">
                         <input id="layer-webcams" type="checkbox" aria-label="Webcams" data-layer-id="webcams"
                           checked={Boolean(optionalLayers.webcams)}

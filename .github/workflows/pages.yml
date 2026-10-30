@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    # Refresh the small track catalogue after each RDPS run, without R2 writes.
+    - cron: '37 3,9,15,21 * * *'
 
 permissions:
   contents: read
@@ -24,6 +27,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'requests>=2.32,<3' 'pyproj>=3.6,<4' 'shapely>=2,<3' 'Pillow>=10,<13'
+      - name: Refresh RDPS storm tracks
+        # Preserve the checked-in snapshot on source outages; the viewer marks it stale.
+        continue-on-error: true
+        run: python -m scripts.update_storm_tracks
       - run: npm run build:pages
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

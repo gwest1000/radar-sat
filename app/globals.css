@@ -1557,3 +1557,11 @@ input:focus-visible {
 }
 .frame-export-dialog p { color: #c4d0d5; font-size: 0.85rem; }
 .frame-export-dialog img { display: block; width: 100%; height: auto; user-select: auto; }
+
+.storm-track-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 8; overflow: hidden; }
+.storm-track-overlay svg { width: 100%; height: 100%; overflow: hidden; }
+.storm-track-overlay line { stroke: #75efef; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.storm-track-overlay circle { fill: #75efef; stroke: #122c38; stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: auto; }
+.storm-track-overlay text { fill: #75efef; font-size: 1.5px; font-weight: 700; stroke: #122c38; stroke-width: 0.18px; paint-order: stroke; pointer-events: auto; }
+.storm-track-key { position: absolute; left: 6px; bottom: 6px; margin: 0; padding: 3px 5px; background: #10232de8; color: #bafcfc; font-size: 11px; max-width: 85%; }
+.storm-selection-boundary { fill: none; stroke: #9bced0; stroke-width: 1; stroke-dasharray: 4 6; vector-effect: non-scaling-stroke; opacity: 0.5; }
