@@ -1346,13 +1346,14 @@ input:focus-visible {
   color: var(--muted);
 }
 
-@media (max-width: 840px) {
+/* Large iPads and Surface tablets can exceed 840 CSS px in portrait. */
+@media (max-width: 840px), (max-width: 1200px) and (orientation: portrait) {
   .app-shell {
     display: block;
     height: auto;
     min-height: 100dvh;
     overflow: visible;
-    padding: 14px 10px 30px;
+    padding: max(14px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(30px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
   }
 
   .site-header {
@@ -1385,11 +1386,16 @@ input:focus-visible {
     transform-origin: top center;
   }
 
+  .range-selector .selector-options {
+    right: 0;
+    left: auto;
+  }
+
   .legend-rail {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+    align-items: start;
+    gap: 12px;
     max-height: none;
     margin-top: 10px;
     overflow: visible;
@@ -1410,6 +1416,7 @@ input:focus-visible {
   }
 
   .legend-title {
+    grid-column: 1 / -1;
     width: 100%;
   }
 
@@ -1419,12 +1426,69 @@ input:focus-visible {
     margin: 0;
   }
 
+  .layer-toolbar {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .layer-selector,
+  .prebuilt-selector {
+    position: relative;
+    width: 100%;
+  }
+
+  .layer-selector.is-open,
+  .prebuilt-selector.is-open {
+    z-index: 100;
+  }
+
+  .layers-popover {
+    inset: calc(100% - 1px) 0 auto;
+    max-height: min(65dvh, 680px);
+    overscroll-behavior: contain;
+  }
+
+  .selector-current,
+  .product-switcher .product-button,
+  .range-selector .range-button,
+  .control-button,
+  .layers-summary,
+  .field-select,
+  .sources-button,
+  .frame-export-button,
+  .speed-control,
+  .speed-range,
+  .timeline-range {
+    min-height: 44px;
+  }
+
+  .prebuilt-selector > .layers-summary { height: auto; }
+
+  .field-select input { width: 18px; height: 18px; }
+
+  .playback-recovery,
+  .frame-export-button { grid-column: 1 / -1; }
+}
+
+/* Use the tablet's width to keep the touch controls from becoming four rows. */
+@media (min-width: 561px) and (max-width: 1200px) and (orientation: portrait) {
+  .map-stage { width: 100%; }
+
+  .transport-row {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.7fr) minmax(0, 1fr);
+  }
+
+  .transport-actions { grid-column: 3; grid-row: 1; }
+  .speed-control { grid-column: 1 / span 2; grid-row: 2; }
+  .timeline-metadata { grid-column: 3; grid-row: 2; }
 }
 
 @media (max-width: 560px) {
   .app-shell {
-    padding-inline: 8px;
+    padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));
   }
+
+  .layer-toolbar { grid-template-columns: 1fr; }
 
   .product-button {
     min-height: 44px;
