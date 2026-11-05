@@ -21,9 +21,14 @@ ROOT = "https://dd.weather.gc.ca"
 
 
 @lru_cache(maxsize=1)
+def storm_region_feature():
+    return json.loads((Path(__file__).resolve().parents[1] / "config" /
+                      "bc-storm-region.json").read_text())
+
+
+@lru_cache(maxsize=1)
 def storm_region():
-    return shape(json.loads((Path(__file__).resolve().parents[1] / "config" /
-                            "bc-storm-region.json").read_text())["geometry"])
+    return shape(storm_region_feature()["geometry"])
 
 
 def first_approach(points: list[dict]) -> str | None:
@@ -96,7 +101,8 @@ def assemble_tracks(collections: list[dict], reference: str) -> dict:
         domains[domain_id] = projected
     return {"schemaVersion": 1, "model": "RDPS", "kind": "Pressure-MSL",
             "referenceTime": reference, "numbering": "run-local-experimental", "domains": domains,
-            "selection": {"bufferKm": 400, "region": "British Columbia including islands"},
+            "selection": {"bufferKm": storm_region_feature()["properties"]["bufferMetres"] / 1000,
+                          "region": "British Columbia including islands"},
             "boundaries": boundaries}
 
 
