@@ -800,7 +800,7 @@ test("renders weather-app lightning bolts and wildfire flames from point frames"
   assert.match(viewer, /lightningUrls/);
   assert.doesNotMatch(viewer, /&& !LIGHTNING_CONTROLLERS\.has\(layer\.id\)/);
   assert.match(viewer, /targetDomain === "north-pacific"/);
-  assert.match(viewer, /BC_ON_NORTH_AMERICA_STYLE/);
+  assert.match(viewer, /viewportPlacement\(BC_ON_NORTH_AMERICA, viewport\)/);
   assert.match(viewer, /active-fire-marker/);
   assert.match(viewer, /clusterNotableFires/);
   assert.match(viewer, /status: Math\.max\(\.\.\.group\.map\(\(marker\) => marker\.status\)\)/);
