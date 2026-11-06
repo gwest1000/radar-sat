@@ -46,15 +46,13 @@ are forecast relative to catalogue generation time. Solid segments are elapsed
 model forecast positions, not observed tracks. Positions remain at their native
 three-hour cadence. The overlay stays fixed at the latest RDPS forecast while
 the historical radar/satellite loop plays, and explicitly says so on the map.
-Only storms whose predicted centres are currently inside the selected map's
-cropped viewport are displayed. The current time is sampled when the catalogue
-is fetched (including its 30-minute refresh); it does not follow the historical
-animation clock. A storm forming later or forecast to enter this view later is
-excluded until present. Three-hourly source positions bracket the visibility
-check, with linear interpolation used only for that check; no extra track dots
-or weather frames are generated, and missing source slots are not bridged.
-The entire available predicted path remains visible for an included storm,
-clipped to the map. Local track numbers are preserved when others are hidden.
+Every view renders the same selected systems and their entire available
+predicted paths, including systems forming later or currently outside the map.
+Paths and labels outside the map are clipped, rather than suppressing the
+whole system based on its current centre. A segment crossing the view remains
+drawable even if neither sampled endpoint is inside it. Track numbers stay
+consistent across views within the same model run. No extra track dots or
+weather frames are generated.
 It adds no per-frame decoding, image caches, or playback animation callbacks.
 
 The main map clock and storm labels use BC's permanent UTC-7 Pacific Time

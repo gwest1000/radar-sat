@@ -7,7 +7,6 @@ import ts from "typescript";
 import { decodedVideoDimensionsError, selectHlsEngine, shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
 import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
 import { pacificClock, dailyTrackPoints, pacificTrackClock } from "../app/pacific-time.ts";
-import { stormPresentInViewport } from "../app/storm-track-policy.ts";
 import { displayViewport, containsViewport, viewportPlacement } from "../app/display-viewport.ts";
 
 test("presentation crops retain registered source and prebuilt coordinates", () => {
@@ -47,17 +46,42 @@ test("storm labels use weekdays and hours, with daily native positions and the e
   assert.equal(pacificTrackClock("2026-11-01T06:00:00Z"), "Sat 23 PCT");
 });
 
-test("storm paths require a current centre inside the selected cropped domain", () => {
-  const start = Date.parse("2026-10-30T18:00:00Z");
-  const points = [0, 1, 2].map((i) => ({ time: new Date(start + i * 3 * 3600_000).toISOString(), x: 0.2 + i * 0.3, y: 0.5 }));
-  const whole = { left: 0, top: 0, width: 1, height: 1 };
-  const crop = { left: 0.4, top: 0.3, width: 0.2, height: 0.4 };
-  assert.equal(stormPresentInViewport(points, start - 1, whole), false, "not formed yet");
-  assert.equal(stormPresentInViewport(points, start + 7 * 3600_000, whole), false, "already dissipated");
-  assert.equal(stormPresentInViewport(points, start, crop), false, "future entry alone is insufficient");
-  assert.equal(stormPresentInViewport(points, start + 3 * 3600_000, crop), true);
-  assert.equal(stormPresentInViewport(points, start + 2.5 * 3600_000, crop), true, "interpolated current centre");
-  assert.equal(stormPresentInViewport([points[0], points[2]], start + 3 * 3600_000, crop), false, "do not bridge a missing source position");
+test("regional storm overlay keeps future entrants and segments crossing between off-map points", async () => {
+  const source = await readFile(new URL("../app/storm-track-overlay.tsx", import.meta.url), "utf8");
+  const point = (x, hour) => ({ x, y: .5, time: `2030-01-01T${hour}:00:00Z`, pressure: 990 });
+  const tracks = [
+    { id: "future-entrant", number: 1, points: [point(.35, "00"), point(.5, "03")] },
+    { id: "crossing", number: 2, points: [point(.3, "00"), point(.7, "03")] },
+  ];
+  const catalog = { schemaVersion: 1, model: "RDPS", referenceTime: "2030-01-01T00:00:00Z",
+    generatedAt: "2030-01-01T00:00:00Z", domains: { bc: tracks }, selection: { bufferKm: 600 } };
+  const exports = {};
+  let stateIndex = 0;
+  const jsx = (type, props, key) => ({ type, props, key });
+  const compiled = ts.transpileModule(source, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ESNext, jsx: ts.JsxEmit.ReactJSX,
+  } }).outputText;
+  vm.runInNewContext(compiled, { exports, require(name) {
+    if (name === "react") return { memo: (fn) => fn, useEffect() {}, useId: () => "test",
+      useState: () => [stateIndex++ === 0 ? catalog : "", () => {}] };
+    if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
+    if (name === "./pacific-time") return { dailyTrackPoints: (p) => p, pacificClock: (p) => p, pacificTrackClock: (p) => p };
+    throw new Error(`Unexpected overlay dependency: ${name}`);
+  } });
+  const tree = exports.StormTrackOverlay({ domain: "bc", visible: true,
+    viewport: { left: .4, top: 0, width: .2, height: 1 } });
+  const nodes = [];
+  const visit = (node) => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (!node || typeof node !== "object") return;
+    nodes.push(node); visit(node.props?.children);
+  };
+  visit(tree);
+  assert.ok(nodes.some((n) => n.type === "g" && n.key === "future-entrant"));
+  const crossing = nodes.find((n) => n.type === "g" && n.key === "crossing");
+  assert.ok(crossing, "do not drop tracks just because all sampled centres are outside");
+  nodes.length = 0; visit(crossing);
+  assert.ok(nodes.some((n) => n.type === "line"), "the crossing segment must remain drawable");
 });
 
 async function pausedSeekHarness({ cached = true, playing = false, readyState = 2 } = {}) {
