@@ -16,6 +16,7 @@ import { FrameExportButton } from "./frame-export-button";
 import { WebcamOverlay } from "./webcam-overlay";
 import { StormTrackOverlay } from "./storm-track-overlay";
 import { pacificClock } from "./pacific-time";
+import { displayViewport, viewportPlacement, DisplayViewport } from "./display-viewport";
 import { captureMapFrame, frameExportFilename } from "./frame-export";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
@@ -228,14 +229,6 @@ const LEGACY_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v5";
 const OLDER_VIEWER_PREFERENCES_KEY = "radar-sat-viewer-preferences-v4";
 const NEWEST_FRAME = Number.MAX_SAFE_INTEGER;
 const FULL_VIEWPORT: Viewport = { left: 0, top: 0, width: 1, height: 1 };
-const FULL_LAYER_STYLE: CSSProperties = {
-  left: "0",
-  top: "0",
-  right: "auto",
-  bottom: "auto",
-  width: "100%",
-  height: "100%",
-};
 const REGIONAL_PRODUCT_KEYS: Record<string, string> = {
   "bc-small-overlay": "small",
   "bc-southwest-overlay": "southwest",
@@ -252,12 +245,6 @@ const COMPOSITE_FRESHNESS_MINUTES: Record<number, number> = {
   168: 70,
 };
 const BC_ON_NORTH_AMERICA = { left: 0.269, top: 0.258, width: 0.286, height: 0.333 };
-const BC_ON_NORTH_AMERICA_STYLE: CSSProperties = {
-  left: `${BC_ON_NORTH_AMERICA.left * 100}%`,
-  top: `${BC_ON_NORTH_AMERICA.top * 100}%`,
-  width: `${BC_ON_NORTH_AMERICA.width * 100}%`,
-  height: `${BC_ON_NORTH_AMERICA.height * 100}%`,
-};
 const LIGHTNING_CONTROLLERS = new Set(["lightning-trail", "glm-lightning-trail"]);
 const SATELLITE_LAYERS = new Set([
   "raw-visir", "raw-visir-5min", "raw-visir-native", "raw-ir",
@@ -4062,16 +4049,12 @@ export function RadarViewer() {
   const archiveCadence = playbackVideoManifest?.cadenceMinutes ?? product.archiveFrameIntervalMinutes ?? 60;
   const selectedArchiveSpan = archiveSpan(anchorFrames)
     + (effectiveRangeHours === 168 && archiveCadence >= 180 ? ` · ${archiveCadence / 60}-hour snapshots` : "");
-  const viewport = product.viewport ?? FULL_VIEWPORT;
+  const originalViewport = product.viewport ?? FULL_VIEWPORT;
+  const videoViewport = (playbackVideoManifest?.viewport ?? originalViewport) as DisplayViewport;
+  const viewport = displayViewport(product.id, originalViewport, videoModeReady ? videoViewport : undefined);
   const mapAspect = (domain.width * viewport.width) / (domain.height * viewport.height);
-  const cropStyle: CSSProperties = {
-    left: `${-(viewport.left / viewport.width) * 100}%`,
-    top: `${-(viewport.top / viewport.height) * 100}%`,
-    right: "auto",
-    bottom: "auto",
-    width: `${100 / viewport.width}%`,
-    height: `${100 / viewport.height}%`,
-  };
+  const cropStyle: CSSProperties = viewportPlacement(FULL_VIEWPORT, viewport);
+  const alignedCropStyle: CSSProperties = viewportPlacement(originalViewport, viewport);
 
   return (
     <main className="app-shell">
@@ -4243,6 +4226,7 @@ export function RadarViewer() {
             {!anchor && <div className="map-loading">No frames are available for this product yet.</div>}
             {videoModeReady && playbackVideoManifest ? (
               <VideoCompositeStage
+                style={viewportPlacement(videoViewport, viewport)}
                 manifest={playbackVideoManifest}
                 mediaUrl={absoluteUrl(playbackVideoManifest.media.path, catalogBase)}
                 plans={videoPlans}
@@ -4265,7 +4249,7 @@ export function RadarViewer() {
                 layerId={layer.renderId ?? layer.id}
                 key={`${product.id}-${layer.id}`}
                 style={{
-                  ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
+                  ...(layer.stageAligned ? alignedCropStyle : cropStyle),
                   opacity: layer.opacity,
                   filter: ["Overlay", "Broad"].includes(product.group)
                     && ["convective", "snowfog", "raw-visir", "raw-visir-5min", "raw-ir", "westwx-visir", "westwx-ir"].includes(layer.id)
@@ -4283,7 +4267,7 @@ export function RadarViewer() {
                     layerId={layer.renderId ?? layer.id}
                     key={`live-edge-${product.id}-${layer.id}`}
                     style={{
-                      ...(layer.stageAligned ? FULL_LAYER_STYLE : cropStyle),
+                      ...(layer.stageAligned ? alignedCropStyle : cropStyle),
                       opacity: layer.opacity,
                       filter: [
                         "convective", "snowfog",
@@ -4304,7 +4288,7 @@ export function RadarViewer() {
             {!videoModeReady && ecccFallbackLightningMarkers.length > 0 && product.domain === "north-america" && (
               <LightningCanvas
                 markers={ecccFallbackLightningMarkers}
-                style={BC_ON_NORTH_AMERICA_STYLE}
+                style={viewportPlacement(BC_ON_NORTH_AMERICA, viewport)}
                 className="eccc-north-fallback"
                 label="Recent ECCC lightning activity in northern British Columbia"
               />

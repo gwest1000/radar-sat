@@ -8,6 +8,28 @@ import { decodedVideoDimensionsError, selectHlsEngine, shouldWaitForSequentialSu
 import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
 import { pacificClock, dailyTrackPoints, pacificTrackClock } from "../app/pacific-time.ts";
 import { stormPresentInViewport } from "../app/storm-track-policy.ts";
+import { displayViewport, containsViewport, viewportPlacement } from "../app/display-viewport.ts";
+
+test("presentation crops retain registered source and prebuilt coordinates", () => {
+  const source = { left: 0, top: 0, width: 1, height: 1 };
+  const encoded = { left: 0, top: 0.1763, width: 0.86, height: 0.78 };
+  const target = displayViewport("north-america-overlay", encoded, encoded);
+  assert.ok(containsViewport(encoded, target));
+  assert.ok(target.top > encoded.top && target.height < encoded.height);
+  const direct = viewportPlacement(source, target);
+  const video = viewportPlacement(encoded, target);
+  const fraction = (value) => parseFloat(value) / 100;
+  for (const [x, y] of [[0.4, 0.5], [0.8, 0.85]]) {
+    const expectedX = fraction(direct.left) + x * fraction(direct.width);
+    const expectedY = fraction(direct.top) + y * fraction(direct.height);
+    const actualX = fraction(video.left) + ((x - encoded.left) / encoded.width) * fraction(video.width);
+    const actualY = fraction(video.top) + ((y - encoded.top) / encoded.height) * fraction(video.height);
+    assert.ok(Math.abs(expectedX - actualX) < 1e-10);
+    assert.ok(Math.abs(expectedY - actualY) < 1e-10);
+  }
+  assert.equal(displayViewport("north-america-overlay", encoded, { left: 0, top: 0.5, width: 0.86, height: 0.3 }), encoded);
+  assert.equal(displayViewport("bc-small-overlay", encoded), encoded);
+});
 
 test("BC Pacific clocks stay at UTC-7 across the former fall-back and through winter", () => {
   for (const date of ["2026-10-30", "2026-11-01", "2027-01-15"]) {
