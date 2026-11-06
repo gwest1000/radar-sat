@@ -9,7 +9,6 @@ type Track = { id: string; number: number; points: Point[] };
 type Catalog = {
   schemaVersion: number; model: string; referenceTime: string; generatedAt: string;
   domains: Record<string, Track[]>;
-  boundaries: Record<string, number[][][]>;
   selection: { bufferKm: number; region: string };
 };
 
@@ -57,10 +56,6 @@ export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewp
           <path d="M 1 1 L 9 5 L 1 9 Z" fill="#75efef" stroke="#000" strokeWidth="1.3" />
         </marker>
       </defs>
-      {(catalog?.boundaries?.[domain] ?? []).map((ring, index) =>
-        <polyline key={`boundary-${index}`} className="storm-selection-boundary"
-          points={ring.map(([x, y]) => `${(x - viewport.left) / viewport.width * 100},${(y - viewport.top) / viewport.height * 100}`).join(" ")}
-          aria-label={`BC plus ${catalog!.selection.bufferKm} kilometre storm-selection boundary`} />)}
       {tracks.map((track) => {
         const points = track.points.map(xy);
         const label = points.find((p) => p.x > 2 && p.x < 96 && p.y > 5 && p.y < 96);

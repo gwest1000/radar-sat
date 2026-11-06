@@ -24,8 +24,9 @@ simplified by 1 km again. This is a meteorological approximation rather than a
 legal boundary or an exact geodesic-distance calculation. Rebuild with
 `python -m scripts.build_storm_region` (Cartopy required only for rebuilding).
 Track segments are checked for crossings between the native three-hour points;
-entry ordering has three-hour precision. A faint dashed outline shows the
-selection boundary. Entry does not by itself imply impacts in BC. The initial
+entry ordering has three-hour precision. The selection region is used only for
+filtering and is not drawn on the map.
+Entry does not by itself imply impacts in BC. The initial
 300 km cutoff excluded the 30 October 2026 offshore-Vancouver-Island low:
 its 18 UTC forecast position was about 332 km from BC and its forecast closest
 approach about 328 km. The subsequent 400 km threshold included that low.

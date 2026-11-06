@@ -824,7 +824,7 @@ test("keeps a compact desktop control rail and gives the map the remaining width
   const viewer = await readFile(new URL("../app/radar-viewer.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(styles, /\.app-shell\s*\{[\s\S]*?width: 100%/);
-  assert.match(styles, /\.app-shell\s*\{[\s\S]*?grid-template-columns: clamp\(260px, 19vw, 300px\) minmax\(0, 1fr\)/);
+  assert.match(styles, /\.app-shell\s*\{[\s\S]*?grid-template-columns: clamp\(195px, 14.25vw, 225px\) minmax\(0, 1fr\)/);
   assert.match(styles, /\.viewer-grid\s*\{[\s\S]*?display: contents/);
   assert.match(styles, /\.map-column\s*\{[\s\S]*?display: contents/);
   assert.match(styles, /\.map-stage\s*\{[\s\S]*?grid-column: 2/);

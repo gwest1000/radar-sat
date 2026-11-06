@@ -56,7 +56,7 @@ input:focus-visible {
   margin: 0 auto;
   padding: 10px clamp(8px, 0.8vw, 14px);
   display: grid;
-  grid-template-columns: clamp(260px, 19vw, 300px) minmax(0, 1fr);
+  grid-template-columns: clamp(195px, 14.25vw, 225px) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto 22px;
   gap: 8px 10px;
   overflow: hidden;
@@ -973,6 +973,7 @@ input:focus-visible {
   align-items: baseline;
   justify-content: space-between;
   gap: 6px;
+  flex-wrap: wrap;
   grid-column: 1 / -1;
 }
 
@@ -1628,5 +1629,4 @@ input:focus-visible {
 .storm-track-overlay circle { fill: #75efef; stroke: #000; stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: auto; }
 .storm-track-overlay text { fill: #75efef; font-size: 1.5px; font-weight: 700; stroke: #122c38; stroke-width: 0.18px; paint-order: stroke; pointer-events: auto; }
 .storm-track-key { position: absolute; left: 6px; bottom: 6px; margin: 0; padding: 3px 5px; background: #10232de8; color: #bafcfc; font-size: 11px; max-width: 85%; }
-.storm-selection-boundary { fill: none; stroke: #9bced0; stroke-width: 1; stroke-dasharray: 4 6; vector-effect: non-scaling-stroke; opacity: 0.5; }
 .storm-track-overlay .storm-daily-label { font-size: 1.15px; font-weight: 600; stroke: #000; stroke-width: 0.2px; }
