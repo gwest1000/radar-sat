@@ -46,7 +46,7 @@ test("storm labels use weekdays and hours, with daily native positions and the e
   assert.equal(pacificTrackClock("2026-11-01T06:00:00Z"), "Sat 23 PCT");
 });
 
-test("regional storm overlay keeps future entrants and segments crossing between off-map points", async () => {
+test("regional storm paths fade in on committed frame time and hide on loop wrap", async () => {
   const source = await readFile(new URL("../app/storm-track-overlay.tsx", import.meta.url), "utf8");
   const point = (x, hour) => ({ x, y: .5, time: `2030-01-01T${hour}:00:00Z`, pressure: 990 });
   const tracks = [
@@ -57,18 +57,28 @@ test("regional storm overlay keeps future entrants and segments crossing between
     generatedAt: "2030-01-01T00:00:00Z", domains: { bc: tracks }, selection: { bufferKm: 600 } };
   const exports = {};
   let stateIndex = 0;
-  const jsx = (type, props, key) => ({ type, props, key });
+  const groups = [];
+  const layout = [];
+  const handle = { current: null };
+  const jsx = (type, props, key) => {
+    if (type === "g") groups.push({ key, dataset: { formedAt: props["data-formed-at"] }, style: {} });
+    if (type === "svg") props.ref.current = { querySelectorAll: () => groups };
+    return { type, props, key };
+  };
   const compiled = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ESNext, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
   vm.runInNewContext(compiled, { exports, require(name) {
     if (name === "react") return { memo: (fn) => fn, useEffect() {}, useId: () => "test",
+      useCallback: (fn) => fn, useRef: (current) => ({ current }),
+      useLayoutEffect: (fn) => layout.push(fn), useImperativeHandle: (ref, make) => { ref.current = make(); },
       useState: () => [stateIndex++ === 0 ? catalog : "", () => {}] };
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
     if (name === "./pacific-time") return { dailyTrackPoints: (p) => p, pacificClock: (p) => p, pacificTrackClock: (p) => p };
     throw new Error(`Unexpected overlay dependency: ${name}`);
   } });
-  const tree = exports.StormTrackOverlay({ domain: "bc", visible: true,
+  const tree = exports.StormTrackOverlay({ domain: "bc", visible: true, ref: handle,
+    videoKey: "new", presentedTime: { current: { key: "old", validTime: "2030-01-01T02:00:00Z" } },
     viewport: { left: .4, top: 0, width: .2, height: 1 } });
   const nodes = [];
   const visit = (node) => {
@@ -82,6 +92,20 @@ test("regional storm overlay keeps future entrants and segments crossing between
   assert.ok(crossing, "do not drop tracks just because all sampled centres are outside");
   nodes.length = 0; visit(crossing);
   assert.ok(nodes.some((n) => n.type === "line"), "the crossing segment must remain drawable");
+  layout.forEach((fn) => fn());
+  const group = groups.find((g) => g.key === "future-entrant");
+  assert.equal(group.style.visibility, "hidden", "ignore the previous video's time");
+  const opacities = ["00:00", "00:10", "00:20", "00:30"].map((time) => {
+    handle.current.updateTime(`2030-01-01T${time}:00Z`);
+    return Number(group.style.opacity);
+  });
+  assert.equal(opacities[0], .2);
+  assert.ok(opacities[0] < opacities[1] && opacities[1] < opacities[2] && opacities[2] < 1);
+  assert.equal(opacities[3], 1);
+  assert.equal(group.style.visibility, "visible");
+  handle.current.updateTime("2029-12-31T23:50:00Z");
+  assert.equal(group.style.visibility, "hidden");
+  assert.equal(group.style.opacity, "0");
 });
 
 async function pausedSeekHarness({ cached = true, playing = false, readyState = 2 } = {}) {

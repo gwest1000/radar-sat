@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useId, useState } from "react";
+import { memo, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import type { Ref, RefObject } from "react";
 import { dailyTrackPoints, pacificClock, pacificTrackClock } from "./pacific-time";
 
 type Point = { x: number; y: number; time: string; pressure: number };
@@ -11,14 +12,49 @@ type Catalog = {
   selection: { bufferKm: number; region: string };
 };
 
-export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewport, visible }: {
+export type StormTrackHandle = { updateTime: (validTime?: string) => void };
+export type StormVideoTime = { key: string; validTime: string };
+
+export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewport, visible, frameTime, videoKey, presentedTime, ref }: {
   domain: string;
   viewport: { left: number; top: number; width: number; height: number };
   visible: boolean;
+  frameTime?: string;
+  videoKey?: string;
+  presentedTime: RefObject<StormVideoTime | null>;
+  ref?: Ref<StormTrackHandle>;
 }) {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [error, setError] = useState("");
   const arrowId = `storm-arrow-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const svgRef = useRef<SVGSVGElement>(null);
+  const groupsRef = useRef<{ node: SVGGElement; formedAt: number; opacity: number }[]>([]);
+  const tracks = catalog?.domains[domain];
+  const updateTime = useCallback((validTime?: string) => {
+    const time = validTime ? Date.parse(validTime) : NaN;
+    for (const group of groupsRef.current) {
+      const elapsed = time - group.formedAt;
+      const opacity = Number.isFinite(elapsed) && elapsed >= 0
+        ? Math.min(1, 0.2 + 0.8 * elapsed / (30 * 60_000)) : 0;
+      if (group.opacity === opacity) continue;
+      if (!group.opacity || !opacity) group.node.style.visibility = opacity ? "visible" : "hidden";
+      group.node.style.opacity = String(opacity);
+      group.opacity = opacity;
+    }
+  }, []);
+  useImperativeHandle(ref, () => ({ updateTime }), [updateTime]);
+  useLayoutEffect(() => {
+    groupsRef.current = Array.from(svgRef.current?.querySelectorAll<SVGGElement>("[data-formed-at]") ?? [], (node) => {
+      // A catalogue refresh can reuse a group with the same id.
+      node.style.visibility = "hidden";
+      node.style.opacity = "0";
+      return { node, formedAt: Date.parse(node.dataset.formedAt ?? ""), opacity: 0 };
+    });
+  }, [tracks, viewport]);
+  useLayoutEffect(() => {
+    const committed = presentedTime.current;
+    updateTime(videoKey ? (committed?.key === videoKey ? committed.validTime : undefined) : frameTime);
+  }, [tracks, viewport, frameTime, videoKey, presentedTime, updateTime]);
   useEffect(() => {
     if (!visible) return;
     const controller = new AbortController();
@@ -39,30 +75,26 @@ export const StormTrackOverlay = memo(function StormTrackOverlay({ domain, viewp
   });
   const clock = (time: string) => new Date(time).toISOString().slice(5, 16).replace("T", " ") + "Z";
   const stale = catalog && Date.now() - Date.parse(catalog.referenceTime) > 12 * 3600_000;
-  // The same selected RDPS systems are available in every view. SVG clipping
-  // handles paths outside the map; neither current position nor birth time
-  // should suppress a storm's forecast path in a regional view.
-  const tracks = catalog?.domains[domain] ?? [];
   return <div className="storm-track-overlay" aria-label="Experimental RDPS storm tracks">
     <p className="storm-track-key" title={error || (catalog
-      ? `RDPS ${clock(catalog.referenceTime)}${stale ? " — STALE" : ""} · BC + ${catalog.selection.bufferKm} km${!tracks.length ? " · no qualifying systems" : ""} · all selected predicted paths, clipped to this view; independent of loop time · trial numbers reset each run`
+      ? `RDPS ${clock(catalog.referenceTime)}${stale ? " — STALE" : ""} · BC + ${catalog.selection.bufferKm} km${!tracks?.length ? " · no qualifying systems" : ""} · predicted paths appear from their first RDPS position in loop time · trial numbers reset each run`
       : "Loading RDPS storm tracks…")}>Beta: RDPS storm tracks
       {(error || stale) && <span role="status"> · {error ? "unavailable" : "stale"}</span>}
     </p>
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="RDPS cyclone paths">
+    <svg ref={svgRef} viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="RDPS cyclone paths">
       <defs>
         <marker id={arrowId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
           <path d="M 1 1 L 9 5 L 1 9 Z" fill="#75efef" stroke="#000" strokeWidth="1.3" />
         </marker>
       </defs>
-      {tracks.map((track) => {
+      {tracks?.map((track) => {
         const points = track.points.map(xy);
         const label = points.find((p) => p.x > 2 && p.x < 96 && p.y > 5 && p.y < 96);
         const endSegment = points.findLastIndex((p, index) => index > 0 && (
           Math.abs(p.x - points[index - 1].x) + Math.abs(p.y - points[index - 1].y) > 0.00001
           && Math.abs(track.points[index].x - track.points[index - 1].x) <= 0.5
         ));
-        return <g key={track.id}>
+        return <g key={track.id} data-formed-at={track.points[0]?.time ?? ""} visibility="hidden" opacity={0}>
           {points.slice(1).map((p, index) => {
             const previous = points[index];
             // Avoid drawing a spurious world-spanning segment at the map seam.

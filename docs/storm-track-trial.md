@@ -44,16 +44,19 @@ preferences enable this layer by default; an explicit saved off choice persists.
 Dashed segments
 are forecast relative to catalogue generation time. Solid segments are elapsed
 model forecast positions, not observed tracks. Positions remain at their native
-three-hour cadence. The overlay stays fixed at the latest RDPS forecast while
-the historical radar/satellite loop plays, and explicitly says so on the map.
-Every view renders the same selected systems and their entire available
-predicted paths, including systems forming later or currently outside the map.
+three-hour cadence. The latest RDPS forecast supplies all the paths. A path
+first appears at the low's first position in that forecast and fades to full
+opacity over 30 minutes of loop time, using the frame actually on screen.
+This is the first known RDPS position, not an observed genesis time; frames
+before the run cannot reveal lows from that run. Every view uses the same
+selected systems and shows their entire available paths once they appear.
 Paths and labels outside the map are clipped, rather than suppressing the
 whole system based on its current centre. A segment crossing the view remains
 drawable even if neither sampled endpoint is inside it. Track numbers stay
 consistent across views within the same model run. No extra track dots or
 weather frames are generated.
-It adds no per-frame decoding, image caches, or playback animation callbacks.
+The existing video commit callback updates track opacity directly without
+per-frame React renders, extra decoding, or extra image caches.
 
 The main map clock and storm labels use BC's permanent UTC-7 Pacific Time
 (`PCT`) from 8 March 2026 onward, even on browsers with older timezone data.

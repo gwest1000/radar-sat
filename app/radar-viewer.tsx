@@ -15,6 +15,7 @@ import {
 import { FrameExportButton } from "./frame-export-button";
 import { WebcamOverlay } from "./webcam-overlay";
 import { StormTrackOverlay } from "./storm-track-overlay";
+import type { StormTrackHandle, StormVideoTime } from "./storm-track-overlay";
 import { pacificClock } from "./pacific-time";
 import { displayViewport, viewportPlacement, DisplayViewport } from "./display-viewport";
 import { captureMapFrame, frameExportFilename } from "./frame-export";
@@ -2016,6 +2017,8 @@ export function RadarViewer() {
   const mapStageRef = useRef<HTMLDivElement>(null);
   const liveEdgeHostRef = useRef<HTMLDivElement>(null);
   const playbackStatusLinesRef = useRef<PlaybackStatusLinesHandle>(null);
+  const stormTrackRef = useRef<StormTrackHandle>(null);
+  const stormVideoTimeRef = useRef<StormVideoTime | null>(null);
   const loadedVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const pendingVideoManifestRef = useRef<VideoLoopManifest | null>(null);
   const loadedCompositeManifestRef = useRef<CompositeLoopManifest | null>(null);
@@ -3257,16 +3260,23 @@ export function RadarViewer() {
   const isAnimating = playing && pageVisible && anchorFrames.length > 1;
   const anchor = anchorFrames[currentFrameIndex];
   const displayAnchor = showLiveEdge && liveEdgeState.anchor ? liveEdgeState.anchor : anchor;
+  const stormVideoKey = videoModeReady && playbackVideoManifest
+    ? `${product?.id}/${playbackVideoManifest.generation}/${playbackVideoManifest.media.path}` : undefined;
   useEffect(() => {
     if (!showLiveEdge || !displayAnchor || !product) return;
     playbackStatusLinesRef.current?.update(displayAnchor.validTime, liveEdgeSourceTimes);
+    if (stormVideoKey && stormVideoTimeRef.current?.key === stormVideoKey
+      && presentedVideoIndexRef.current === anchorFrames.length - 1) {
+      stormVideoTimeRef.current = { key: stormVideoKey, validTime: displayAnchor.validTime };
+      stormTrackRef.current?.updateTime(displayAnchor.validTime);
+    }
     if (mapStageRef.current) {
       mapStageRef.current.setAttribute(
         "aria-label",
         `${product.title}, valid ${utcClock(displayAnchor.validTime)} UTC. ${liveEdgeSourceTimes}`,
       );
     }
-  }, [displayAnchor, liveEdgeSourceTimes, product, showLiveEdge]);
+  }, [anchorFrames.length, displayAnchor, liveEdgeSourceTimes, product, showLiveEdge, stormVideoKey]);
   const lightningController = product?.layers.find((recipe) => LIGHTNING_CONTROLLERS.has(recipe.id));
   const lightningPointsId = lightningController ? pointLayerId(lightningController.id) : undefined;
   // GOES-18 GLM has the same physical coverage in both broad views. Reuse the
@@ -3418,6 +3428,13 @@ export function RadarViewer() {
       frameCountRef.current.textContent = `${index + 1} / ${anchorFrames.length}`;
     }
     if (timelineRangeRef.current) timelineRangeRef.current.value = String(index);
+    const frame = videoAnchorFrames[index];
+    if (!frame) return;
+    const displayedFrame = isHotEdge && liveEdgeState.anchor ? liveEdgeState.anchor : frame;
+    if (stormVideoKey) {
+      stormVideoTimeRef.current = { key: stormVideoKey, validTime: displayedFrame.validTime };
+      stormTrackRef.current?.updateTime(displayedFrame.validTime);
+    }
     const now = performance.now();
     if (
       !forceHud && index !== 0
@@ -3425,10 +3442,8 @@ export function RadarViewer() {
       && now - lastVideoHudUpdateAtRef.current < VIDEO_HUD_UPDATE_INTERVAL_MS
     ) return;
     lastVideoHudUpdateAtRef.current = now;
-    const frame = videoAnchorFrames[index];
     const plan = videoPlans[index];
-    if (!frame || !plan || !product) return;
-    const displayedFrame = isHotEdge && liveEdgeState.anchor ? liveEdgeState.anchor : frame;
+    if (!plan || !product) return;
     const times = isHotEdge && liveEdgeSourceTimes
       ? liveEdgeSourceTimes
       : videoHudSourceTimes[index] ?? "";
@@ -3467,6 +3482,7 @@ export function RadarViewer() {
     liveEdgeState,
     product,
     sidecarExactComposite,
+    stormVideoKey,
     videoAnchorFrames,
     videoHudSourceTimes,
     videoPlans,
@@ -4300,7 +4316,9 @@ export function RadarViewer() {
               <WebcamOverlay domain={product.domain} viewport={viewport} visible={pageVisible} key={product.id} />
             )}
             {optionalLayers.stormTracks && (
-              <StormTrackOverlay domain={product.domain} viewport={viewport} visible={pageVisible} key={`storms-${product.id}`} />
+              <StormTrackOverlay ref={stormTrackRef} domain={product.domain} viewport={viewport}
+                visible={pageVisible} frameTime={stormVideoKey ? undefined : displayAnchor?.validTime}
+                videoKey={stormVideoKey} presentedTime={stormVideoTimeRef} key={`storms-${product.id}`} />
             )}
             {displayAnchor && (
               <div
