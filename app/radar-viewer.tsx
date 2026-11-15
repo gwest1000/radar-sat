@@ -17,7 +17,7 @@ import { WebcamOverlay } from "./webcam-overlay";
 import { StormTrackOverlay } from "./storm-track-overlay";
 import type { StormTrackHandle, StormVideoTime } from "./storm-track-overlay";
 import { pacificClock } from "./pacific-time";
-import { displayViewport, viewportPlacement, DisplayViewport } from "./display-viewport";
+import { displayViewport, playbackProductForView, viewportPlacement, DisplayViewport } from "./display-viewport";
 import { captureMapFrame, frameExportFilename } from "./frame-export";
 
 import { loadPointFrame, preloadPointFrame } from "./point-data";
@@ -2281,9 +2281,13 @@ export function RadarViewer() {
       - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER)
     ));
   }, [availableProducts]);
-  const product = useMemo(
+  const selectedProduct = useMemo(
     () => availableProducts.find((item) => item.id === productId) ?? availableProducts[0],
     [availableProducts, productId],
+  );
+  const product = useMemo(
+    () => playbackProductForView(selectedProduct, availableProducts),
+    [selectedProduct, availableProducts],
   );
   const domain = product ? catalog?.domains[product.domain] : undefined;
   const liveEdgeDomain = useMemo<Domain | undefined>(() => {
@@ -4067,7 +4071,7 @@ export function RadarViewer() {
     + (effectiveRangeHours === 168 && archiveCadence >= 180 ? ` · ${archiveCadence / 60}-hour snapshots` : "");
   const originalViewport = product.viewport ?? FULL_VIEWPORT;
   const videoViewport = (playbackVideoManifest?.viewport ?? originalViewport) as DisplayViewport;
-  const viewport = displayViewport(product.id, originalViewport, videoModeReady ? videoViewport : undefined);
+  const viewport = displayViewport(selectedProduct?.id ?? product.id, originalViewport, videoModeReady ? videoViewport : undefined);
   const mapAspect = (domain.width * viewport.width) / (domain.height * viewport.height);
   const cropStyle: CSSProperties = viewportPlacement(FULL_VIEWPORT, viewport);
   const alignedCropStyle: CSSProperties = viewportPlacement(originalViewport, viewport);
@@ -4130,7 +4134,7 @@ export function RadarViewer() {
                     <button
                       className="product-button"
                       type="button"
-                      aria-pressed={item.id === product.id}
+                      aria-pressed={item.id === selectedProduct?.id}
                       key={item.id}
                       onClick={(event) => {
                         const firstPrebuilt = catalog

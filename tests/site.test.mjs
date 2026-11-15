@@ -7,7 +7,7 @@ import ts from "typescript";
 import { decodedVideoDimensionsError, selectHlsEngine, shouldWaitForSequentialSurface } from "../app/video-playback-guard.ts";
 import { appendLiveEdgeFrame } from "../app/live-edge-timeline.ts";
 import { pacificClock, dailyTrackPoints, pacificTrackClock } from "../app/pacific-time.ts";
-import { displayViewport, containsViewport, viewportPlacement } from "../app/display-viewport.ts";
+import { displayViewport, containsViewport, playbackProductForView, viewportPlacement } from "../app/display-viewport.ts";
 
 test("presentation crops retain registered source and prebuilt coordinates", () => {
   const source = { left: 0, top: 0, width: 1, height: 1 };
@@ -27,7 +27,31 @@ test("presentation crops retain registered source and prebuilt coordinates", () 
     assert.ok(Math.abs(expectedY - actualY) < 1e-10);
   }
   assert.equal(displayViewport("north-america-overlay", encoded, { left: 0, top: 0.5, width: 0.86, height: 0.3 }), encoded);
-  assert.equal(displayViewport("bc-small-overlay", encoded), encoded);
+  assert.equal(displayViewport("bc-northeast-overlay", encoded), encoded);
+});
+
+test("shifted BC view keeps media validation tied to BC XL and preserves the selected BC identity", () => {
+  const oldBC = { id: "bc-small-overlay", title: "BC", shortTitle: "BC", domain: "bc", defaultHours: 3,
+    maxHours: 168, notes: [], viewport: { left: .16404, top: .22489, width: .670919, height: .581179 },
+    layers: [{ id: "old-regional" }] };
+  const xl = { ...oldBC, id: "bc-large-overlay", title: "BC XL", shortTitle: "BC XL",
+    viewport: { left: 0, top: .05, width: 1, height: .9 }, layers: [{ id: "full-domain" }] };
+  const source = playbackProductForView(oldBC, [oldBC, xl]);
+  assert.equal(source.id, xl.id, "real manifest/product ids must still agree");
+  assert.equal(source.shortTitle, "BC");
+  assert.equal(source.layers, xl.layers, "do not mix old regional proxies with the wider source");
+  const crop = displayViewport(oldBC.id, source.viewport, xl.viewport);
+  assert.equal(crop.width, oldBC.viewport.width);
+  assert.equal(crop.height, oldBC.viewport.height);
+  assert.ok(crop.top > oldBC.viewport.top);
+  assert.ok(crop.top + crop.height > oldBC.viewport.top + oldBC.viewport.height);
+  assert.ok(containsViewport(xl.viewport, crop));
+  const northing = 2_200_000 - crop.top * 2_300_000;
+  assert.ok(Math.abs(northing - 1_449_268.398692914 - 20_000) < .01);
+  assert.equal(playbackProductForView(xl, [oldBC, xl]), xl, "BC XL itself is unchanged");
+  assert.equal(playbackProductForView(oldBC, [oldBC]), oldBC, "missing wide media fails safely");
+  const native = { ...oldBC, viewport: crop };
+  assert.equal(playbackProductForView(native, [native, xl]), native, "prefer native shifted media when available");
 });
 
 test("BC Pacific clocks stay at UTC-7 across the former fall-back and through winter", () => {
