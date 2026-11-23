@@ -1,16 +1,21 @@
 export type DisplayViewport = { left: number; top: number; width: number; height: number };
 
-// Presentation-only crops of retained full-resolution media. No new source
-// grids, proxy bitmaps, or video generations are needed for these subsets.
+// Presentation crops in the normalized coordinates of the full source grid.
+// A stored video can use a crop only if it covers that footprint.
 const CROPS: Record<string, DisplayViewport> = {
   // BC Hydro Williston watershed's northernmost EPSG:3005 northing is
   // 1,449,268.399 m. Add 20 km above it; retain the BC width and aspect.
   "bc-small-overlay": { left: 0.164040, top: 0.317709392, width: 0.670919, height: 0.581179 },
-  // EPSG:3857 common grid: 61.5 N to 19.5 N, eastern tip of Maine (~66.9 W).
-  "north-america-overlay": { left: 0, top: 0.338644, width: 0.824515, height: 0.527490 },
-  // Pacific-centred Mercator: move the top from ~69 N to 61.5 N.
-  "north-pacific-overlay": { left: 0, top: 0.254394, width: 0.77, height: 0.721542 },
+  // Keep 19.5 N and the eastern tip of Maine. Extend north to 63.66 N and
+  // trim the western edge by 3.7 degrees to match the Pacific aspect ratio.
+  "north-america-overlay": { left: 0.025, top: 0.296446855, width: 0.799515, height: 0.569687145 },
+  // Keep 61.5 N and extend the southern edge from 9.19 N to 8.23 N.
+  "north-pacific-overlay": { left: 0, top: 0.254394, width: 0.77, height: 0.731542 },
 };
+
+// Previously encoded Pacific loops end at 9.19 N. Keep their existing
+// display crop until the scheduled replacement for each range is ready.
+const PREVIOUS_PACIFIC_CROP: DisplayViewport = { left: 0, top: 0.254394, width: 0.77, height: 0.721542 };
 
 type ViewProduct = {
   id: string; title: string; shortTitle: string; domain: string;
@@ -43,7 +48,11 @@ export function containsViewport(outer: DisplayViewport, inner: DisplayViewport)
 
 export function displayViewport(productId: string, original: DisplayViewport, media?: DisplayViewport): DisplayViewport {
   const crop = CROPS[productId];
-  return crop && containsViewport(original, crop) && (!media || containsViewport(media, crop)) ? crop : original;
+  const fits = (candidate: DisplayViewport) => containsViewport(original, candidate)
+    && (!media || containsViewport(media, candidate));
+  if (crop && fits(crop)) return crop;
+  if (productId === "north-pacific-overlay" && fits(PREVIOUS_PACIFIC_CROP)) return PREVIOUS_PACIFIC_CROP;
+  return original;
 }
 
 export function viewportPlacement(source: DisplayViewport, target: DisplayViewport) {

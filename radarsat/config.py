@@ -502,9 +502,8 @@ BROAD_VIEWPORTS: dict[str, dict[str, float]] = {
     # Keeping the source grid intact means satellite, radar and hazards remain
     # pixel-registered while the browser devotes its space to useful terrain.
     "north-america": {"left": 0.0, "top": 0.1763, "width": 0.8600, "height": 0.7800},
-    # Retain the full Pacific western edge, remove the high Arctic above 69 N,
-    # and stop at 120 W along the straight BC–Alberta boundary.
-    "north-pacific": {"left": 0.0, "top": 0.075936, "width": 0.770000, "height": 0.900000},
+    # Retain the Pacific media footprint and extend its southern edge to 8.23 N.
+    "north-pacific": {"left": 0.0, "top": 0.075936, "width": 0.770000, "height": 0.910000},
 }
 
 

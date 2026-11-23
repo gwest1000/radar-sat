@@ -15,6 +15,9 @@ test("presentation crops retain registered source and prebuilt coordinates", () 
   const target = displayViewport("north-america-overlay", encoded, encoded);
   assert.ok(containsViewport(encoded, target));
   assert.ok(target.top > encoded.top && target.height < encoded.height);
+  assert.equal(target.left, .025);
+  assert.ok(Math.abs((target.top + target.height) - .866134) < 1e-8);
+  assert.ok(Math.abs((target.left + target.width) - .824515) < 1e-8);
   const direct = viewportPlacement(source, target);
   const video = viewportPlacement(encoded, target);
   const fraction = (value) => parseFloat(value) / 100;
@@ -28,6 +31,24 @@ test("presentation crops retain registered source and prebuilt coordinates", () 
   }
   assert.equal(displayViewport("north-america-overlay", encoded, { left: 0, top: 0.5, width: 0.86, height: 0.3 }), encoded);
   assert.equal(displayViewport("bc-northeast-overlay", encoded), encoded);
+});
+
+test("Pacific gains a small southern strip and matches East Pacific / North America", () => {
+  const previousMedia = { left: 0, top: .075936, width: .77, height: .9 };
+  const currentMedia = { ...previousMedia, height: .91 };
+  const previousCrop = { left: 0, top: .254394, width: .77, height: .721542 };
+  const naMedia = { left: 0, top: .1763, width: .86, height: .78 };
+  const ea = displayViewport("north-america-overlay", naMedia, naMedia);
+  const pacific = displayViewport("north-pacific-overlay", currentMedia, currentMedia);
+  assert.deepEqual(displayViewport("north-pacific-overlay", currentMedia, previousMedia), previousCrop);
+  assert.deepEqual(displayViewport("north-pacific-overlay", previousMedia), previousCrop);
+  assert.deepEqual(displayViewport("north-pacific-overlay", currentMedia), pacific);
+  assert.equal(pacific.top, previousCrop.top);
+  assert.equal(pacific.left, previousCrop.left);
+  assert.equal(pacific.width, previousCrop.width);
+  assert.ok(Math.abs(pacific.height - previousCrop.height - .01) < 1e-8);
+  const aspect = (vw, width, height) => width * vw.width / (height * vw.height);
+  assert.ok(Math.abs(aspect(pacific, 1600, 900) - aspect(ea, 1280, 960)) < 1e-8);
 });
 
 test("shifted BC view keeps media validation tied to BC XL and preserves the selected BC identity", () => {
@@ -1050,7 +1071,7 @@ test("ships a runtime data configuration", async () => {
   assert.equal(northPacific.frameIntervalMinutes, 20);
   assert.match(viewer, /"lightning-hour"/);
   assert.match(viewer, /"glm-lightning-hour"/);
-  assert.deepEqual(northPacific.viewport, { left: 0, top: 0.075936, width: 0.77, height: 0.9 });
+  assert.deepEqual(northPacific.viewport, { left: 0, top: 0.075936, width: 0.77, height: 0.91 });
   assert.equal(northPacific.layers.find((layer) => layer.id === "ptype").choiceGroup, "precipitation");
   assert.equal(northPacific.layers.find((layer) => layer.id === "hotspots").defaultEnabled, false);
   assert.ok(
